@@ -51,7 +51,7 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
         }
     }
     
-    // Create date-based subdirectory
+    // Create date-based subdirectory (no time-based subdirectories)
     $date_dir = date('Y-m-d', strtotime($ctime));
     $screens_date_path = $ip_paths['screens'] . $date_dir . '/';
     $thumbnails_date_path = $ip_paths['thumbnails'] . $date_dir . '/';
