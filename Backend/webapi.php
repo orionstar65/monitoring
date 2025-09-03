@@ -9,6 +9,9 @@
 require_once 'config.inc.php';
 require_once 'services/DatabaseService.php';
 
+// Initialize configuration
+$config = new JConfig();
+
 // Initialize database connection
 $mysqli = new mysqli($config->dbhost, $config->dbuser, $config->dbpassword, $config->dbname);
 
@@ -60,8 +63,10 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
         @mkdir($thumbnails_date_path, 0755, true);
     }
     
-    // Generate filename
-    $img_name = date('Y-m-d_H.i.s', strtotime($ctime)) . '_' . rand(1000, 9999) . '.jpg';
+    // Generate filename with IP address and datetime
+    $datetime = date('Y-m-d_H.i.s', strtotime($ctime));
+    $ip_clean = str_replace('.', '_', $clientIP); // Replace dots with underscores for filename safety
+    $img_name = $ip_clean . '_' . $datetime . '.jpg';
     $file_location = $screens_date_path . $img_name;
     
     // Handle file upload
@@ -78,7 +83,25 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
         $image_info = getimagesize($file_location);
         $imagewidth = $image_info[0] ?? 0;
         $imageheight = $image_info[1] ?? 0;
-        $file_ext = 'jpg';
+        
+        // Determine file extension from uploaded file
+        $original_name = $_FILES['imagefile']['name'] ?? '';
+        $file_ext = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
+        if (empty($file_ext)) {
+            $file_ext = 'jpg'; // Default fallback
+        }
+        
+        // Update filename with correct extension
+        $img_name = $ip_clean . '_' . $datetime . '.' . $file_ext;
+        $file_location = $screens_date_path . $img_name;
+        
+        // Rename the file if extension changed
+        if ($file_ext !== 'jpg') {
+            $old_location = $screens_date_path . $ip_clean . '_' . $datetime . '.jpg';
+            if (file_exists($old_location)) {
+                rename($old_location, $file_location);
+            }
+        }
         
         // Create thumbnail
         $thumb_file_location = $thumbnails_date_path . $img_name;

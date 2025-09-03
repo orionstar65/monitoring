@@ -74,7 +74,7 @@ try {
                 $dbService->updateMonitorActivity($clientIP, 'browser');
                 $response['data'] = [
                     'inserted_count' => $inserted_count,
-                    'interval' => 120 // Return interval for next browser history sync
+                    'interval' => 120, // Return interval for next browser history sync
                 ];
             }
             break;

@@ -133,7 +133,6 @@ class DatabaseService {
             $devicePath = $usbLog['device_path'] ?? '';
             $deviceType = $usbLog['device_type'] ?? '';
             $action = $usbLog['action'] ?? 'Connected';
-            var_dump($deviceDate, $deviceName, $devicePath, $deviceType, $action);
             $stmt->bind_param("isssss", $ip_id, $deviceDate, $deviceName, $devicePath, $deviceType, $action);
             if ($stmt->execute()) {
                 $inserted_count++;
