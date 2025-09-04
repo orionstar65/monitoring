@@ -5,10 +5,57 @@ class Monitors extends Base {
     
     public function index() {
         $monitors = $this->db->fetchAll(
-            "SELECT * FROM tbl_monitor_ips ORDER BY last_monitor_tic DESC"
+            "SELECT * FROM tbl_monitor_ips ORDER BY id"
         );
         
-        $this->view('monitors/index', ['monitors' => $monitors]);
+        // Add dynamic status calculation for each monitor
+        foreach ($monitors as &$monitor) {
+            $status_display = $this->calculateDynamicStatus($monitor['updated_at']);
+            $monitor['dynamic_status'] = $status_display['status'];
+            $monitor['status_text'] = $status_display['text'];
+            $monitor['status_class'] = $status_display['class'];
+        }
+        
+        // Calculate distinct usernames count
+        $distinct_usernames = array_unique(array_filter(array_column($monitors, 'username')));
+        $distinct_username_count = count($distinct_usernames);
+        
+        $this->view('monitors/index', [
+            'monitors' => $monitors,
+            'distinct_username_count' => $distinct_username_count
+        ]);
+    }
+    
+    /**
+     * Calculate dynamic status based on updated_at timestamp
+     */
+    private function calculateDynamicStatus($updated_at) {
+        if (!$updated_at) {
+            return [
+                'status' => 'inactive',
+                'text' => 'Inactive',
+                'class' => 'secondary'
+            ];
+        }
+        
+        $last_activity = strtotime($updated_at);
+        $current_time = time();
+        $time_diff = $current_time - $last_activity;
+        
+        // 5 minutes = 300 seconds
+        if ($time_diff <= 300) {
+            return [
+                'status' => 'active',
+                'text' => 'Active',
+                'class' => 'success'
+            ];
+        } else {
+            return [
+                'status' => 'inactive',
+                'text' => 'Inactive',
+                'class' => 'secondary'
+            ];
+        }
     }
     
     public function create() {
@@ -33,18 +80,7 @@ class Monitors extends Base {
                 if ($existing) {
                     $error = 'IP address already exists';
                 } else {
-                    // Check if username already exists
-                    if (!empty($username)) {
-                        $existing_username = $this->db->fetch(
-                            "SELECT id FROM tbl_monitor_ips WHERE username = :username",
-                            ['username' => $username]
-                        );
-                        
-                        if ($existing_username) {
-                            $error = 'Username already exists';
-                        }
-                    }
-                    
+                    // No username uniqueness check needed - multiple monitors can have same username
                     if (empty($error)) {
                         $monitorId = $this->db->insert('tbl_monitor_ips', [
                             'ip_address' => $ip_address,
@@ -83,35 +119,22 @@ class Monitors extends Base {
         }
         
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $ip_address = $_POST['ip_address'] ?? '';
-            $name = $_POST['name'] ?? '';
-            $username = $_POST['username'] ?? '';
-            $mac_address = $_POST['mac_address'] ?? '';
-            $type = $_POST['type'] ?? 'user';
+            $type = $_POST['type'] ?? 'desktop';
+            $username = trim($_POST['username'] ?? '');
             
-            if (empty($ip_address) || empty($name)) {
-                $error = 'IP address and name are required';
+            // Validate type
+            if (!in_array($type, ['desktop', 'laptop', 'server'])) {
+                $error = 'Invalid device type selected';
             } else {
-                // Check if username already exists for another monitor
-                if (!empty($username)) {
-                    $existing = $this->db->fetch(
-                        "SELECT id FROM tbl_monitor_ips WHERE username = :username AND id != :id",
-                        ['username' => $username, 'id' => $id]
-                    );
-                    
-                    if ($existing) {
-                        $error = 'Username already exists for another monitor';
-                    }
-                }
-                
+                // No username uniqueness check needed - multiple monitors can have same username
                 if (empty($error)) {
-                    $this->db->update('tbl_monitor_ips', [
-                        'ip_address' => $ip_address,
-                        'name' => $name,
-                        'username' => $username,
-                        'mac_address' => $mac_address,
-                        'type' => $type
-                    ], 'id = :id', ['id' => $id]);
+                    // Update username and type fields (but NOT updated_at - that's only for monitoring events)
+                    $update_data = [
+                        'type' => $type,
+                        'username' => $username
+                    ];
+                    
+                    $this->db->update('tbl_monitor_ips', $update_data, 'id = :id', ['id' => $id]);
                     
                     $this->redirect('monitors');
                 }

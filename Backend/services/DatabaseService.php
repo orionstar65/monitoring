@@ -362,18 +362,50 @@ class DatabaseService {
      */
     public function updateMonitorActivity($ip_address, $activity_type = 'monitor') {
         $field = ($activity_type == 'browser') ? 'last_browser_tic' : 'last_monitor_tic';
+        $current_time = date('Y-m-d H:i:s');
         
         $stmt = $this->mysqli->prepare("
             UPDATE tbl_monitor_ips 
-            SET $field = NOW(), updated_at = NOW() 
+            SET $field = ?, updated_at = ? 
             WHERE ip_address = ?
         ");
         
-        $stmt->bind_param("s", $ip_address);
+        $stmt->bind_param("sss", $current_time, $current_time, $ip_address);
         $result = $stmt->execute();
         $stmt->close();
         
         return $result;
+    }
+    
+    /**
+     * Calculate dynamic status based on updated_at timestamp
+     * Returns: 'active' if within 5 minutes, 'inactive' if more than 5 minutes
+     */
+    public function calculateDynamicStatus($updated_at) {
+        if (!$updated_at) {
+            return 'inactive';
+        }
+        
+        $last_activity = strtotime($updated_at);
+        $current_time = time();
+        $time_diff = $current_time - $last_activity;
+        
+        // 5 minutes = 300 seconds
+        return ($time_diff <= 300) ? 'active' : 'inactive';
+    }
+    
+    /**
+     * Get status text and CSS class for dynamic status
+     */
+    public function getStatusDisplay($updated_at) {
+        $status = $this->calculateDynamicStatus($updated_at);
+        
+        return [
+            'status' => $status,
+            'text' => ucfirst($status),
+            'class' => $status === 'active' ? 'success' : 'secondary',
+            'icon' => $status === 'active' ? 'fas fa-circle' : 'fas fa-circle'
+        ];
     }
     
     /**
