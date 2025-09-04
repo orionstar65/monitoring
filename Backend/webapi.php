@@ -253,25 +253,9 @@ switch ($request_type) {
         break;
         
     case 'username':
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $input = file_get_contents('php://input');
-            $data = json_decode($input, true);
-            $username = $data['username'] ?? '';
-            
-            if (!empty($username)) {
-                $result = updateUsername($username);
-                if (!$result) {
-                    http_response_code(500);
-                    echo json_encode(['error' => 'Failed to update username']);
-                }
-            } else {
-                http_response_code(400);
-                echo json_encode(['error' => 'Username is required']);
-            }
-        } else {
-            http_response_code(405);
-            echo json_encode(['error' => 'Method not allowed']);
-        }
+        // Username updates are disabled - only allowed through admin edit page
+        http_response_code(403);
+        echo json_encode(['error' => 'Username updates are disabled. Please contact administrator.']);
         break;
         
     default:

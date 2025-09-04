@@ -445,11 +445,12 @@ class DatabaseService {
                 $types .= "s";
             }
             
-            if ($username !== null) {
-                $update_fields[] = "username = ?";
-                $params[] = $username;
-                $types .= "s";
-            }
+            // Username updates are only allowed through admin edit page, not from client requests
+            // if ($username !== null) {
+            //     $update_fields[] = "username = ?";
+            //     $params[] = $username;
+            //     $types .= "s";
+            // }
             
             if ($app_version !== null) {
                 $update_fields[] = "app_version = ?";
