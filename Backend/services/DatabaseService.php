@@ -14,12 +14,19 @@ class DatabaseService {
     
     /**
      * Get monitor IP ID by IP address or MAC address
+     * Handles duplicate entries by returning the most recent one
      */
     public function getMonitorIpId($ip_address = null, $mac_address = null) {
         $ip_id = null;
         
         if ($ip_address) {
-            $stmt = $this->mysqli->prepare("SELECT id FROM tbl_monitor_ips WHERE ip_address = ?");
+            // Get the most recent record for this IP address (handles duplicates)
+            $stmt = $this->mysqli->prepare("
+                SELECT id FROM tbl_monitor_ips 
+                WHERE ip_address = ? 
+                ORDER BY updated_at DESC, created_at DESC, id DESC 
+                LIMIT 1
+            ");
             $stmt->bind_param("s", $ip_address);
             $stmt->execute();
             $result = $stmt->get_result();
@@ -30,7 +37,13 @@ class DatabaseService {
         }
         
         if (!$ip_id && $mac_address) {
-            $stmt = $this->mysqli->prepare("SELECT id FROM tbl_monitor_ips WHERE mac_address = ?");
+            // Get the most recent record for this MAC address (handles duplicates)
+            $stmt = $this->mysqli->prepare("
+                SELECT id FROM tbl_monitor_ips 
+                WHERE mac_address = ? 
+                ORDER BY updated_at DESC, created_at DESC, id DESC 
+                LIMIT 1
+            ");
             $stmt->bind_param("s", $mac_address);
             $stmt->execute();
             $result = $stmt->get_result();
@@ -382,22 +395,55 @@ class DatabaseService {
     
     /**
      * Create or update monitor IP record
+     * Properly handles existing records by checking first, then updating
      */
     public function createOrUpdateMonitorIP($ip_address, $mac_address = null, $username = null, $app_version = null) {
+        // First, check if record exists
         $existing = $this->getMonitorIP($ip_address);
         
         if ($existing) {
-            // Update existing record
-            $stmt = $this->mysqli->prepare("
-                UPDATE tbl_monitor_ips 
-                SET mac_address = COALESCE(?, mac_address),
-                    username = COALESCE(?, username),
-                    app_version = COALESCE(?, app_version),
-                    updated_at = NOW()
-                WHERE ip_address = ?
-            ");
+            // Update existing record - only update fields that are not null
+            $update_fields = [];
+            $params = [];
+            $types = "";
             
-            $stmt->bind_param("ssss", $mac_address, $username, $app_version, $ip_address);
+            if ($mac_address !== null) {
+                $update_fields[] = "mac_address = ?";
+                $params[] = $mac_address;
+                $types .= "s";
+            }
+            
+            if ($username !== null) {
+                $update_fields[] = "username = ?";
+                $params[] = $username;
+                $types .= "s";
+            }
+            
+            if ($app_version !== null) {
+                $update_fields[] = "app_version = ?";
+                $params[] = $app_version;
+                $types .= "s";
+            }
+            
+            if (!empty($update_fields)) {
+                $update_fields[] = "updated_at = NOW()";
+                $params[] = $ip_address;
+                $types .= "s";
+                
+                $stmt = $this->mysqli->prepare("
+                    UPDATE tbl_monitor_ips 
+                    SET " . implode(", ", $update_fields) . "
+                    WHERE ip_address = ?
+                ");
+                
+                $stmt->bind_param($types, ...$params);
+                $result = $stmt->execute();
+                $stmt->close();
+                
+                return $result;
+            }
+            
+            return true; // No fields to update, but record exists
         } else {
             // Create new record
             $stmt = $this->mysqli->prepare("
@@ -406,12 +452,69 @@ class DatabaseService {
             ");
             
             $stmt->bind_param("ssss", $ip_address, $mac_address, $username, $app_version);
+            $result = $stmt->execute();
+            $stmt->close();
+            
+            return $result;
         }
+    }
+    
+    /**
+     * Clean up duplicate monitor IP entries
+     * Keeps the most recent record and removes older duplicates
+     */
+    public function cleanupDuplicateMonitorIPs() {
+        $cleaned_count = 0;
         
-        $result = $stmt->execute();
+        // Find all duplicate IP addresses
+        $stmt = $this->mysqli->prepare("
+            SELECT ip_address, COUNT(*) as count 
+            FROM tbl_monitor_ips 
+            GROUP BY ip_address 
+            HAVING COUNT(*) > 1
+        ");
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $duplicates = $result->fetch_all(MYSQLI_ASSOC);
         $stmt->close();
         
-        return $result;
+        foreach ($duplicates as $duplicate) {
+            $ip_address = $duplicate['ip_address'];
+            
+            // Get all records for this IP, ordered by most recent first
+            $stmt = $this->mysqli->prepare("
+                SELECT id FROM tbl_monitor_ips 
+                WHERE ip_address = ? 
+                ORDER BY updated_at DESC, created_at DESC, id DESC
+            ");
+            $stmt->bind_param("s", $ip_address);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $records = $result->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
+            
+            // Keep the first (most recent) record, delete the rest
+            if (count($records) > 1) {
+                $keep_id = $records[0]['id'];
+                $delete_ids = array_slice(array_column($records, 'id'), 1);
+                
+                if (!empty($delete_ids)) {
+                    $placeholders = str_repeat('?,', count($delete_ids) - 1) . '?';
+                    $stmt = $this->mysqli->prepare("
+                        DELETE FROM tbl_monitor_ips 
+                        WHERE id IN ($placeholders)
+                    ");
+                    $stmt->bind_param(str_repeat('i', count($delete_ids)), ...$delete_ids);
+                    $stmt->execute();
+                    $cleaned_count += $stmt->affected_rows;
+                    $stmt->close();
+                    
+                    error_log("Cleaned up " . count($delete_ids) . " duplicate records for IP: $ip_address, kept ID: $keep_id");
+                }
+            }
+        }
+        
+        return $cleaned_count;
     }
     
     /**
