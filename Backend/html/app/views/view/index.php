@@ -5,9 +5,33 @@ $page_title = 'Real-time Monitoring';
 ob_start();
 ?>
 <style>
+/* Modern Real-time Monitoring Styles */
+:root {
+    --monitoring-primary: #1976d2;
+    --monitoring-primary-dark: #1565c0;
+    --monitoring-success: #4caf50;
+    --monitoring-warning: #ff9800;
+    --monitoring-error: #f44336;
+    --monitoring-surface: #ffffff;
+    --monitoring-background: #fafafa;
+    --monitoring-text-primary: #212121;
+    --monitoring-text-secondary: #757575;
+    --monitoring-divider: #e0e0e0;
+    --monitoring-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    --monitoring-shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+/* Status Badges with Modern Design */
 .live-status-badge {
     position: relative;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-weight: 500;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
 }
 
 .live-status-badge .pulse {
@@ -26,8 +50,8 @@ ob_start();
         opacity: 1;
     }
     50% {
-        transform: scale(1.1);
-        opacity: 0.7;
+        transform: scale(1.05);
+        opacity: 0.8;
     }
     100% {
         transform: scale(1);
@@ -36,262 +60,366 @@ ob_start();
 }
 
 .status-online {
-    background: linear-gradient(45deg, #28a745, #20c997);
-    border: none;
+    background: linear-gradient(135deg, var(--monitoring-success), #66bb6a);
+    color: white;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
 }
 
 .status-inactive {
-    background: linear-gradient(45deg, #ffc107, #fd7e14);
-    border: none;
+    background: linear-gradient(135deg, var(--monitoring-warning), #ffb74d);
+    color: white;
+    box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
 }
 
 .status-offline {
-    background: linear-gradient(45deg, #dc3545, #e83e8c);
-    border: none;
+    background: linear-gradient(135deg, var(--monitoring-error), #ef5350);
+    color: white;
+    box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
 }
 
-.activity-badge {
-    font-size: 0.75rem;
-    padding: 0.25rem 0.5rem;
+/* Override main layout constraints for monitoring page */
+.content-area {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
 }
 
-.monitor-name {
-    font-weight: 600;
-    color: #495057;
-}
-
-.monitor-username {
-    font-size: 0.8rem;
-    color: #6c757d;
-}
-
-.time-ago {
-    font-size: 0.75rem;
-    color: #6c757d;
-}
-
-/* Dashboard Layout */
+/* Modern Dashboard Layout */
 .dashboard-container {
     display: flex;
-    height: calc(100vh - 80px);
-    gap: 0.75rem;
+    height: calc(100vh - 120px);
+    gap: 1.5rem;
+    padding: 1.5rem;
+    background: var(--monitoring-background);
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    box-sizing: border-box;
 }
 
 .sidebar-panel {
-    width: 320px;
-    background: #f8f9fa;
-    border-radius: 0.5rem;
-    border: 1px solid #dee2e6;
+    width: 360px;
+    min-width: 320px;
+    max-width: 400px;
+    background: var(--monitoring-surface);
+    border-radius: 16px;
+    box-shadow: var(--monitoring-shadow);
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
 }
 
 .main-content {
     flex: 1;
-    background: white;
-    border-radius: 0.5rem;
-    border: 1px solid #dee2e6;
+    min-width: 0;
+    background: var(--monitoring-surface);
+    border-radius: 16px;
+    box-shadow: var(--monitoring-shadow);
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
-/* Status Overview - Moved to right panel */
+/* Modern Status Overview */
 .status-overview {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, var(--monitoring-primary) 0%, var(--monitoring-primary-dark) 100%);
     color: white;
-    padding: 1rem;
-    border-radius: 0.5rem 0.5rem 0 0;
+    padding: 2rem;
+    border-radius: 16px 16px 0 0;
+}
+
+.status-overview h5 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.status-overview p {
+    opacity: 0.9;
+    font-size: 0.95rem;
     margin-bottom: 0;
 }
 
 .status-stats {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 0.75rem;
-    margin-top: 0.75rem;
+    gap: 1rem;
+    margin-top: 1.5rem;
 }
 
 .stat-card {
-    background: rgba(255, 255, 255, 0.1);
-    padding: 0.75rem;
-    border-radius: 0.375rem;
+    background: rgba(255, 255, 255, 0.15);
+    padding: 1.25rem;
+    border-radius: 12px;
     text-align: center;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: transform 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
 }
 
 .stat-number {
-    font-size: 1.5rem;
+    font-size: 2rem;
     font-weight: 700;
-    margin-bottom: 0.125rem;
+    margin-bottom: 0.25rem;
+    line-height: 1;
 }
 
 .stat-label {
-    font-size: 0.75rem;
+    font-size: 0.875rem;
     opacity: 0.9;
+    font-weight: 500;
 }
 
-/* Sidebar Styles - Optimized */
-.sidebar-header {
-    padding: 0.75rem;
-    border-bottom: 1px solid #dee2e6;
-    background: #fff;
-    border-radius: 0.5rem 0.5rem 0 0;
+/* Modern Sidebar */
+.sidebar-panel .sidebar-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--monitoring-divider);
+    background: var(--monitoring-surface);
 }
 
-.filter-container {
-    margin-top: 0.5rem;
+.sidebar-panel .sidebar-header h6 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--monitoring-text-primary);
+    margin-bottom: 1rem;
 }
 
-.filter-container .form-control {
-    font-size: 0.8rem;
-    border-radius: 0.375rem;
+.sidebar-panel .filter-container {
+    margin-top: 0.75rem;
 }
 
-.filter-container .form-control:focus {
-    border-color: #007bff;
-    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+.sidebar-panel .filter-container .form-control {
+    border-radius: 12px;
+    border: 2px solid var(--monitoring-divider);
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
 }
 
-.sidebar-content {
+.sidebar-panel .filter-container .form-control:focus {
+    border-color: var(--monitoring-primary);
+    box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1);
+}
+
+.sidebar-panel .sidebar-content {
     flex: 1;
     overflow-y: auto;
     padding: 0;
 }
 
-.monitor-item {
-    padding: 0.75rem;
-    border-bottom: 1px solid #dee2e6;
+.sidebar-panel .monitor-item {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--monitoring-divider);
     cursor: pointer;
-    transition: background-color 0.2s;
-    background: white;
+    transition: all 0.2s ease;
+    background: var(--monitoring-surface);
+    position: relative;
 }
 
-.monitor-item:hover {
-    background: #f8f9fa;
+.sidebar-panel .monitor-item:hover {
+    background: rgba(25, 118, 210, 0.05);
+    transform: translateX(4px);
 }
 
-.monitor-item.selected {
-    background: #e3f2fd;
-    border-left: 4px solid #2196f3;
+.sidebar-panel .monitor-item.selected {
+    background: rgba(25, 118, 210, 0.1);
+    border-left: 4px solid var(--monitoring-primary);
 }
 
-.monitor-item input[type="checkbox"] {
-    margin-right: 0.5rem;
+.sidebar-panel .monitor-item.selected::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--monitoring-primary);
 }
 
-.monitor-item-header {
+.sidebar-panel .monitor-item-header {
     display: flex;
     align-items: center;
-    margin-bottom: 0.375rem;
+    margin-bottom: 0.5rem;
 }
 
-.monitor-item-name {
+.sidebar-panel .monitor-item-name {
     font-weight: 600;
-    color: #495057;
+    color: var(--monitoring-text-primary);
     flex: 1;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
 }
 
-.monitor-item-status {
+.sidebar-panel .monitor-item-status {
     margin-left: auto;
 }
 
-.monitor-item-username {
-    font-size: 0.75rem;
-    color: #6c757d;
-    margin-left: 1.25rem;
-    line-height: 1.2;
+.sidebar-panel .monitor-item-username {
+    font-size: 0.8rem;
+    color: var(--monitoring-text-secondary);
+    margin-left: 1.5rem;
+    line-height: 1.3;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
 }
 
-/* Main Content Styles */
+/* Modern Main Content */
 .main-header {
-    padding: 0.75rem;
-    border-bottom: 1px solid #dee2e6;
-    background: #fff;
-    border-radius: 0 0.5rem 0.5rem 0;
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--monitoring-divider);
+    background: var(--monitoring-surface);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.main-header h6 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--monitoring-text-primary);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .main-content-area {
     flex: 1;
     overflow-y: auto;
-    padding: 0.75rem;
+    padding: 1.5rem;
 }
 
+/* Modern Screenshot Grid */
 .screenshot-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
 }
 
 .screenshot-card {
-    border: 1px solid #dee2e6;
-    border-radius: 0.375rem;
+    border: none;
+    border-radius: 16px;
     overflow: hidden;
     cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
-    background: white;
+    transition: all 0.3s ease;
+    background: var(--monitoring-surface);
+    box-shadow: var(--monitoring-shadow);
 }
 
 .screenshot-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-4px);
+    box-shadow: var(--monitoring-shadow-hover);
 }
 
 .screenshot-card img {
     width: 100%;
-    height: 180px;
+    height: 200px;
     object-fit: cover;
+    transition: transform 0.3s ease;
+}
+
+.screenshot-card:hover img {
+    transform: scale(1.05);
 }
 
 .screenshot-info {
-    padding: 0.625rem;
-    background: #f8f9fa;
+    padding: 1rem;
+    background: var(--monitoring-surface);
 }
 
 .screenshot-badges {
     display: flex;
-    gap: 0.25rem;
-    margin-bottom: 0.375rem;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
     flex-wrap: wrap;
 }
 
 .screenshot-badges .badge {
-    font-size: 0.65rem;
-}
-
-.screenshot-details {
     font-size: 0.75rem;
-    color: #6c757d;
-    line-height: 1.2;
-}
-
-.screenshot-timestamp {
-    font-size: 0.75rem;
-    color: #6c757d;
-    text-align: center;
+    padding: 0.375rem 0.75rem;
+    border-radius: 20px;
     font-weight: 500;
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
-    .dashboard-container {
-        flex-direction: column;
-        height: auto;
-    }
-    
-    .sidebar-panel {
-        width: 100%;
-        max-height: 250px;
-    }
-    
-    .status-stats {
-        grid-template-columns: repeat(2, 1fr);
-    }
+.screenshot-details {
+    font-size: 0.8rem;
+    color: var(--monitoring-text-secondary);
+    line-height: 1.4;
 }
 
-/* Checkbox Styles */
-.monitor-checkbox {
-    transform: scale(1.1);
-    margin-right: 0.5rem;
+.screenshot-timestamp {
+    font-size: 0.8rem;
+    color: var(--monitoring-text-secondary);
+    text-align: center;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+}
+
+/* Modern Form Controls */
+.form-check-input {
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 6px;
+    border: 2px solid var(--monitoring-divider);
+}
+
+.form-check-input:checked {
+    background-color: var(--monitoring-primary);
+    border-color: var(--monitoring-primary);
+}
+
+.form-select {
+    border-radius: 12px;
+    border: 2px solid var(--monitoring-divider);
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+}
+
+.form-select:focus {
+    border-color: var(--monitoring-primary);
+    box-shadow: 0 0 0 3px rgba(25, 118, 210, 0.1);
+}
+
+/* Modern Buttons */
+.btn {
+    border-radius: 12px;
+    font-weight: 500;
+    padding: 0.75rem 1.5rem;
+    transition: all 0.2s ease;
+    border: none;
+    font-size: 0.875rem;
+}
+
+.btn-primary {
+    background: var(--monitoring-primary);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: var(--monitoring-primary-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(25, 118, 210, 0.3);
+}
+
+.btn-outline-light {
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    background: transparent;
+}
+
+.btn-outline-light:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.5);
+    color: white;
 }
 
 /* Loading States */
@@ -299,45 +427,71 @@ ob_start();
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 200px;
-    color: #6c757d;
+    height: 300px;
+    color: var(--monitoring-text-secondary);
+    flex-direction: column;
+    gap: 1rem;
 }
 
 .loading-container i {
-    margin-right: 0.5rem;
+    font-size: 2rem;
+    color: var(--monitoring-primary);
 }
 
 /* Empty States */
 .empty-state {
     text-align: center;
-    padding: 2rem 1rem;
-    color: #6c757d;
+    padding: 3rem 2rem;
+    color: var(--monitoring-text-secondary);
 }
 
 .empty-state i {
-    font-size: 2.5rem;
-    margin-bottom: 0.75rem;
+    font-size: 3rem;
+    margin-bottom: 1rem;
     opacity: 0.5;
+    color: var(--monitoring-primary);
 }
 
-/* Modal Styles */
-.modal-fullscreen .modal-body {
-    padding: 0;
+.empty-state h5 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--monitoring-text-primary);
+}
+
+/* Modern Modal Styles */
+.modal-content {
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+    border-bottom: 1px solid var(--monitoring-divider);
+    padding: 1.5rem;
+    border-radius: 16px 16px 0 0;
+}
+
+.modal-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--monitoring-text-primary);
 }
 
 .modal-actions {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.75rem;
 }
 
 .modal-actions .btn {
-    font-size: 0.8rem;
-    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
 }
 
 .modal-layout {
-    height: calc(100vh - 120px);
+    height: calc(100vh - 140px);
 }
 
 .screenshot-section {
@@ -355,70 +509,87 @@ ob_start();
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0;
+    padding: 1rem;
 }
 
 .screenshot-container img {
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-    border-radius: 0;
+    border-radius: 8px;
 }
 
-/* Log Sub-Modal Styles */
+/* Log Modal Styles */
 .log-sub-modal .modal-dialog {
     max-width: 90%;
-    max-height: 80vh;
+    max-height: 85vh;
 }
 
 .log-sub-modal .modal-content {
-    max-height: 80vh;
+    max-height: 85vh;
+    border-radius: 16px;
 }
 
 .log-sub-modal .modal-body {
     overflow-y: auto;
-    max-height: calc(80vh - 120px);
+    max-height: calc(85vh - 120px);
+    padding: 1.5rem;
 }
 
-/* Log Table Styles */
+/* Modern Table Styles */
 .log-table {
-    font-size: 0.75rem;
+    font-size: 0.875rem;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--monitoring-shadow);
 }
 
 .log-table th {
-    font-size: 0.7rem;
-    padding: 0.375rem;
-    background: #f8f9fa;
+    font-size: 0.8rem;
+    padding: 1rem;
+    background: var(--monitoring-primary);
+    color: white;
+    font-weight: 600;
+    border: none;
     position: sticky;
     top: 0;
     z-index: 10;
 }
 
 .log-table td {
-    padding: 0.375rem;
+    padding: 0.75rem 1rem;
     vertical-align: middle;
+    border-color: var(--monitoring-divider);
+}
+
+.log-table tbody tr:hover {
+    background: rgba(25, 118, 210, 0.05);
 }
 
 .log-table .badge {
-    font-size: 0.65rem;
+    font-size: 0.75rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 20px;
+    font-weight: 500;
 }
 
-/* Modal Log Table Container */
+/* Modal Log Container */
 .modal-log-container {
     height: 100%;
     overflow-y: auto;
-    border: 1px solid #dee2e6;
-    border-radius: 0.375rem;
-    background: white;
+    border: 1px solid var(--monitoring-divider);
+    border-radius: 12px;
+    background: var(--monitoring-surface);
 }
 
 .modal-log-pagination {
-    padding: 0.5rem;
-    background: #f8f9fa;
-    border-top: 1px solid #dee2e6;
+    padding: 1rem;
+    background: var(--monitoring-background);
+    border-top: 1px solid var(--monitoring-divider);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    border-radius: 0 0 12px 12px;
 }
 
 .modal-log-pagination .pagination {
@@ -426,66 +597,215 @@ ob_start();
 }
 
 .modal-log-pagination .page-link {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    border-radius: 8px;
+    margin: 0 0.125rem;
+    border: 1px solid var(--monitoring-divider);
+    color: var(--monitoring-text-primary);
+    transition: all 0.2s ease;
 }
 
 .modal-log-pagination .page-item.active .page-link {
-    background-color: #007bff;
-    border-color: #007bff;
+    background-color: var(--monitoring-primary);
+    border-color: var(--monitoring-primary);
+    color: white;
 }
 
 .modal-log-pagination .page-item.disabled .page-link {
-    color: #6c757d;
-    background-color: #fff;
-    border-color: #dee2e6;
+    color: var(--monitoring-text-secondary);
+    background-color: var(--monitoring-surface);
+    border-color: var(--monitoring-divider);
 }
 
 .modal-log-info {
-    font-size: 0.75rem;
-    color: #6c757d;
-}
-
-/* Tab Content Height */
-.tab-content {
-    height: calc(100vh - 300px);
-    overflow-y: auto;
-}
-
-.tab-pane {
-    height: 100%;
-    padding: 0.75rem;
-}
-
-.tab-pane .table-responsive {
-    height: calc(100% - 60px);
-    overflow-y: auto;
+    font-size: 0.875rem;
+    color: var(--monitoring-text-secondary);
+    font-weight: 500;
 }
 
 /* Header Log Buttons */
 .log-buttons {
     display: flex;
-    gap: 0.5rem;
+    gap: 0.75rem;
 }
 
 .log-buttons .btn {
-    font-size: 0.8rem;
-    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-weight: 500;
 }
 
 .log-buttons .btn:hover {
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Responsive Design */
+@media (max-width: 1400px) {
+    .dashboard-container {
+        gap: 1rem;
+        padding: 1rem;
+    }
+    
+    .sidebar-panel {
+        width: 320px;
+        min-width: 280px;
+    }
+}
+
+@media (max-width: 1200px) {
+    .dashboard-container {
+        gap: 0.75rem;
+        padding: 0.75rem;
+    }
+    
+    .sidebar-panel {
+        width: 300px;
+        min-width: 260px;
+    }
+}
+
+@media (max-width: 992px) {
+    .dashboard-container {
+        gap: 0.5rem;
+        padding: 0.5rem;
+    }
+    
+    .sidebar-panel {
+        width: 280px;
+        min-width: 240px;
+    }
+}
+
+@media (max-width: 768px) {
+    .dashboard-container {
+        flex-direction: column;
+        height: auto;
+        gap: 1rem;
+        padding: 1rem;
+    }
+    
+    .sidebar-panel {
+        width: 100%;
+        min-width: auto;
+        max-width: none;
+        max-height: 300px;
+    }
+    
+    .screenshot-grid {
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 1rem;
+    }
+    
+    .main-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 480px) {
+    .dashboard-container {
+        padding: 0.5rem;
+        gap: 0.5rem;
+    }
+    
+    .screenshot-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .log-buttons {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .log-buttons .btn {
+        width: 100%;
+    }
+}
+
+/* Checkbox Styles */
+.monitor-checkbox {
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-right: 0.75rem;
+    border-radius: 6px;
+    border: 2px solid var(--monitoring-divider);
+    transition: all 0.2s ease;
+}
+
+.monitor-checkbox:checked {
+    background-color: var(--monitoring-primary);
+    border-color: var(--monitoring-primary);
+}
+
+/* Badge Styles */
+.badge {
+    font-weight: 500;
+    border-radius: 20px;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+}
+
+.bg-success {
+    background: var(--monitoring-success) !important;
+}
+
+.bg-warning {
+    background: var(--monitoring-warning) !important;
+}
+
+.bg-danger {
+    background: var(--monitoring-error) !important;
+}
+
+.bg-primary {
+    background: var(--monitoring-primary) !important;
+}
+
+.bg-secondary {
+    background: var(--monitoring-text-secondary) !important;
+}
+
+.bg-info {
+    background: #17a2b8 !important;
+}
+
+/* Scrollbar Styling */
+.sidebar-panel .sidebar-content::-webkit-scrollbar,
+.main-content-area::-webkit-scrollbar,
+.modal-log-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar-panel .sidebar-content::-webkit-scrollbar-track,
+.main-content-area::-webkit-scrollbar-track,
+.modal-log-container::-webkit-scrollbar-track {
+    background: var(--monitoring-background);
+}
+
+.sidebar-panel .sidebar-content::-webkit-scrollbar-thumb,
+.main-content-area::-webkit-scrollbar-thumb,
+.modal-log-container::-webkit-scrollbar-thumb {
+    background: var(--monitoring-divider);
+    border-radius: 3px;
+}
+
+.sidebar-panel .sidebar-content::-webkit-scrollbar-thumb:hover,
+.main-content-area::-webkit-scrollbar-thumb:hover,
+.modal-log-container::-webkit-scrollbar-thumb:hover {
+    background: var(--monitoring-text-secondary);
 }
 </style>
 
-<!-- Dashboard Container -->
+<!-- Modern Dashboard Container -->
 <div class="dashboard-container">
     <!-- Left Sidebar - Monitor List -->
     <div class="sidebar-panel">
         <div class="sidebar-header">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <h6 class="mb-0">Monitors</h6>
+            <div class="d-flex justify-content-between align-items-center mb-3">
                 <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="selectAllMonitors">
                     <label class="form-check-label" for="selectAllMonitors">
@@ -494,7 +814,7 @@ ob_start();
                 </div>
             </div>
             <div class="filter-container">
-                <input type="text" class="form-control form-control-sm" id="monitorFilter" placeholder="Filter by name, username, or IP...">
+                                 <input type="text" class="form-control" id="monitorFilter" placeholder="Filter by username, type, or IP...">
             </div>
         </div>
         <div class="sidebar-content" id="monitorList">
@@ -503,54 +823,20 @@ ob_start();
     </div>
     
     <!-- Right Main Content - Status Overview + Screenshots -->
-    <div class="main-content">
-        <!-- Status Overview -->
-        <div class="status-overview">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h5 class="mb-1">Real-time Monitoring Dashboard</h5>
-                    <p class="mb-0 opacity-75" style="font-size: 0.875rem;">Live status and activity tracking</p>
-                </div>
-                <div>
-                    <span class="badge bg-success" id="status-indicator">Auto-refresh: ON</span>
-                    <button class="btn btn-sm btn-outline-light ms-2" id="refresh-btn">
-                        <i class="fas fa-sync-alt"></i> Refresh
-                    </button>
-                </div>
-            </div>
-            
-            <div class="status-stats">
-                <div class="stat-card">
-                    <div class="stat-number" id="total-monitors">0</div>
-                    <div class="stat-label">Total</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number" id="online-monitors">0</div>
-                    <div class="stat-label">Online</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number" id="active-monitors">0</div>
-                    <div class="stat-label">Active</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number" id="total-screenshots">0</div>
-                    <div class="stat-label">Screenshots</div>
-                </div>
-            </div>
-        </div>
+    <div class="main-content" style="margin-left: 0 !important;">
         
-        <!-- Screenshots Section -->
+        <!-- Modern Screenshots Section -->
         <div class="main-header">
-            <div class="d-flex justify-content-between align-items-center">
-                <h6 class="mb-0">
-                    <i class="fas fa-image me-2"></i>
-                    Screenshots
-                    <span class="badge bg-secondary ms-2" id="screenshotCount">0</span>
-                </h6>
-                <div class="d-flex align-items-center">
-                    <div id="headerDateFilterContainer" class="me-3"></div>
-                    <label class="form-label mb-0 me-2" style="font-size: 0.875rem;">Per page:</label>
-                    <select class="form-select form-select-sm" id="perPageSelect" style="width: auto;">
+            <h6>
+                <i class="fas fa-image me-2"></i>
+                Screenshots
+                <span class="badge bg-secondary ms-2" id="screenshotCount">0</span>
+            </h6>
+            <div class="d-flex align-items-center gap-3">
+                <div id="headerDateFilterContainer"></div>
+                <div class="d-flex align-items-center gap-2">
+                    <label class="form-label mb-0">Per page:</label>
+                    <select class="form-select" id="perPageSelect" style="width: auto;">
                         <option value="50">50</option>
                         <option value="100">100</option>
                         <option value="150" selected>150</option>
@@ -564,30 +850,36 @@ ob_start();
             <div id="screenshotsContainer">
                 <div class="loading-container">
                     <i class="fas fa-spinner fa-spin"></i>
-                    Loading monitors...
+                    <div>Loading monitors...</div>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Screenshot Modal -->
+<!-- Modern Screenshot Modal -->
 <div class="modal fade" id="screenshotModal" tabindex="-1">
     <div class="modal-dialog modal-fullscreen">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="modalTitle">Screenshot Details</h5>
+                <h5 class="modal-title" id="modalTitle">
+                    <i class="fas fa-image me-2"></i>
+                    Screenshot Details
+                </h5>
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="browserLogBtn" title="View Browser Logs">
-                        <i class="fas fa-globe"></i> Browser
+                    <button type="button" class="btn btn-outline-primary" id="browserLogBtn" title="View Browser Logs">
+                        <i class="fas fa-globe me-1"></i>
+                        Browser
                     </button>
-                    <button type="button" class="btn btn-sm btn-outline-warning" id="keyLogBtn" title="View Key Logs">
-                        <i class="fas fa-keyboard"></i> Keys
+                    <button type="button" class="btn btn-outline-warning" id="keyLogBtn" title="View Key Logs">
+                        <i class="fas fa-keyboard me-1"></i>
+                        Keys
                     </button>
-                    <button type="button" class="btn btn-sm btn-outline-info" id="usbLogBtn" title="View USB Logs">
-                        <i class="fas fa-usb"></i> USB
+                    <button type="button" class="btn btn-outline-info" id="usbLogBtn" title="View USB Logs">
+                        <i class="fas fa-usb me-1"></i>
+                        USB
                     </button>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
             </div>
             <div class="modal-body p-0">
@@ -604,8 +896,8 @@ ob_start();
     </div>
 </div>
 
-<!-- Log Sub-Modals -->
-<div class="modal fade" id="browserLogModal" tabindex="-1">
+<!-- Modern Log Sub-Modals -->
+<div class="modal fade log-sub-modal" id="browserLogModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
@@ -613,16 +905,21 @@ ob_start();
                     <i class="fas fa-globe text-primary me-2"></i>
                     Browser Activity Logs
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div id="browserLogsContent"></div>
+                <div id="browserLogsContent">
+                    <div class="loading-container">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <div>Loading browser logs...</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<div class="modal fade" id="keyLogModal" tabindex="-1">
+<div class="modal fade log-sub-modal" id="keyLogModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
@@ -630,16 +927,21 @@ ob_start();
                     <i class="fas fa-keyboard text-warning me-2"></i>
                     Keyboard Activity Logs
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div id="keyLogsContent"></div>
+                <div id="keyLogsContent">
+                    <div class="loading-container">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <div>Loading keyboard logs...</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<div class="modal fade" id="usbLogModal" tabindex="-1">
+<div class="modal fade log-sub-modal" id="usbLogModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
@@ -647,46 +949,56 @@ ob_start();
                     <i class="fas fa-usb text-info me-2"></i>
                     USB Activity Logs
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div id="usbLogsContent"></div>
+                <div id="usbLogsContent">
+                    <div class="loading-container">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <div>Loading USB logs...</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Log Modal -->
+<!-- Modern Log Modal -->
 <div class="modal fade" id="logModal" tabindex="-1">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="logModalTitle">Log File Content</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="logModalTitle">
+                    <i class="fas fa-file-alt me-2"></i>
+                    Log File Content
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <!-- Log View Tabs -->
+                <!-- Modern Log View Tabs -->
                 <ul class="nav nav-tabs" id="logViewTabs" role="tablist">
                     <li class="nav-item" role="presentation">
                         <button class="nav-link active" id="table-tab" data-bs-toggle="tab" data-bs-target="#table-content" type="button" role="tab">
-                            <i class="fas fa-table me-2"></i>Table View
+                            <i class="fas fa-table me-2"></i>
+                            Table View
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="raw-tab" data-bs-toggle="tab" data-bs-target="#raw-content" type="button" role="tab">
-                            <i class="fas fa-file-alt me-2"></i>Raw Text
+                            <i class="fas fa-file-alt me-2"></i>
+                            Raw Text
                         </button>
                     </li>
                 </ul>
                 
                 <!-- Tab Content -->
-                <div class="tab-content mt-3" id="logViewTabContent">
+                <div class="tab-content mt-4" id="logViewTabContent">
                     <!-- Table View Tab -->
                     <div class="tab-pane fade show active" id="table-content" role="tabpanel">
                         <div id="logContentContainer">
-                            <div class="text-center py-4">
-                                <i class="fas fa-spinner fa-spin fa-2x text-muted mb-3"></i>
-                                <p class="text-muted">Loading log content...</p>
+                            <div class="loading-container">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                <div>Loading log content...</div>
                             </div>
                         </div>
                     </div>
@@ -694,9 +1006,9 @@ ob_start();
                     <!-- Raw Text Tab -->
                     <div class="tab-pane fade" id="raw-content" role="tabpanel">
                         <div id="rawContentContainer">
-                            <div class="text-center py-4">
-                                <i class="fas fa-spinner fa-spin fa-2x text-muted mb-3"></i>
-                                <p class="text-muted">Loading raw content...</p>
+                            <div class="loading-container">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                <div>Loading raw content...</div>
                             </div>
                         </div>
                     </div>
@@ -732,6 +1044,7 @@ waitForJQuery(function() {
     loadMonitors();
     loadScreenshots();
     
+    
     // Auto-refresh every 30 seconds
     setInterval(function() {
         if (isAutoRefresh) {
@@ -747,7 +1060,28 @@ waitForJQuery(function() {
     
     // Event handlers
     setupEventHandlers();
+    
+    // Handle window resize to ensure proper layout
+    $(window).on('resize', function() {
+        // Force layout recalculation
+        $('.dashboard-container').css('width', '100%');
+    });
+    
 });
+
+
+function getMonitorTypeIcon(type) {
+    switch(type.toLowerCase()) {
+        case 'laptop':
+            return 'laptop';
+        case 'desktop':
+            return 'desktop';
+        case 'server':
+            return 'server';
+        default:
+            return 'desktop'; // Default fallback
+    }
+}
 
 function setupEventHandlers() {
     // Select all monitors
@@ -857,12 +1191,13 @@ function filterMonitors() {
         filteredMonitors = [...allMonitors];
     } else {
         filteredMonitors = allMonitors.filter(monitor => {
-            const name = monitor.name.toLowerCase();
             const username = (monitor.username || '').toLowerCase();
+            const type = (monitor.type || '').toLowerCase();
             const ip = monitor.ip_address.toLowerCase();
             
-            return name.includes(filterText) || 
+            return 
                    username.includes(filterText) || 
+                   type.includes(filterText) ||
                    ip.includes(filterText);
         });
     }
@@ -967,18 +1302,20 @@ function updateMonitorList(monitors) {
             <div class="monitor-item ${isSelected ? 'selected' : ''}">
                 <div class="monitor-item-header">
                     <input type="checkbox" class="monitor-checkbox" value="${monitor.id}" ${isSelected ? 'checked' : ''}>
-                    <div class="monitor-item-name">${monitor.name}</div>
+                    <div class="monitor-item-name">${monitor.username}</div>
                     <div class="monitor-item-status">
-                        <span class="badge status-${statusClass}">
-                            <i class="fas fa-circle me-1"></i>${statusText}
+                        <span class="live-status-badge status-${statusClass}">
+                            <i class="fas fa-circle"></i>
+                            <span>${statusText}</span>
                             ${statusClass === 'online' ? '<div class="pulse"></div>' : ''}
                         </span>
                     </div>
                 </div>
-                ${monitor.username && monitor.username !== 'Unknown' ? 
-                    `<div class="monitor-item-username">
-                        <i class="fas fa-user me-1"></i>${monitor.username}
-                    </div>` : ''}
+                                 ${monitor.type && monitor.type !== 'Unknown' ? 
+                     `<div class="monitor-item-username">
+                         <i class="fas fa-${getMonitorTypeIcon(monitor.type)}"></i>
+                         <span>${monitor.type}</span>
+                     </div>` : ''}
             </div>
         `;
     });
@@ -1124,11 +1461,11 @@ function displayScreenshots(screenshots, pagination = null) {
         if (isSingleMonitor) {
             // Single monitor view - show enhanced time ago and timestamp
             html += `
-                <div class="screenshot-card" onclick="viewScreenshot('${fullUrl}', '${monitor.name}', '${monitor.ip_address}')">
+                <div class="screenshot-card" onclick="viewScreenshot('${fullUrl}', '${monitor.username}', '${monitor.ip_address}')">
                     <img src="${thumbnailUrl}" alt="Screenshot" loading="lazy">
                     <div class="screenshot-info">
                         <div class="screenshot-timestamp">
-                            <i class="fas fa-clock me-1"></i>${timeAgo}
+                            <i class="fas fa-${getMonitorTypeIcon(monitor.type)} me-1"></i>${monitor.type}
                         </div>
                         <div class="screenshot-timestamp">
                             <i class="fas fa-calendar me-1"></i>${timestamp}
@@ -1143,13 +1480,14 @@ function displayScreenshots(screenshots, pagination = null) {
                 : '';
             
             html += `
-                <div class="screenshot-card" onclick="viewScreenshot('${fullUrl}', '${monitor.name}', '${monitor.ip_address}')">
+                <div class="screenshot-card" onclick="viewScreenshot('${fullUrl}', '${monitor.username}', '${monitor.ip_address}')">
                     <img src="${thumbnailUrl}" alt="Screenshot" loading="lazy">
                     <div class="screenshot-info">
                         <div class="screenshot-badges">
                             ${usernameHtml}
-                            <span class="badge bg-secondary">${monitor.ip_address}</span>
-                            <span class="badge bg-info">${timeAgo}</span>
+                            <span class="badge bg-secondary"><i class="fas fa-globe me-1"></i>${monitor.ip_address}</span>
+                            <!--<span class="badge bg-info">${timeAgo}</span>-->
+                            <span class="badge bg-info"><i class="fas fa-${getMonitorTypeIcon(monitor.type)} me-1"></i></span>
                         </div>
                         <div class="screenshot-details">
                             <div><i class="fas fa-clock me-1"></i>${timestamp}</div>
