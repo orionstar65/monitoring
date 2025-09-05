@@ -134,7 +134,7 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
                     'file_size' => $file_size,
                     'image_width' => $imagewidth,
                     'image_height' => $imageheight,
-                    'interval' => 5 // Return interval for next screenshot
+                    'interval' => 60 // Return interval for next screenshot
                 ]
             ]);
             return true;
