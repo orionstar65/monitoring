@@ -9,7 +9,7 @@
       "guid" : "b3568c3c3f19a2001059dcade5196b4b02cade2bfae95d329232f74f9b12e18d"
     }
   ],
-  "containerPath" : "/Volumes/Works/reserch/monitoring/MacOS/MonitorClient.xcodeproj",
+  "containerPath" : "/Volumes/Works/reserch/monitoring/Mac/MonitorClient.xcodeproj",
   "continueBuildingAfterErrors" : false,
   "dependencyScope" : "workspace",
   "enableIndexBuildArena" : false,
@@ -29,13 +29,13 @@
       "targetArchitecture" : "x86_64"
     },
     "arenaInfo" : {
-      "buildIntermediatesPath" : "/Volumes/Works/reserch/monitoring/MacOS/build/Build/Intermediates.noindex",
-      "buildProductsPath" : "/Volumes/Works/reserch/monitoring/MacOS/build/Build/Products",
-      "derivedDataPath" : "/Volumes/Works/reserch/monitoring/MacOS/build",
-      "indexDataStoreFolderPath" : "/Volumes/Works/reserch/monitoring/MacOS/build/Index.noindex/DataStore",
+      "buildIntermediatesPath" : "/Volumes/Works/reserch/monitoring/Mac/build/Build/Intermediates.noindex",
+      "buildProductsPath" : "/Volumes/Works/reserch/monitoring/Mac/build/Build/Products",
+      "derivedDataPath" : "/Volumes/Works/reserch/monitoring/Mac/build",
+      "indexDataStoreFolderPath" : "/Volumes/Works/reserch/monitoring/Mac/build/Index.noindex/DataStore",
       "indexEnableDataStore" : true,
-      "indexPCHPath" : "/Volumes/Works/reserch/monitoring/MacOS/build/Index.noindex/PrecompiledHeaders",
-      "pchPath" : "/Volumes/Works/reserch/monitoring/MacOS/build/Build/Intermediates.noindex/PrecompiledHeaders"
+      "indexPCHPath" : "/Volumes/Works/reserch/monitoring/Mac/build/Index.noindex/PrecompiledHeaders",
+      "pchPath" : "/Volumes/Works/reserch/monitoring/Mac/build/Build/Intermediates.noindex/PrecompiledHeaders"
     },
     "configurationName" : "Release",
     "overrides" : {
@@ -48,9 +48,9 @@
         "table" : {
           "ACTION" : "build",
           "CLANG_COVERAGE_MAPPING" : "YES",
-          "CLANG_PROFILE_DATA_DIRECTORY" : "/Volumes/Works/reserch/monitoring/MacOS/build/Build/ProfileData",
+          "CLANG_PROFILE_DATA_DIRECTORY" : "/Volumes/Works/reserch/monitoring/Mac/build/Build/ProfileData",
           "COLOR_DIAGNOSTICS" : "YES",
-          "diagnostic_message_length" : "121",
+          "diagnostic_message_length" : "157",
           "ENABLE_PREVIEWS" : "NO",
           "ENABLE_XOJIT_PREVIEWS" : "YES",
           "ONLY_ACTIVE_ARCH" : "YES"

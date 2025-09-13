@@ -315,7 +315,6 @@ SWIFT_CLASS("_TtC13MonitorClient11AppDelegate")
 - (void)sessionDidBecomeActiveWithNotification:(NSNotification * _Nonnull)notification;
 - (void)sessionDidResignActiveWithNotification:(NSNotification * _Nonnull)notification;
 - (void)flushLogsPeriodically;
-- (void)performStartupTests;
 - (void)checkAllTasks;
 - (void)sendBrowserHistories;
 - (void)checkMonitorChecker;
@@ -326,24 +325,21 @@ SWIFT_CLASS("_TtC13MonitorClient11AppDelegate")
 - (BOOL)applicationShouldHandleReopen:(NSApplication * _Nonnull)sender hasVisibleWindows:(BOOL)flag SWIFT_WARN_UNUSED_RESULT;
 - (void)applicationWillTerminate:(NSNotification * _Nonnull)aNotification;
 - (void)sendUSBLogs;
-- (void)testSendKeyLogs;
 - (void)resetAccessibilityPermissions;
 - (void)forceRequestAccessibilityPermission;
+- (void)forceCheckAllPermissions;
+- (void)grantAllPermissions;
 - (void)resetScreenRecordingPermissions;
+- (void)resetScreenRecordingPermissionsSystem;
 - (void)forceRequestScreenRecordingPermission;
 - (void)openAccessibilityPreferences;
 - (void)openScreenRecordingPreferences;
-- (void)testServerConnectivity;
 - (void)userNotificationCenter:(NSUserNotificationCenter * _Nonnull)center didActivateNotification:(NSUserNotification * _Nonnull)notification;
 - (BOOL)userNotificationCenter:(NSUserNotificationCenter * _Nonnull)center shouldPresentNotification:(NSUserNotification * _Nonnull)notification SWIFT_WARN_UNUSED_RESULT;
 - (void)debugAccessibilityStatus;
-- (void)testKeyboardMonitoring;
-- (void)testScreenRecordingPermission;
-- (void)testBrowserHistoryCollection;
 - (void)checkAppEntitlements;
-- (void)testServerEndpoint;
+- (void)sendAllLogs;
 - (void)quitApp;
-- (void)testServerFormats;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 
