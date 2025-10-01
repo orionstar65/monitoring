@@ -1,37 +1,48 @@
 <?php
 require_once BASEPATH . 'app/controllers/Base.php';
-require_once BASEPATH . 'app/services/DataSyncService.php';
 
 class Dashboard extends Base {
-    private $dataSync;
     
     public function __construct() {
         parent::__construct();
-        $this->dataSync = new DataSyncService();
     }
     
     public function index() {
-        // Sync monitors with actual data
-        $synced_count = $this->dataSync->syncMonitorsWithData();
-        
         // Get statistics
         $totalUsers = $this->db->fetch("SELECT COUNT(*) as count FROM users")['count'];
         $totalMonitors = $this->db->fetch("SELECT COUNT(*) as count FROM tbl_monitor_ips")['count'];
         $activeMonitors = $this->db->fetch("SELECT COUNT(*) as count FROM tbl_monitor_ips WHERE monitor_status = 1")['count'];
         
-        // Get recent monitors with actual data
+        // Get recent monitors with actual data from database
         $recentMonitors = $this->db->fetchAll(
             "SELECT * FROM tbl_monitor_ips ORDER BY last_monitor_tic DESC LIMIT 10"
         );
         
-        // Add actual data information to monitors
+        // Add actual data information to monitors using database queries
         foreach ($recentMonitors as &$monitor) {
-            $ip_identifier = 'ip_' . str_replace([':', '.'], '_', $monitor['ip_address']);
+            // Check for screenshots
+            $has_screenshots = $this->db->fetch(
+                "SELECT COUNT(*) as count FROM screenshot_metadata WHERE monitor_ip_id = :monitor_id",
+                ['monitor_id' => $monitor['id']]
+            )['count'] > 0;
             
-            // Check if monitor has actual data
-            $has_screenshots = $this->dataSync->getLatestScreenshot($ip_identifier) !== null;
-            $logs = $this->dataSync->getLogs($ip_identifier);
-            $has_logs = !empty($logs['browser_history']) || !empty($logs['key_logs']) || !empty($logs['usb_logs']);
+            // Check for logs
+            $has_browser_logs = $this->db->fetch(
+                "SELECT COUNT(*) as count FROM browser_history_logs WHERE monitor_ip_id = :monitor_id",
+                ['monitor_id' => $monitor['id']]
+            )['count'] > 0;
+            
+            $has_key_logs = $this->db->fetch(
+                "SELECT COUNT(*) as count FROM key_logs WHERE monitor_ip_id = :monitor_id",
+                ['monitor_id' => $monitor['id']]
+            )['count'] > 0;
+            
+            $has_usb_logs = $this->db->fetch(
+                "SELECT COUNT(*) as count FROM usb_device_logs WHERE monitor_ip_id = :monitor_id",
+                ['monitor_id' => $monitor['id']]
+            )['count'] > 0;
+            
+            $has_logs = $has_browser_logs || $has_key_logs || $has_usb_logs;
             
             $monitor['has_data'] = $has_screenshots || $has_logs;
             $monitor['has_screenshots'] = $has_screenshots;
@@ -43,7 +54,7 @@ class Dashboard extends Base {
             'totalMonitors' => $totalMonitors,
             'activeMonitors' => $activeMonitors,
             'recentMonitors' => $recentMonitors,
-            'syncedCount' => $synced_count
+            'syncedCount' => 0 // No longer needed since we use database
         ]);
     }
 }

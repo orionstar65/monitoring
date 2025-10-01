@@ -145,6 +145,7 @@
         .main-content {
             margin-left: var(--sidebar-width);
             min-height: 100vh;
+            padding-bottom: 120px; /* Add space for footer */
             transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             background: var(--background-color);
         }
@@ -484,6 +485,12 @@
                 <a class="nav-link <?php echo $active_page === 'view' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>view">
                     <i class="fas fa-eye"></i>
                     <span>Real-time Monitoring</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a class="nav-link <?php echo $active_page === 'logs' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>view/logs">
+                    <i class="fas fa-file-alt"></i>
+                    <span>Log Management</span>
                 </a>
             </div>
             <div class="nav-item">

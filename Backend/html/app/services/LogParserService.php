@@ -210,4 +210,20 @@ class LogParserService {
         
         return isset($icons[$logType]) ? $icons[$logType] : 'fas fa-file-alt';
     }
+    
+    /**
+     * Parse log data based on log type - wrapper method
+     */
+    public function parseLogData($content, $logType) {
+        switch ($logType) {
+            case 'browser_history':
+                return $this->parseBrowserHistory($content);
+            case 'key_logs':
+                return $this->parseKeyLogs($content);
+            case 'usb_logs':
+                return $this->parseUsbLogs($content);
+            default:
+                return $this->parseGenericLog($content, $logType);
+        }
+    }
 } 

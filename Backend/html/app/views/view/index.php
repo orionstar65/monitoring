@@ -87,9 +87,10 @@ ob_start();
 /* Modern Dashboard Layout */
 .dashboard-container {
     display: flex;
-    height: calc(100vh - 120px);
+    min-height: calc(100vh - 200px); /* Use min-height instead of fixed height */
     gap: 1.5rem;
     padding: 1.5rem;
+    padding-bottom: 2rem; /* Extra padding at bottom */
     background: var(--monitoring-background);
     width: 100%;
     max-width: none;
@@ -624,29 +625,14 @@ ob_start();
     font-weight: 500;
 }
 
-/* Header Log Buttons */
-.log-buttons {
-    display: flex;
-    gap: 0.75rem;
-}
-
-.log-buttons .btn {
-    font-size: 0.875rem;
-    padding: 0.5rem 1rem;
-    border-radius: 8px;
-    font-weight: 500;
-}
-
-.log-buttons .btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
+/* Log button styles removed - screenshots only */
 
 /* Responsive Design */
 @media (max-width: 1400px) {
     .dashboard-container {
         gap: 1rem;
         padding: 1rem;
+        padding-bottom: 2rem; /* Extra padding at bottom */
     }
     
     .sidebar-panel {
@@ -659,6 +645,7 @@ ob_start();
     .dashboard-container {
         gap: 0.75rem;
         padding: 0.75rem;
+        padding-bottom: 2rem; /* Extra padding at bottom */
     }
     
     .sidebar-panel {
@@ -726,17 +713,17 @@ ob_start();
     }
 }
 
-/* Checkbox Styles */
-.monitor-checkbox {
+/* Radio Button Styles */
+.monitor-radio {
     width: 1.25rem;
     height: 1.25rem;
     margin-right: 0.75rem;
-    border-radius: 6px;
+    border-radius: 50%;
     border: 2px solid var(--monitoring-divider);
     transition: all 0.2s ease;
 }
 
-.monitor-checkbox:checked {
+.monitor-radio:checked {
     background-color: var(--monitoring-primary);
     border-color: var(--monitoring-primary);
 }
@@ -807,10 +794,10 @@ ob_start();
         <div class="sidebar-header">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="selectAllMonitors">
-                    <label class="form-check-label" for="selectAllMonitors">
-                        Select All
-                    </label>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="selectAllMonitors">
+                        <i class="fas fa-globe me-1"></i>
+                        Show All Devices
+                    </button>
                 </div>
             </div>
             <div class="filter-container">
@@ -831,17 +818,20 @@ ob_start();
                 <i class="fas fa-image me-2"></i>
                 Screenshots
                 <span class="badge bg-secondary ms-2" id="screenshotCount">0</span>
+                <small class="text-muted ms-2" id="timezoneIndicator">
+                    <i class="fas fa-clock me-1"></i>
+                    <span id="userTimezone">Loading...</span>
+                </small>
             </h6>
             <div class="d-flex align-items-center gap-3">
                 <div id="headerDateFilterContainer"></div>
                 <div class="d-flex align-items-center gap-2">
                     <label class="form-label mb-0">Per page:</label>
                     <select class="form-select" id="perPageSelect" style="width: auto;">
-                        <option value="50">50</option>
-                        <option value="100">100</option>
-                        <option value="150" selected>150</option>
-                        <option value="200">200</option>
-                        <option value="300">300</option>
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="30">30</option>
+                        <option value="50" selected>50</option>
                     </select>
                 </div>
             </div>
@@ -867,19 +857,18 @@ ob_start();
                     Screenshot Details
                 </h5>
                 <div class="modal-actions">
-                    <button type="button" class="btn btn-outline-primary" id="browserLogBtn" title="View Browser Logs">
-                        <i class="fas fa-globe me-1"></i>
-                        Browser
-                    </button>
-                    <button type="button" class="btn btn-outline-warning" id="keyLogBtn" title="View Key Logs">
-                        <i class="fas fa-keyboard me-1"></i>
-                        Keys
-                    </button>
-                    <button type="button" class="btn btn-outline-info" id="usbLogBtn" title="View USB Logs">
-                        <i class="fas fa-usb me-1"></i>
-                        USB
-                    </button>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-outline-secondary" id="prevScreenshotBtn" title="Previous Screenshot" disabled>
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <span id="screenshotCounter" class="text-muted small">1 / 1</span>
+                        <button type="button" class="btn btn-outline-secondary" id="nextScreenshotBtn" title="Next Screenshot" disabled>
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
                 </div>
             </div>
             <div class="modal-body p-0">
@@ -896,127 +885,7 @@ ob_start();
     </div>
 </div>
 
-<!-- Modern Log Sub-Modals -->
-<div class="modal fade log-sub-modal" id="browserLogModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-globe text-primary me-2"></i>
-                    Browser Activity Logs
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div id="browserLogsContent">
-                    <div class="loading-container">
-                        <i class="fas fa-spinner fa-spin"></i>
-                        <div>Loading browser logs...</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal fade log-sub-modal" id="keyLogModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-keyboard text-warning me-2"></i>
-                    Keyboard Activity Logs
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div id="keyLogsContent">
-                    <div class="loading-container">
-                        <i class="fas fa-spinner fa-spin"></i>
-                        <div>Loading keyboard logs...</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal fade log-sub-modal" id="usbLogModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-usb text-info me-2"></i>
-                    USB Activity Logs
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div id="usbLogsContent">
-                    <div class="loading-container">
-                        <i class="fas fa-spinner fa-spin"></i>
-                        <div>Loading USB logs...</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Modern Log Modal -->
-<div class="modal fade" id="logModal" tabindex="-1">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="logModalTitle">
-                    <i class="fas fa-file-alt me-2"></i>
-                    Log File Content
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <!-- Modern Log View Tabs -->
-                <ul class="nav nav-tabs" id="logViewTabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="table-tab" data-bs-toggle="tab" data-bs-target="#table-content" type="button" role="tab">
-                            <i class="fas fa-table me-2"></i>
-                            Table View
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="raw-tab" data-bs-toggle="tab" data-bs-target="#raw-content" type="button" role="tab">
-                            <i class="fas fa-file-alt me-2"></i>
-                            Raw Text
-                        </button>
-                    </li>
-                </ul>
-                
-                <!-- Tab Content -->
-                <div class="tab-content mt-4" id="logViewTabContent">
-                    <!-- Table View Tab -->
-                    <div class="tab-pane fade show active" id="table-content" role="tabpanel">
-                        <div id="logContentContainer">
-                            <div class="loading-container">
-                                <i class="fas fa-spinner fa-spin"></i>
-                                <div>Loading log content...</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Raw Text Tab -->
-                    <div class="tab-pane fade" id="raw-content" role="tabpanel">
-                        <div id="rawContentContainer">
-                            <div class="loading-container">
-                                <i class="fas fa-spinner fa-spin"></i>
-                                <div>Loading raw content...</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+<!-- Log modals removed - screenshots only -->
 
 <script>
 // Wait for jQuery to be available
@@ -1033,13 +902,17 @@ function waitForJQuery(callback) {
 let refreshInterval;
 let isAutoRefresh = true;
 let currentPage = 1;
-let currentPerPage = 150;
+let currentPerPage = 50;
 let selectedMonitors = [];
 let allMonitors = [];
 let filteredMonitors = [];
 
 // Initialize when jQuery is ready
 waitForJQuery(function() {
+    // Detect and display user's timezone
+    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    $('#userTimezone').text(userTimezone);
+    
     // Load initial data
     loadMonitors();
     loadScreenshots();
@@ -1067,10 +940,23 @@ waitForJQuery(function() {
         $('.dashboard-container').css('width', '100%');
     });
     
+    // Make functions global so they can be called from onclick attributes
+    window.getMonitorTypeIcon = getMonitorTypeIcon;
+    window.loadScreenshotsForSelectedMonitor = loadScreenshotsForSelectedMonitor;
+    window.viewScreenshot = viewScreenshot;
+    window.setupNavigationButtons = setupNavigationButtons;
+    window.navigateScreenshot = navigateScreenshot;
+    window.initializeNavigationState = initializeNavigationState;
+    
 });
 
 
 function getMonitorTypeIcon(type) {
+    // Handle undefined, null, or empty type
+    if (!type || typeof type !== 'string') {
+        return 'desktop'; // Default fallback
+    }
+    
     switch(type.toLowerCase()) {
         case 'laptop':
             return 'laptop';
@@ -1078,41 +964,43 @@ function getMonitorTypeIcon(type) {
             return 'desktop';
         case 'server':
             return 'server';
+        case 'user':
+            return 'desktop'; // Default for 'user' type
         default:
             return 'desktop'; // Default fallback
     }
 }
 
 function setupEventHandlers() {
-    // Select all monitors
-    $('#selectAllMonitors').change(function() {
-        const isChecked = $(this).is(':checked');
-        $('.monitor-checkbox').prop('checked', isChecked);
+    // Show all devices button
+    $('#selectAllMonitors').click(function() {
+        // Clear all selections to show all devices
+        selectedMonitors = [];
+        $('.monitor-radio').prop('checked', false);
+        $('.monitor-item').removeClass('selected');
         
-        if (isChecked) {
-            selectedMonitors = filteredMonitors.map(m => m.id);
-            $('.monitor-item').addClass('selected');
-        } else {
-            selectedMonitors = [];
-            $('.monitor-item').removeClass('selected');
-        }
+        // Update UI
+        updateSelectAllCheckbox();
         
         loadScreenshots();
     });
     
-    // Individual monitor selection
-    $(document).on('change', '.monitor-checkbox', function() {
+    // Individual monitor selection (radio button mode)
+    $(document).on('change', '.monitor-radio', function() {
         const monitorId = parseInt($(this).val());
         const isChecked = $(this).is(':checked');
         
         if (isChecked) {
-            if (!selectedMonitors.includes(monitorId)) {
-                selectedMonitors.push(monitorId);
-            }
+            // Radio button selection - only one monitor can be selected
+            selectedMonitors = [monitorId];
+            
+            // Remove selected class from all items and add to current
+            $('.monitor-item').removeClass('selected');
             $(this).closest('.monitor-item').addClass('selected');
         } else {
-            selectedMonitors = selectedMonitors.filter(id => id !== monitorId);
-            $(this).closest('.monitor-item').removeClass('selected');
+            // If unchecked, clear selection (show all devices)
+            selectedMonitors = [];
+            $('.monitor-item').removeClass('selected');
         }
         
         // Update select all checkbox
@@ -1121,23 +1009,23 @@ function setupEventHandlers() {
         loadScreenshots();
     });
     
-    // Click anywhere on monitor item to toggle checkbox
+    // Click anywhere on monitor item to select radio button
     $(document).on('click', '.monitor-item', function(e) {
-        // Don't trigger if clicking directly on the checkbox
-        if ($(e.target).is('input[type="checkbox"]') || $(e.target).is('label')) {
+        // Don't trigger if clicking directly on the radio button
+        if ($(e.target).is('input[type="radio"]') || $(e.target).is('label')) {
             return;
         }
         
-        const checkbox = $(this).find('.monitor-checkbox');
-        const monitorId = parseInt(checkbox.val());
+        const radio = $(this).find('.monitor-radio');
+        const monitorId = parseInt(radio.val());
         
         // Clear all selections first
-        $('.monitor-checkbox').prop('checked', false);
+        $('.monitor-radio').prop('checked', false);
         $('.monitor-item').removeClass('selected');
         selectedMonitors = [];
         
         // Select only this monitor
-        checkbox.prop('checked', true);
+        radio.prop('checked', true);
         $(this).addClass('selected');
         selectedMonitors = [monitorId];
         
@@ -1146,9 +1034,6 @@ function setupEventHandlers() {
         
         // Load screenshots for this specific monitor
         loadScreenshotsForMonitor(monitorId);
-        
-        // Also load logs for this monitor
-        loadLogsForMonitor(monitorId);
     });
     
     // Monitor filter
@@ -1207,15 +1092,14 @@ function filterMonitors() {
 }
 
 function updateSelectAllCheckbox() {
-    const totalMonitors = filteredMonitors.length;
     const selectedCount = selectedMonitors.length;
     
     if (selectedCount === 0) {
-        $('#selectAllMonitors').prop('indeterminate', false).prop('checked', false);
-    } else if (selectedCount === totalMonitors) {
-        $('#selectAllMonitors').prop('indeterminate', false).prop('checked', true);
+        $('#selectAllMonitors').removeClass('btn-primary').addClass('btn-outline-primary');
+        $('#selectAllMonitors').html('<i class="fas fa-globe me-1"></i>Show All Devices');
     } else {
-        $('#selectAllMonitors').prop('indeterminate', true).prop('checked', false);
+        $('#selectAllMonitors').removeClass('btn-outline-primary').addClass('btn-primary');
+        $('#selectAllMonitors').html('<i class="fas fa-check me-1"></i>All Devices Selected');
     }
 }
 
@@ -1301,7 +1185,7 @@ function updateMonitorList(monitors) {
         html += `
             <div class="monitor-item ${isSelected ? 'selected' : ''}">
                 <div class="monitor-item-header">
-                    <input type="checkbox" class="monitor-checkbox" value="${monitor.id}" ${isSelected ? 'checked' : ''}>
+                    <input type="radio" class="monitor-radio" name="monitor_selection" value="${monitor.id}" ${isSelected ? 'checked' : ''}>
                     <div class="monitor-item-name">${monitor.username}</div>
                     <div class="monitor-item-status">
                         <span class="live-status-badge status-${statusClass}">
@@ -1314,7 +1198,7 @@ function updateMonitorList(monitors) {
                                  ${monitor.type && monitor.type !== 'Unknown' ? 
                      `<div class="monitor-item-username">
                          <i class="fas fa-${getMonitorTypeIcon(monitor.type)}"></i>
-                         <span>${monitor.type}</span>
+                         <span>${monitor.type || 'Desktop'}</span>
                      </div>` : ''}
             </div>
         `;
@@ -1441,13 +1325,22 @@ function displayScreenshots(screenshots, pagination = null) {
         
         let timestamp;
         if (item.modified_time) {
-            timestamp = new Date(item.modified_time).toLocaleString();
+            // Convert UTC timestamp to user's local timezone
+            timestamp = new Date(item.modified_time * 1000).toLocaleString('en-US', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
         } else {
             timestamp = new Date().toLocaleString();
         }
         
         // Calculate time ago
-        const screenshotTime = new Date(item.modified_time);
+        const screenshotTime = new Date(item.modified_time * 1000);
         const timeDiff = Date.now() - screenshotTime.getTime();
         const timeDiffSeconds = Math.floor(timeDiff / 1000);
         let timeAgo = '';
@@ -1458,14 +1351,17 @@ function displayScreenshots(screenshots, pagination = null) {
             timeAgo = formatTimeAgo(timeDiffSeconds);
         }
         
+        // Get user's timezone for display
+        const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        
         if (isSingleMonitor) {
             // Single monitor view - show enhanced time ago and timestamp
             html += `
-                <div class="screenshot-card" onclick="viewScreenshot('${fullUrl}', '${monitor.username}', '${monitor.ip_address}')">
+                <div class="screenshot-card" onclick="viewScreenshot('${fullUrl}', '${monitor.username}', '${monitor.ip_address}', '${item.global_id}')">
                     <img src="${thumbnailUrl}" alt="Screenshot" loading="lazy">
                     <div class="screenshot-info">
                         <div class="screenshot-timestamp">
-                            <i class="fas fa-${getMonitorTypeIcon(monitor.type)} me-1"></i>${monitor.type}
+                            <i class="fas fa-${getMonitorTypeIcon(monitor.type)} me-1"></i>${monitor.type || 'Desktop'}
                         </div>
                         <div class="screenshot-timestamp">
                             <i class="fas fa-calendar me-1"></i>${timestamp}
@@ -1480,14 +1376,12 @@ function displayScreenshots(screenshots, pagination = null) {
                 : '';
             
             html += `
-                <div class="screenshot-card" onclick="viewScreenshot('${fullUrl}', '${monitor.username}', '${monitor.ip_address}')">
+                <div class="screenshot-card" onclick="viewScreenshot('${fullUrl}', '${monitor.username}', '${monitor.ip_address}', '${item.global_id}')">
                     <img src="${thumbnailUrl}" alt="Screenshot" loading="lazy">
                     <div class="screenshot-info">
                         <div class="screenshot-badges">
                             ${usernameHtml}
-                            <span class="badge bg-secondary"><i class="fas fa-globe me-1"></i>${monitor.ip_address}</span>
-                            <!--<span class="badge bg-info">${timeAgo}</span>-->
-                            <span class="badge bg-info"><i class="fas fa-${getMonitorTypeIcon(monitor.type)} me-1"></i></span>
+                            <span class="badge bg-info"><i class="fas fa-${getMonitorTypeIcon(monitor.type)} me-1"></i>${monitor.ip_address}</span>
                         </div>
                         <div class="screenshot-details">
                             <div><i class="fas fa-clock me-1"></i>${timestamp}</div>
@@ -1740,902 +1634,137 @@ function loadScreenshotsForMonitor(monitorId, page = 1) {
     });
 }
 
-function viewScreenshot(imageUrl, monitorName, ipAddress) {
+function viewScreenshot(imageUrl, monitorName, ipAddress, screenshotId = null) {
     $("#modalImage").attr("src", imageUrl);
     $("#modalTitle").text(`Screenshot - ${monitorName} (${ipAddress})`);
+    
+    // Store current screenshot ID for navigation
+    window.currentScreenshotId = screenshotId;
+    
     $("#screenshotModal").modal("show");
     
-    // Load logs for this IP
-    loadLogsForScreenshot(ipAddress);
+    // Setup navigation buttons
+    setupNavigationButtons();
     
-    // Setup log button event handlers
-    setupLogButtonHandlers();
-}
-
-function setupLogButtonHandlers() {
-    // Browser log button
-    $('#browserLogBtn').off('click').on('click', function() {
-        if (currentLogData.browser.data.length > 0) {
-            displayLogTableWithPagination('browser', $("#browserLogsContent"));
-            $('#browserLogModal').modal('show');
-        } else {
-            alert('No browser logs available for this monitor.');
-        }
-    });
-    
-    // Key log button
-    $('#keyLogBtn').off('click').on('click', function() {
-        if (currentLogData.key.data.length > 0) {
-            displayLogTableWithPagination('key', $("#keyLogsContent"));
-            $('#keyLogModal').modal('show');
-        } else {
-            alert('No key logs available for this monitor.');
-        }
-    });
-    
-    // USB log button
-    $('#usbLogBtn').off('click').on('click', function() {
-        if (currentLogData.usb.data.length > 0) {
-            displayLogTableWithPagination('usb', $("#usbLogsContent"));
-            $('#usbLogModal').modal('show');
-        } else {
-            alert('No USB logs available for this monitor.');
-        }
-    });
-}
-
-function loadLogsForMonitor(monitorId) {
-    // Find monitor by ID
-    const monitor = allMonitors.find(m => m.id === monitorId);
-    
-    if (monitor) {
-        $.ajax({
-            url: "<?php echo BASE_URL; ?>view/api_logs/" + monitor.id,
-            method: "GET",
-            success: function(data) {
-                displayLogsInModal(data);
-            },
-            error: function(xhr, status, error) {
-                console.log("Failed to load logs:", error);
-                // Reset log data on error
-                currentLogData = {
-                    browser: { data: [], headers: [], currentPage: 1, perPage: 20 },
-                    key: { data: [], headers: [], currentPage: 1, perPage: 20 },
-                    usb: { data: [], headers: [], currentPage: 1, perPage: 20 }
-                };
-            }
-        });
+    // Initialize navigation state
+    if (screenshotId) {
+        initializeNavigationState();
     }
 }
 
-function loadLogsForScreenshot(ipAddress) {
-    // Show loading state
-    $("#browserLogsContent, #keyLogsContent, #usbLogsContent").html('<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading...</div>');
-    
-    // Find monitor by IP address
-    const monitor = allMonitors.find(m => m.ip_address === ipAddress);
-    
-    if (monitor) {
-        $.ajax({
-            url: "<?php echo BASE_URL; ?>view/api_logs/" + monitor.id,
-            method: "GET",
-            success: function(data) {
-                displayLogsInModal(data);
-            },
-            error: function(xhr, status, error) {
-                console.log("Failed to load logs:", error);
-                $("#browserLogsContent, #keyLogsContent, #usbLogsContent").html('<div class="text-danger">Failed to load logs</div>');
-            }
-        });
-    }
-}
+// Log button handlers removed - screenshots only
 
-// Global variables for log pagination
-let currentLogData = {
-    browser: { data: [], headers: [], currentPage: 1, perPage: 20 },
-    key: { data: [], headers: [], currentPage: 1, perPage: 20 },
-    usb: { data: [], headers: [], currentPage: 1, perPage: 20 }
-};
+// Log loading functions removed - screenshots only
 
-function displayLogsInModal(logs) {
-    // Display browser logs
-    if (logs.browser_history && logs.browser_history.length > 0) {
-        const latestBrowserLog = logs.browser_history[0];
-        $.get("<?php echo BASE_URL; ?>" + latestBrowserLog.path, function(data) {
-            const parsedData = parseLogData(data, 'browser_history');
-            if (parsedData.data.length > 0) {
-                currentLogData.browser.data = parsedData.data;
-                currentLogData.browser.headers = parsedData.headers;
-                currentLogData.browser.currentPage = 1;
-                // Only update modal content if modal exists
-                if ($("#browserLogsContent").length > 0) {
-                    displayLogTableWithPagination('browser', $("#browserLogsContent"));
-                }
-            } else {
-                if ($("#browserLogsContent").length > 0) {
-                    $("#browserLogsContent").html('<div class="text-muted">No browser logs available</div>');
-                }
-            }
-        }).fail(function() {
-            if ($("#browserLogsContent").length > 0) {
-                $("#browserLogsContent").html('<div class="text-muted">No browser logs available</div>');
-            }
-        });
-    } else {
-        if ($("#browserLogsContent").length > 0) {
-            $("#browserLogsContent").html('<div class="text-muted">No browser logs available</div>');
-        }
-    }
-    
-    // Display key logs
-    if (logs.key_logs && logs.key_logs.length > 0) {
-        const latestKeyLog = logs.key_logs[0];
-        $.get("<?php echo BASE_URL; ?>" + latestKeyLog.path, function(data) {
-            const parsedData = parseLogData(data, 'key_logs');
-            if (parsedData.data.length > 0) {
-                currentLogData.key.data = parsedData.data;
-                currentLogData.key.headers = parsedData.headers;
-                currentLogData.key.currentPage = 1;
-                // Only update modal content if modal exists
-                if ($("#keyLogsContent").length > 0) {
-                    displayLogTableWithPagination('key', $("#keyLogsContent"));
-                }
-            } else {
-                if ($("#keyLogsContent").length > 0) {
-                    $("#keyLogsContent").html('<div class="text-muted">No key logs available</div>');
-                }
-            }
-        }).fail(function() {
-            if ($("#keyLogsContent").length > 0) {
-                $("#keyLogsContent").html('<div class="text-muted">No key logs available</div>');
-            }
-        });
-    } else {
-        if ($("#keyLogsContent").length > 0) {
-            $("#keyLogsContent").html('<div class="text-muted">No key logs available</div>');
-        }
-    }
-    
-    // Display USB logs
-    if (logs.usb_logs && logs.usb_logs.length > 0) {
-        const latestUsbLog = logs.usb_logs[0];
-        $.get("<?php echo BASE_URL; ?>" + latestUsbLog.path, function(data) {
-            const parsedData = parseLogData(data, 'usb_logs');
-            if (parsedData.data.length > 0) {
-                currentLogData.usb.data = parsedData.data;
-                currentLogData.usb.headers = parsedData.headers;
-                currentLogData.usb.currentPage = 1;
-                // Only update modal content if modal exists
-                if ($("#usbLogsContent").length > 0) {
-                    displayLogTableWithPagination('usb', $("#usbLogsContent"));
-                }
-            } else {
-                if ($("#usbLogsContent").length > 0) {
-                    $("#usbLogsContent").html('<div class="text-muted">No USB logs available</div>');
-                }
-            }
-        }).fail(function() {
-            if ($("#usbLogsContent").length > 0) {
-                $("#usbLogsContent").html('<div class="text-muted">No USB logs available</div>');
-            }
-        });
-    } else {
-        if ($("#usbLogsContent").length > 0) {
-            $("#usbLogsContent").html('<div class="text-muted">No USB logs available</div>');
-        }
-    }
-    
-    // Update timestamp
-    // $("#logsTimestamp").text("Last updated: " + new Date().toLocaleString()); // This line is removed as per new_code
-}
+// Log-related variables removed - screenshots only
 
-function displayLogTableWithPagination(logType, container) {
-    const logData = currentLogData[logType];
-    if (!logData.data || logData.data.length === 0) {
-        container.html('<div class="text-muted">No log entries available</div>');
-        return;
-    }
-    
-    const totalEntries = logData.data.length;
-    const totalPages = Math.ceil(totalEntries / logData.perPage);
-    const startIndex = (logData.currentPage - 1) * logData.perPage;
-    const endIndex = Math.min(startIndex + logData.perPage, totalEntries);
-    const displayData = logData.data.slice(startIndex, endIndex);
-    
-    let html = `
-        <div class="modal-log-container">
-            <div class="table-responsive">
-                <table class="table table-sm log-table mb-0">
-                    <thead class="sticky-top bg-light">
-                        <tr>
-    `;
-    
-    logData.headers.forEach(header => {
-        html += `<th>${header}</th>`;
-    });
-    
-    html += `
-                        </tr>
-                    </thead>
-                    <tbody>
-    `;
-    
-    displayData.forEach(row => {
-        html += '<tr>';
-        logData.headers.forEach(header => {
-            const key = header.toLowerCase().replace(/\s+/g, '');
-            const value = row[key] || row[Object.keys(row).find(k => k.toLowerCase().includes(key.toLowerCase()))] || '';
-            
-            let displayValue = value;
-            if (key === 'url' && value.length > 50) {
-                displayValue = `<a href="${value}" target="_blank" title="${value}" class="text-truncate d-inline-block" style="max-width: 200px;">${value.substring(0, 47)}...</a>`;
-            } else if (key === 'url') {
-                displayValue = `<a href="${value}" target="_blank" title="${value}">${value}</a>`;
-            } else if (key === 'title' && value.length > 40) {
-                displayValue = `<span title="${value}" class="text-truncate d-inline-block" style="max-width: 150px;">${value.substring(0, 37)}...</span>`;
-            } else if (key === 'key') {
-                displayValue = `<span class="badge bg-light text-dark border">${value}</span>`;
-            } else if (key === 'action') {
-                const actionClass = value.toLowerCase() === 'connected' ? 'bg-success' : 
-                                  value.toLowerCase() === 'disconnected' ? 'bg-danger' : 
-                                  value.toLowerCase() === 'keydown' ? 'bg-primary' :
-                                  value.toLowerCase() === 'keyup' ? 'bg-secondary' : 'bg-info';
-                displayValue = `<span class="badge ${actionClass}">${value}</span>`;
-            } else if (key === 'browser') {
-                displayValue = `<span class="badge bg-primary">${value}</span>`;
-            } else if (key === 'application') {
-                displayValue = `<span class="badge bg-info">${value}</span>`;
-            } else if (key === 'device') {
-                displayValue = `<span class="badge bg-warning text-dark">${value}</span>`;
-            } else if (key === 'date') {
-                const date = new Date(value);
-                if (!isNaN(date.getTime())) {
-                    displayValue = `<small class="text-muted">${date.toLocaleString()}</small>`;
-                } else {
-                    displayValue = `<small class="text-muted">${value}</small>`;
-                }
-            } else if (key === 'content') {
-                displayValue = `<code class="small">${value}</code>`;
-            } else if (key === 'line') {
-                displayValue = `<span class="badge bg-secondary">${value}</span>`;
-            }
-            
-            html += `<td>${displayValue}</td>`;
-        });
-        html += '</tr>';
-    });
-    
-    html += `
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    `;
-    
-    // Add pagination
-    if (totalPages > 1) {
-        html += generateModalPagination(logType, logData.currentPage, totalPages, totalEntries, startIndex + 1, endIndex);
-    } else {
-        html += `
-            <div class="modal-log-pagination">
-                <div class="modal-log-info">
-                    Showing ${totalEntries} of ${totalEntries} entries
-                </div>
-            </div>
-        `;
-    }
-    
-    container.html(html);
-}
+// Log display functions removed - screenshots only
 
-function generateModalPagination(logType, currentPage, totalPages, totalEntries, startEntry, endEntry) {
-    let html = `
-        <div class="modal-log-pagination">
-            <div class="modal-log-info">
-                Showing ${startEntry} to ${endEntry} of ${totalEntries} entries
-            </div>
-            <nav aria-label="Log Pagination">
-                <ul class="pagination pagination-sm mb-0">
-    `;
-    
+// Log table display functions removed - screenshots only
+
+// Log pagination functions removed - screenshots only
+
+// Remaining log display functions removed - screenshots only
+
+// All log parsing functions removed - screenshots only
+
+// All remaining log functions removed - screenshots only
+
+// Navigation functionality for screenshot modal
+function setupNavigationButtons() {
     // Previous button
-    html += `
-        <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-            <a class="page-link" href="#" onclick="changeLogPage('${logType}', ${currentPage - 1}); return false;">
-                <i class="fas fa-chevron-left"></i>
-            </a>
-        </li>
-    `;
-    
-    // Page numbers
-    const maxVisible = 5;
-    if (totalPages <= maxVisible) {
-        for (let i = 1; i <= totalPages; i++) {
-            html += `
-                <li class="page-item ${i === currentPage ? 'active' : ''}">
-                    <a class="page-link" href="#" onclick="changeLogPage('${logType}', ${i}); return false;">${i}</a>
-                </li>
-            `;
+    $('#prevScreenshotBtn').off('click').on('click', function() {
+        if (window.currentScreenshotId) {
+            navigateScreenshot('prev');
         }
-    } else {
-        let start = Math.max(1, currentPage - 2);
-        let end = Math.min(totalPages, start + maxVisible - 1);
-        
-        if (end - start + 1 < maxVisible) {
-            start = Math.max(1, end - maxVisible + 1);
-        }
-        
-        if (start > 1) {
-            html += `
-                <li class="page-item">
-                    <a class="page-link" href="#" onclick="changeLogPage('${logType}', 1); return false;">1</a>
-                </li>
-                <li class="page-item disabled">
-                    <span class="page-link">...</span>
-                </li>
-            `;
-        }
-        
-        for (let i = start; i <= end; i++) {
-            html += `
-                <li class="page-item ${i === currentPage ? 'active' : ''}">
-                    <a class="page-link" href="#" onclick="changeLogPage('${logType}', ${i}); return false;">${i}</a>
-                </li>
-            `;
-        }
-        
-        if (end < totalPages) {
-            html += `
-                <li class="page-item disabled">
-                    <span class="page-link">...</span>
-                </li>
-                <li class="page-item">
-                    <a class="page-link" href="#" onclick="changeLogPage('${logType}', ${totalPages}); return false;">${totalPages}</a>
-                </li>
-            `;
-        }
-    }
+    });
     
     // Next button
-    html += `
-        <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-            <a class="page-link" href="#" onclick="changeLogPage('${logType}', ${currentPage + 1}); return false;">
-                <i class="fas fa-chevron-right"></i>
-            </a>
-        </li>
-    `;
-    
-    html += `
-                </ul>
-            </nav>
-        </div>
-    `;
-    
-    return html;
-}
-
-function changeLogPage(logType, page) {
-    const logData = currentLogData[logType];
-    if (page >= 1 && page <= Math.ceil(logData.data.length / logData.perPage)) {
-        logData.currentPage = page;
-        displayLogTableWithPagination(logType, $(`#${logType}LogsContent`)); // Changed to logTypeLogsContent
-    }
-}
-
-function displayLogTable(data, headers, logType, container) {
-    if (!data || data.length === 0) {
-        container.html('<div class="text-muted">No log entries available</div>');
-        return;
-    }
-    
-    // Limit to first 10 entries for modal display
-    const displayData = data.slice(0, 10);
-    
-    let html = `
-        <div class="table-responsive">
-            <table class="table table-sm log-table">
-                <thead>
-                    <tr>
-    `;
-    
-    headers.forEach(header => {
-        html += `<th>${header}</th>`;
+    $('#nextScreenshotBtn').off('click').on('click', function() {
+        if (window.currentScreenshotId) {
+            navigateScreenshot('next');
+        }
     });
     
-    html += `
-                    </tr>
-                </thead>
-                <tbody>
-    `;
-    
-    displayData.forEach(row => {
-        html += '<tr>';
-        headers.forEach(header => {
-            const key = header.toLowerCase().replace(/\s+/g, '');
-            const value = row[key] || row[Object.keys(row).find(k => k.toLowerCase().includes(key.toLowerCase()))] || '';
-            
-            let displayValue = value;
-            if (key === 'url' && value.length > 50) {
-                displayValue = `<a href="${value}" target="_blank" title="${value}" class="text-truncate d-inline-block" style="max-width: 200px;">${value.substring(0, 47)}...</a>`;
-            } else if (key === 'url') {
-                displayValue = `<a href="${value}" target="_blank" title="${value}">${value}</a>`;
-            } else if (key === 'title' && value.length > 40) {
-                displayValue = `<span title="${value}" class="text-truncate d-inline-block" style="max-width: 150px;">${value.substring(0, 37)}...</span>`;
-            } else if (key === 'key') {
-                displayValue = `<span class="badge bg-light text-dark border">${value}</span>`;
-            } else if (key === 'action') {
-                const actionClass = value.toLowerCase() === 'connected' ? 'bg-success' : 
-                                  value.toLowerCase() === 'disconnected' ? 'bg-danger' : 
-                                  value.toLowerCase() === 'keydown' ? 'bg-primary' :
-                                  value.toLowerCase() === 'keyup' ? 'bg-secondary' : 'bg-info';
-                displayValue = `<span class="badge ${actionClass}">${value}</span>`;
-            } else if (key === 'browser') {
-                displayValue = `<span class="badge bg-primary">${value}</span>`;
-            } else if (key === 'application') {
-                displayValue = `<span class="badge bg-info">${value}</span>`;
-            } else if (key === 'device') {
-                displayValue = `<span class="badge bg-warning text-dark">${value}</span>`;
-            } else if (key === 'date') {
-                const date = new Date(value);
-                if (!isNaN(date.getTime())) {
-                    displayValue = `<small class="text-muted">${date.toLocaleString()}</small>`;
-                } else {
-                    displayValue = `<small class="text-muted">${value}</small>`;
-                }
-            } else if (key === 'content') {
-                displayValue = `<code class="small">${value}</code>`;
-            } else if (key === 'line') {
-                displayValue = `<span class="badge bg-secondary">${value}</span>`;
+    // Keyboard navigation
+    $(document).off('keydown.screenshotNavigation').on('keydown.screenshotNavigation', function(e) {
+        if ($('#screenshotModal').hasClass('show')) {
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                $('#prevScreenshotBtn').click();
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                $('#nextScreenshotBtn').click();
             }
-            
-            html += `<td>${displayValue}</td>`;
-        });
-        html += '</tr>';
+        }
     });
-    
-    html += `
-                </tbody>
-            </table>
-        </div>
-    `;
-    
-    if (data.length > 10) {
-        html += `<div class="text-muted text-center mt-2"><small>Showing first 10 of ${data.length} entries</small></div>`;
-    }
-    
-    container.html(html);
 }
 
-// Log parsing functions (from logs_detail.php)
-function parseLogData(data, logType) {
-    if (!data || data.trim() === '') {
-        return { data: [], headers: [] };
-    }
+function initializeNavigationState() {
+    if (!window.currentScreenshotId) return;
     
-    const lines = data.split('\n').filter(line => line.trim() !== '');
+    // Get the monitor ID from the screenshot ID
+    const monitorId = window.currentScreenshotId.split('_')[1];
     
-    switch (logType) {
-        case 'browser_history':
-            return parseBrowserHistory(lines);
-        case 'key_logs':
-            return parseKeyLogs(lines);
-        case 'usb_logs':
-            return parseUsbLogs(lines);
-        default:
-            return parseGenericLog(lines);
-    }
+    // Get total screenshots for this monitor
+    $.ajax({
+        url: "<?php echo BASE_URL; ?>view/api_screenshots?monitor_id=" + monitorId + "&per_page=1",
+        method: "GET",
+        success: function(data) {
+            if (data.pagination) {
+                const totalScreenshots = data.pagination.total_screenshots;
+                $('#screenshotCounter').text(`1 / ${totalScreenshots}`);
+                
+                // Enable/disable navigation buttons based on total count
+                $('#prevScreenshotBtn').prop('disabled', totalScreenshots <= 1);
+                $('#nextScreenshotBtn').prop('disabled', totalScreenshots <= 1);
+            }
+        },
+        error: function(xhr, status, error) {
+            console.log("Failed to get total screenshots:", error);
+            $('#screenshotCounter').text('1 / ?');
+        }
+    });
 }
 
-function parseBrowserHistory(lines) {
-    const headers = ['Date', 'Browser', 'URL', 'Title'];
-    const data = [];
+function navigateScreenshot(direction) {
+    if (!window.currentScreenshotId) return;
     
-    lines.forEach(line => {
-        const match = line.match(/Date:\s*(.+?)\s*\|\s*Browser:\s*(.+?)\s*\|\s*URL:\s*(.+?)\s*\|\s*Title:\s*(.+?)\s*(?:\||$)/);
-        if (match) {
-            data.push({
-                date: match[1].trim(),
-                browser: match[2].trim(),
-                url: match[3].trim(),
-                title: match[4].trim()
-            });
-        } else {
-            const alMatch = line.match(/Date:\s*(.+?)\s*\|\s*URL:\s*(.+?)\s*\|\s*Title:\s*(.+?)\s*(?:\||$)/);
-            if (altMatch) {
-                data.push({
-                    date: altMatch[1].trim(),
-                    browser: 'Unknown',
-                    url: altMatch[2].trim(),
-                    title: altMatch[3].trim()
-                });
+    $.ajax({
+        url: "<?php echo BASE_URL; ?>view/api_screenshot_navigation?cur_id=" + window.currentScreenshotId + "&action=" + direction,
+        method: "GET",
+        success: function(response) {
+            if (response.success) {
+                const screenshot = response.screenshot;
+                
+                // Update modal content
+                $("#modalImage").attr("src", screenshot.screenshot);
+                $("#modalTitle").text(`Screenshot - ${screenshot.monitor.username} (${screenshot.monitor.ip_address})`);
+                
+                // Update current screenshot ID
+                window.currentScreenshotId = screenshot.global_id;
+                
+                // Update navigation buttons
+                $('#prevScreenshotBtn').prop('disabled', !response.has_prev);
+                $('#nextScreenshotBtn').prop('disabled', !response.has_next);
+                
+                // Update counter
+                $('#screenshotCounter').text(`${response.current_position} / ${response.total_screenshots}`);
             } else {
-                data.push({
-                    date: new Date().toLocaleString(),
-                    browser: 'Unknown',
-                    url: line,
-                    title: 'Unknown'
-                });
+                console.log('Navigation failed:', response.error);
             }
+        },
+        error: function(xhr, status, error) {
+            console.log("Failed to navigate screenshot:", error);
         }
-    });
-    
-    return { data, headers };
-}
-
-function parseKeyLogs(lines) {
-    const headers = ['Date', 'Application', 'Key', 'Action'];
-    const data = [];
-    
-    lines.forEach(line => {
-        let match = line.match(/Date: (.+?) \| Application: (.+?) \| Key: (.+?) \| Action: (.+)/);
-        
-        if (!match) {
-            match = line.match(/Date: (.+?) \| Key: (.+?) \| Action: (.+)/);
-            if (match) {
-                data.push({
-                    date: match[1].trim(),
-                    application: 'Unknown',
-                    key: match[2].trim(),
-                    action: match[3].trim()
-                });
-                return;
-            }
-        }
-        
-        if (!match) {
-            match = line.match(/Date: (.+?) \| Application: (.+?) \| Key: (.+)/);
-            if (match) {
-                data.push({
-                    date: match[1].trim(),
-                    application: match[2].trim(),
-                    key: match[3].trim(),
-                    action: 'Unknown'
-                });
-                return;
-            }
-        }
-        
-        if (!match) {
-            match = line.match(/Date: (.+?) \| Key: (.+)/);
-            if (match) {
-                data.push({
-                    date: match[1].trim(),
-                    application: 'Unknown',
-                    key: match[2].trim(),
-                    action: 'Unknown'
-                });
-                return;
-            }
-        }
-        
-        if (!match) {
-            const dateMatch = line.match(/Date:\s*([^|]+)/);
-            const keyMatch = line.match(/Key:\s*([^|]+)/);
-            const appMatch = line.match(/Application:\s*([^|]+)/);
-            const actionMatch = line.match(/Action:\s*([^|]+)/);
-            
-            if (dateMatch || keyMatch || appMatch || actionMatch) {
-                data.push({
-                    date: dateMatch ? dateMatch[1].trim() : new Date().toLocaleString(),
-                    application: appMatch ? appMatch[1].trim() : 'Unknown',
-                    key: keyMatch ? keyMatch[1].trim() : 'Unknown',
-                    action: actionMatch ? actionMatch[1].trim() : 'Unknown'
-                });
-                return;
-            }
-        }
-        
-        if (match) {
-            data.push({
-                date: match[1].trim(),
-                application: match[2].trim(),
-                key: match[3].trim(),
-                action: match[4].trim()
-            });
-        } else {
-            data.push({
-                date: new Date().toLocaleString(),
-                application: 'Unknown',
-                key: 'Unknown',
-                action: line
-            });
-        }
-    });
-    
-    return { data, headers };
-}
-
-function parseUsbLogs(lines) {
-    const headers = ['Date', 'Device', 'Action', 'Details'];
-    const data = [];
-    
-    lines.forEach(line => {
-        const match = line.match(/Date: (.+?) \| Device: (.+?) \| Action: (.+?) \| Details: (.+)/);
-        if (match) {
-            data.push({
-                date: match[1].trim(),
-                device: match[2].trim(),
-                action: match[3].trim(),
-                details: match[4].trim()
-            });
-        } else {
-            const altMatch = line.match(/Date: (.+?) \| Device: (.+?) \| Action: (.+)/);
-            if (altMatch) {
-                data.push({
-                    date: altMatch[1].trim(),
-                    device: altMatch[2].trim(),
-                    action: altMatch[3].trim(),
-                    details: 'No details'
-                });
-            } else {
-                data.push({
-                    date: new Date().toLocaleString(),
-                    device: 'Unknown',
-                    action: 'Unknown',
-                    details: line
-                });
-            }
-        }
-    });
-    
-    return { data, headers };
-}
-
-function parseGenericLog(lines) {
-    const headers = ['Line', 'Content'];
-    const data = [];
-    
-    lines.forEach((line, index) => {
-        data.push({
-            line: index + 1,
-            content: line
-        });
-    });
-    
-    return { data, headers };
-}
-
-function viewLogFile(filePath) {
-    let logType = 'generic';
-    if (filePath.includes('browser_history')) {
-        logType = 'browser_history';
-    } else if (filePath.includes('key_logs')) {
-        logType = 'key_logs';
-    } else if (filePath.includes('usb_logs')) {
-        logType = 'usb_logs';
-    }
-    
-    $("#logContentContainer").html(`
-        <div class="text-center py-4">
-            <i class="fas fa-spinner fa-spin fa-2x text-muted mb-3"></i>
-            <p class="text-muted">Loading log content...</p>
-        </div>
-    `);
-    
-    $("#rawContentContainer").html(`
-        <div class="text-center py-4">
-            <i class="fas fa-spinner fa-spin fa-2x text-muted mb-3"></i>
-            <p class="text-muted">Loading raw content...</p>
-        </div>
-    `);
-    
-    const fileUrl = "<?php echo BASE_URL; ?>" + filePath;
-    $.get(fileUrl, function(data) {
-        displayRawContent(data, filePath);
-        const parsedData = parseLogData(data, logType);
-        displayParsedLog(parsedData.data, parsedData.headers, logType, filePath);
-    }).fail(function(xhr, status, error) {
-        const errorHtml = `
-            <div class="text-center py-4">
-                <i class="fas fa-exclamation-triangle fa-2x text-danger mb-3"></i>
-                <h5 class="text-danger">Failed to Load Content</h5>
-                <p class="text-muted">Error: ${error} (Status: ${xhr.status})</p>
-            </div>
-        `;
-        $("#logContentContainer").html(errorHtml);
-        $("#rawContentContainer").html(errorHtml);
-    });
-    
-    $("#logModalTitle").text("Log Content - " + filePath.split('/').pop());
-    $("#logModal").modal("show");
-}
-
-function displayParsedLog(data, headers, logType, filePath) {
-    if (!data || data.length === 0) {
-        $("#logContentContainer").html(`
-            <div class="text-center py-4">
-                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                <h5 class="text-muted">No Log Entries</h5>
-                <p class="text-muted">This log file contains no parseable entries.</p>
-            </div>
-        `);
-        return;
-    }
-    
-    const icons = {
-        'browser_history': 'fas fa-globe text-primary',
-        'key_logs': 'fas fa-keyboard text-warning',
-        'usb_logs': 'fas fa-usb text-info',
-        'generic': 'fas fa-file-alt text-secondary'
-    };
-    
-    const icon = icons[logType] || icons['generic'];
-    
-    let html = `
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <div>
-                <i class="${icon} me-2"></i>
-                <span class="fw-bold">${data.length} log entries</span>
-            </div>
-            <div class="btn-group" role="group">
-                <input type="text" class="form-control form-control-sm me-2" id="logSearchInput" placeholder="Search logs..." style="width: 200px;">
-                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="downloadLogFile('${filePath}')">
-                    <i class="fas fa-download me-1"></i>Download Raw
-                </button>
-            </div>
-        </div>
-        <div class="table-responsive">
-            <table class="table table-sm table-hover" id="logDataTable">
-                <thead class="table-light">
-                    <tr>
-    `;
-    
-    headers.forEach(header => {
-        html += `<th>${header}</th>`;
-    });
-    
-    html += `
-                    </tr>
-                </thead>
-                <tbody>
-    `;
-    
-    data.forEach(row => {
-        html += '<tr>';
-        headers.forEach(header => {
-            const key = header.toLowerCase().replace(/\s+/g, '');
-            const value = row[key] || row[Object.keys(row).find(k => k.toLowerCase().includes(key.toLowerCase()))] || '';
-            
-            let displayValue = value;
-            if (key === 'url' && value.length > 80) {
-                displayValue = `<a href="${value}" target="_blank" title="${value}" class="text-truncate d-inline-block" style="max-width: 300px;">${value.substring(0, 77)}...</a>`;
-            } else if (key === 'url') {
-                displayValue = `<a href="${value}" target="_blank" title="${value}">${value}</a>`;
-            } else if (key === 'title' && value.length > 60) {
-                displayValue = `<span title="${value}" class="text-truncate d-inline-block" style="max-width: 250px;">${value.substring(0, 57)}...</span>`;
-            } else if (key === 'key') {
-                displayValue = `<span class="badge bg-light text-dark border">${value}</span>`;
-            } else if (key === 'action') {
-                const actionClass = value.toLowerCase() === 'connected' ? 'bg-success' : 
-                                  value.toLowerCase() === 'disconnected' ? 'bg-danger' : 
-                                  value.toLowerCase() === 'keydown' ? 'bg-primary' :
-                                  value.toLowerCase() === 'keyup' ? 'bg-secondary' : 'bg-info';
-                displayValue = `<span class="badge ${actionClass}">${value}</span>`;
-            } else if (key === 'browser') {
-                displayValue = `<span class="badge bg-primary">${value}</span>`;
-            } else if (key === 'application') {
-                displayValue = `<span class="badge bg-info">${value}</span>`;
-            } else if (key === 'device') {
-                displayValue = `<span class="badge bg-warning text-dark">${value}</span>`;
-            } else if (key === 'date') {
-                const date = new Date(value);
-                if (!isNaN(date.getTime())) {
-                    displayValue = `<small class="text-muted">${date.toLocaleString()}</small>`;
-                } else {
-                    displayValue = `<small class="text-muted">${value}</small>`;
-                }
-            } else if (key === 'content') {
-                displayValue = `<code class="small">${value}</code>`;
-            } else if (key === 'line') {
-                displayValue = `<span class="badge bg-secondary">${value}</span>`;
-            }
-            
-            html += `<td>${displayValue}</td>`;
-        });
-        html += '</tr>';
-    });
-    
-    html += `
-                </tbody>
-            </table>
-        </div>
-    `;
-    
-    $("#logContentContainer").html(html);
-    
-    $("#logSearchInput").on("keyup", function() {
-        const searchTerm = $(this).val().toLowerCase();
-        $("#logDataTable tbody tr").each(function() {
-            const rowText = $(this).text().toLowerCase();
-            if (rowText.includes(searchTerm)) {
-                $(this).show();
-            } else {
-                $(this).hide();
-            }
-        });
     });
 }
 
-function displayRawContent(data, filePath) {
-    if (!data) {
-        $("#rawContentContainer").html(`
-            <div class="text-center py-4">
-                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                <h5 class="text-muted">No Raw Content</h5>
-                <p class="text-muted">This log file is empty or could not be loaded.</p>
-            </div>
-        `);
-        return;
-    }
-
-    let html = `
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <div>
-                <i class="fas fa-file-alt text-secondary me-2"></i>
-                <span class="fw-bold">Raw Log Content (${data.split('\n').length} lines)</span>
-            </div>
-            <div class="btn-group" role="group">
-                <input type="text" class="form-control form-control-sm me-2" id="rawSearchInput" placeholder="Search raw content..." style="width: 200px;">
-                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="downloadLogFile('${filePath}')">
-                    <i class="fas fa-download me-1"></i>Download Raw
-                </button>
-            </div>
-        </div>
-        <div class="table-responsive">
-            <table class="table table-sm table-hover" id="rawDataTable">
-                <thead class="table-light">
-                    <tr>
-                        <th style="width: 60px;">Line</th>
-                        <th>Content</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
-
-    const lines = data.split('\n');
-    lines.forEach((line, index) => {
-        if (line.trim() === '') {
-            html += `
-                <tr class="table-light">
-                    <td class="text-muted">${index + 1}</td>
-                    <td class="text-muted"><em>Empty line</em></td>
-                </tr>
-            `;
-        } else {
-            html += `
-                <tr>
-                    <td class="text-muted fw-bold">${index + 1}</td>
-                    <td><code class="small">${line}</code></td>
-                </tr>
-            `;
-        }
-    });
-
-    html += `
-                </tbody>
-            </table>
-        </div>
-    `;
-
-    $("#rawContentContainer").html(html);
-    
-    $("#rawSearchInput").on("keyup", function() {
-        const searchTerm = $(this).val().toLowerCase();
-        $("#rawDataTable tbody tr").each(function() {
-            const rowText = $(this).text().toLowerCase();
-            if (rowText.includes(searchTerm)) {
-                $(this).show();
-            } else {
-                $(this).hide();
-            }
-        });
-    });
-}
-
-function downloadLogFile(filePath) {
-    const fileUrl = "<?php echo BASE_URL; ?>" + filePath;
-    window.open(fileUrl, '_blank');
-}
+// Clean up keyboard events when modal is closed
+$('#screenshotModal').on('hidden.bs.modal', function() {
+    $(document).off('keydown.screenshotNavigation');
+    window.currentScreenshotId = null;
+});
 </script>
 
 <?php
