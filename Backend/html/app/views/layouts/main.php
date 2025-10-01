@@ -494,6 +494,12 @@
                 </a>
             </div>
             <div class="nav-item">
+                <a class="nav-link <?php echo $active_page === 'reports' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>reports">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Reports</span>
+                </a>
+            </div>
+            <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'logout' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>auth/logout">
                     <i class="fas fa-sign-out-alt"></i>
                     <span>Logout</span>
