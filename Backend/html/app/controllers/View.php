@@ -1015,6 +1015,7 @@ class View extends Base {
         ]);
     }
     
+
     public function test() {
         echo "View controller test method<br>";
         

@@ -488,9 +488,9 @@
                 </a>
             </div>
             <div class="nav-item">
-                <a class="nav-link <?php echo $active_page === 'logs' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>view/logs">
+                <a class="nav-link <?php echo $active_page === 'logbrowse' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>logbrowse">
                     <i class="fas fa-file-alt"></i>
-                    <span>Log Management</span>
+                    <span>Log Browse</span>
                 </a>
             </div>
             <div class="nav-item">

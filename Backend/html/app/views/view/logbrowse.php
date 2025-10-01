@@ -1,0 +1,885 @@
+<?php
+$title = 'Log Browse - ' . APP_NAME;
+$active_page = 'logbrowse';
+$page_title = 'Log Browse';
+ob_start();
+?>
+
+<style>
+/* Log Browse Styles */
+:root {
+    --logbrowse-primary: #2563eb;
+    --logbrowse-primary-dark: #1d4ed8;
+    --logbrowse-success: #10b981;
+    --logbrowse-warning: #f59e0b;
+    --logbrowse-error: #ef4444;
+    --logbrowse-surface: #ffffff;
+    --logbrowse-background: #f8fafc;
+    --logbrowse-text-primary: #1e293b;
+    --logbrowse-text-secondary: #64748b;
+    --logbrowse-divider: #e2e8f0;
+    --logbrowse-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    --logbrowse-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Override main layout constraints */
+.content-area {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Main Container */
+.logbrowse-container {
+    min-height: calc(100vh - 120px);
+    background: var(--logbrowse-background);
+    padding: 1.5rem;
+}
+
+/* Filter Panel */
+.filter-panel {
+    background: var(--logbrowse-surface);
+    border-radius: 12px;
+    box-shadow: var(--logbrowse-shadow);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--logbrowse-divider);
+}
+
+.filter-panel h5 {
+    color: var(--logbrowse-text-primary);
+    font-weight: 600;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.filter-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 1rem;
+    align-items: end;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.filter-group label {
+    font-weight: 500;
+    color: var(--logbrowse-text-primary);
+    font-size: 0.875rem;
+}
+
+.filter-group .form-control,
+.filter-group .form-select {
+    border: 2px solid var(--logbrowse-divider);
+    border-radius: 8px;
+    padding: 0.75rem;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+}
+
+.filter-group .form-control:focus,
+.filter-group .form-select:focus {
+    border-color: var(--logbrowse-primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    outline: none;
+}
+
+.filter-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-filter {
+    background: var(--logbrowse-primary);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.btn-filter:hover {
+    background: var(--logbrowse-primary-dark);
+    transform: translateY(-1px);
+}
+
+.btn-clear {
+    background: var(--logbrowse-text-secondary);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.btn-clear:hover {
+    background: var(--logbrowse-text-primary);
+}
+
+/* Stats Panel */
+.stats-panel {
+    background: var(--logbrowse-surface);
+    border-radius: 12px;
+    box-shadow: var(--logbrowse-shadow);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--logbrowse-divider);
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    background: linear-gradient(135deg, var(--logbrowse-surface) 0%, #f8fafc 100%);
+    border: 1px solid var(--logbrowse-divider);
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+    transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--logbrowse-shadow-lg);
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--logbrowse-primary);
+    margin-bottom: 0.5rem;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: var(--logbrowse-text-secondary);
+    font-weight: 500;
+}
+
+/* Content Panel */
+.content-panel {
+    background: var(--logbrowse-surface);
+    border-radius: 12px;
+    box-shadow: var(--logbrowse-shadow);
+    border: 1px solid var(--logbrowse-divider);
+    overflow: hidden;
+}
+
+/* Tabs */
+.log-tabs {
+    border-bottom: 1px solid var(--logbrowse-divider);
+    background: #f8fafc;
+    padding: 0;
+    margin: 0;
+    display: flex;
+}
+
+.log-tabs .nav-link {
+    border: none;
+    border-radius: 0;
+    padding: 1rem 1.5rem;
+    font-weight: 500;
+    color: var(--logbrowse-text-secondary);
+    transition: all 0.2s ease;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+}
+
+.log-tabs .nav-link:hover {
+    color: var(--logbrowse-primary);
+    background: rgba(37, 99, 235, 0.05);
+}
+
+.log-tabs .nav-link.active {
+    color: var(--logbrowse-primary);
+    background: var(--logbrowse-surface);
+    border-bottom: 2px solid var(--logbrowse-primary);
+}
+
+/* Table */
+.log-table-container {
+    padding: 1.5rem;
+}
+
+.log-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.log-table th {
+    background: #f8fafc;
+    color: var(--logbrowse-text-primary);
+    font-weight: 600;
+    padding: 1rem 0.75rem;
+    text-align: left;
+    border-bottom: 2px solid var(--logbrowse-divider);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.log-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--logbrowse-divider);
+    vertical-align: middle;
+}
+
+.log-table tbody tr:hover {
+    background: rgba(37, 99, 235, 0.02);
+}
+
+.log-table .badge {
+    font-size: 0.75rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 20px;
+    font-weight: 500;
+}
+
+/* Pagination */
+.pagination-panel {
+    background: #f8fafc;
+    border-top: 1px solid var(--logbrowse-divider);
+    padding: 1rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.pagination-info {
+    font-size: 0.875rem;
+    color: var(--logbrowse-text-secondary);
+    font-weight: 500;
+}
+
+.pagination {
+    display: flex;
+    gap: 0.25rem;
+    margin: 0;
+    list-style: none;
+}
+
+.page-link {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--logbrowse-divider);
+    border-radius: 6px;
+    color: var(--logbrowse-text-primary);
+    text-decoration: none;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+    display: block;
+}
+
+.page-link:hover {
+    background: var(--logbrowse-primary);
+    color: white;
+    border-color: var(--logbrowse-primary);
+}
+
+.page-item.active .page-link {
+    background: var(--logbrowse-primary);
+    color: white;
+    border-color: var(--logbrowse-primary);
+}
+
+.page-item.disabled .page-link {
+    color: var(--logbrowse-text-secondary);
+    background: transparent;
+    cursor: not-allowed;
+}
+
+/* Loading States */
+.loading-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    color: var(--logbrowse-text-secondary);
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.loading-spinner {
+    width: 2rem;
+    height: 2rem;
+    border: 3px solid var(--logbrowse-divider);
+    border-top: 3px solid var(--logbrowse-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Empty States */
+.empty-state {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: var(--logbrowse-text-secondary);
+}
+
+.empty-state i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+    color: var(--logbrowse-primary);
+}
+
+.empty-state h5 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--logbrowse-text-primary);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .filter-row {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .filter-actions {
+        justify-content: stretch;
+    }
+    
+    .filter-actions .btn-filter,
+    .filter-actions .btn-clear {
+        flex: 1;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .pagination-panel {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: stretch;
+    }
+    
+    .pagination {
+        justify-content: center;
+    }
+}
+
+/* Device Status Badges */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.status-online {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--logbrowse-success);
+}
+
+.status-inactive {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--logbrowse-warning);
+}
+
+.status-offline {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--logbrowse-error);
+}
+
+.status-online::before {
+    content: '●';
+    color: var(--logbrowse-success);
+}
+
+.status-inactive::before {
+    content: '●';
+    color: var(--logbrowse-warning);
+}
+
+.status-offline::before {
+    content: '●';
+    color: var(--logbrowse-error);
+}
+
+/* Bootstrap compatibility */
+.fw-bold { font-weight: bold !important; }
+.small { font-size: 0.875em; }
+.text-muted { color: var(--logbrowse-text-secondary) !important; }
+.table-responsive { overflow-x: auto; }
+</style>
+
+<div class="logbrowse-container">
+    <!-- Filter Panel -->
+    <div class="filter-panel">
+        <h5>
+            <i class="fas fa-filter"></i>
+            Filters
+        </h5>
+        <div class="filter-row">
+            <div class="filter-group">
+                <label for="deviceFilter">Device</label>
+                <select id="deviceFilter" class="form-select">
+                    <option value="">All Devices</option>
+                    <?php foreach ($monitors as $monitor): ?>
+                        <option value="<?php echo $monitor['id']; ?>">
+                            <?php echo htmlspecialchars($monitor['username'] ?: 'Unknown'); ?> 
+                            (<?php echo htmlspecialchars($monitor['ip_address']); ?>)
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="startDate">Start Date</label>
+                <input type="date" id="startDate" class="form-control" value="<?php echo date('Y-m-d'); ?>">
+            </div>
+            <div class="filter-group">
+                <label for="endDate">End Date</label>
+                <input type="date" id="endDate" class="form-control" value="<?php echo date('Y-m-d'); ?>">
+            </div>
+            <div class="filter-actions">
+                <button class="btn-filter" onclick="applyFilters()">
+                    <i class="fas fa-search"></i>
+                    Filter
+                </button>
+                <button class="btn-clear" onclick="clearFilters()">
+                    <i class="fas fa-times"></i>
+                    Clear
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Panel -->
+    <div class="stats-panel">
+        <h5>
+            <i class="fas fa-chart-bar"></i>
+            Statistics
+        </h5>
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-number" id="totalLogs">0</div>
+                <div class="stat-label">Total Logs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="browserLogs">0</div>
+                <div class="stat-label">Browser History</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="keyLogs">0</div>
+                <div class="stat-label">Key Logs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="usbLogs">0</div>
+                <div class="stat-label">USB Logs</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content Panel -->
+    <div class="content-panel">
+        <!-- Tabs -->
+        <div class="log-tabs" id="logTabs">
+            <button class="nav-link active" onclick="switchTab('browser')">
+                <i class="fas fa-globe"></i>
+                Browser History
+            </button>
+            <button class="nav-link" onclick="switchTab('key')">
+                <i class="fas fa-keyboard"></i>
+                Key Logs
+            </button>
+            <button class="nav-link" onclick="switchTab('usb')">
+                <i class="fas fa-usb"></i>
+                USB Logs
+            </button>
+        </div>
+
+        <!-- Table Container -->
+        <div class="log-table-container" id="tableContainer">
+            <div class="loading-container">
+                <div class="loading-spinner"></div>
+                <div>Loading logs...</div>
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination-panel" id="paginationPanel" style="display: none;">
+            <div class="pagination-info" id="paginationInfo">
+                Showing 0 to 0 of 0 entries
+            </div>
+            <nav aria-label="Log Pagination">
+                <ul class="pagination" id="pagination">
+                    <!-- Pagination will be generated here -->
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+<script>
+// Global variables
+let currentTab = 'browser';
+let currentPage = 1;
+let currentPerPage = 20;
+let currentFilters = {
+    device_id: '',
+    start_date: '',
+    end_date: ''
+};
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Set default date values
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('startDate').value = today;
+    document.getElementById('endDate').value = today;
+    
+    // Load initial data
+    updateFilters();
+    loadStats();
+    loadLogs();
+});
+
+function switchTab(tab) {
+    currentTab = tab;
+    currentPage = 1;
+    
+    // Update active tab
+    document.querySelectorAll('.log-tabs .nav-link').forEach(link => {
+        link.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    // Load logs for new tab
+    loadLogs();
+}
+
+function updateFilters() {
+    currentFilters = {
+        device_id: document.getElementById('deviceFilter').value,
+        start_date: document.getElementById('startDate').value,
+        end_date: document.getElementById('endDate').value
+    };
+}
+
+function applyFilters() {
+    updateFilters();
+    currentPage = 1;
+    loadStats();
+    loadLogs();
+}
+
+function clearFilters() {
+    document.getElementById('deviceFilter').value = '';
+    document.getElementById('startDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('endDate').value = new Date().toISOString().split('T')[0];
+    applyFilters();
+}
+
+function loadStats() {
+    const params = new URLSearchParams(currentFilters);
+    
+    fetch(`<?php echo BASE_URL; ?>logbrowse/api_stats?${params}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('totalLogs').textContent = data.stats.total.toLocaleString();
+                document.getElementById('browserLogs').textContent = data.stats.browser_history.toLocaleString();
+                document.getElementById('keyLogs').textContent = data.stats.key_logs.toLocaleString();
+                document.getElementById('usbLogs').textContent = data.stats.usb_logs.toLocaleString();
+            }
+        })
+        .catch(error => {
+            console.error('Error loading stats:', error);
+        });
+}
+
+function loadLogs() {
+    const params = new URLSearchParams({
+        ...currentFilters,
+        page: currentPage,
+        per_page: currentPerPage
+    });
+    
+    const apiEndpoint = getApiEndpoint();
+    
+    // Show loading state
+    document.getElementById('tableContainer').innerHTML = `
+        <div class="loading-container">
+            <div class="loading-spinner"></div>
+            <div>Loading ${currentTab} logs...</div>
+        </div>
+    `;
+    
+    fetch(`${apiEndpoint}?${params}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayLogs(data.logs, data.pagination);
+            } else {
+                showError('Failed to load logs');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading logs:', error);
+            showError('Error loading logs: ' + error.message);
+        });
+}
+
+function getApiEndpoint() {
+    switch (currentTab) {
+        case 'browser':
+            return `<?php echo BASE_URL; ?>logbrowse/api_browser_logs`;
+        case 'key':
+            return `<?php echo BASE_URL; ?>logbrowse/api_key_logs`;
+        case 'usb':
+            return `<?php echo BASE_URL; ?>logbrowse/api_usb_logs`;
+        default:
+            return `<?php echo BASE_URL; ?>logbrowse/api_browser_logs`;
+    }
+}
+
+function displayLogs(logs, pagination) {
+    if (logs.length === 0) {
+        showEmptyState();
+        return;
+    }
+    
+    const tableHtml = createTable(logs);
+    document.getElementById('tableContainer').innerHTML = tableHtml;
+    
+    // Update pagination
+    updatePagination(pagination);
+}
+
+function createTable(logs) {
+    const headers = getTableHeaders();
+    let tableRows = '';
+    
+    logs.forEach(log => {
+        tableRows += '<tr>';
+        headers.forEach(header => {
+            const value = formatCellValue(log, header);
+            tableRows += `<td>${value}</td>`;
+        });
+        tableRows += '</tr>';
+    });
+    
+    return `
+        <div class="table-responsive">
+            <table class="log-table">
+                <thead>
+                    <tr>
+                        ${headers.map(header => `<th>${header}</th>`).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${tableRows}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+function getTableHeaders() {
+    switch (currentTab) {
+        case 'browser':
+            return ['Date', 'Device', 'Browser', 'URL', 'Title'];
+        case 'key':
+            return ['Date', 'Device', 'Application', 'Key', 'Action'];
+        case 'usb':
+            return ['Date', 'Device', 'Device Name', 'Action', 'Details'];
+        default:
+            return ['Date', 'Device', 'Browser', 'URL', 'Title'];
+    }
+}
+
+function formatCellValue(log, header) {
+    switch (header) {
+        case 'Date':
+            return formatDate(log.date);
+        case 'Device':
+            return formatDevice(log);
+        case 'Browser':
+            return `<span class="badge" style="background-color: #007bff; color: white;">${escapeHtml(log.browser)}</span>`;
+        case 'URL':
+            if (log.url && log.url.length > 50) {
+                return `<a href="${escapeHtml(log.url)}" target="_blank" title="${escapeHtml(log.url)}">${escapeHtml(log.url.substring(0, 47))}...</a>`;
+            }
+            return `<a href="${escapeHtml(log.url)}" target="_blank">${escapeHtml(log.url)}</a>`;
+        case 'Title':
+            if (log.title && log.title.length > 40) {
+                return `<span title="${escapeHtml(log.title)}">${escapeHtml(log.title.substring(0, 37))}...</span>`;
+            }
+            return escapeHtml(log.title);
+        case 'Application':
+            return `<span class="badge" style="background-color: #17a2b8; color: white;">${escapeHtml(log.application)}</span>`;
+        case 'Key':
+            return `<span class="badge" style="background-color: #f8f9fa; color: #212529; border: 1px solid #dee2e6;">${escapeHtml(log.key)}</span>`;
+        case 'Action':
+            const actionClass = log.action === 'Connected' ? 'background-color: #28a745; color: white;' : 
+                              log.action === 'Disconnected' ? 'background-color: #dc3545; color: white;' : 
+                              log.action === 'keydown' ? 'background-color: #007bff; color: white;' : 'background-color: #6c757d; color: white;';
+            return `<span class="badge" style="${actionClass}">${escapeHtml(log.action)}</span>`;
+        case 'Device Name':
+            return `<span class="badge" style="background-color: #ffc107; color: #212529;">${escapeHtml(log.device)}</span>`;
+        case 'Details':
+            return escapeHtml(log.details);
+        default:
+            return escapeHtml(log[header.toLowerCase()] || '');
+    }
+}
+
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return `<small class="text-muted">${date.toLocaleString()}</small>`;
+}
+
+function formatDevice(log) {
+    const statusClass = getDeviceStatus(log.username, log.last_monitor_tic);
+    return `
+        <div>
+            <div class="fw-bold">${escapeHtml(log.username || 'Unknown')}</div>
+            <div class="small text-muted">${escapeHtml(log.ip_address)}</div>
+            <span class="status-badge ${statusClass}">${getStatusText(statusClass)}</span>
+        </div>
+    `;
+}
+
+function getDeviceStatus(username, lastTic) {
+    if (!lastTic) return 'status-offline';
+    
+    const lastActivity = new Date(lastTic);
+    const now = new Date();
+    const diffMinutes = (now - lastActivity) / (1000 * 60);
+    
+    if (diffMinutes <= 5) return 'status-online';
+    if (diffMinutes <= 60) return 'status-inactive';
+    return 'status-offline';
+}
+
+function getStatusText(statusClass) {
+    switch (statusClass) {
+        case 'status-online': return 'Online';
+        case 'status-inactive': return 'Inactive';
+        case 'status-offline': return 'Offline';
+        default: return 'Unknown';
+    }
+}
+
+function updatePagination(pagination) {
+    if (pagination.total_pages <= 1) {
+        document.getElementById('paginationPanel').style.display = 'none';
+        return;
+    }
+    
+    document.getElementById('paginationPanel').style.display = 'flex';
+    
+    // Update pagination info
+    const start = ((pagination.current_page - 1) * pagination.per_page) + 1;
+    const end = Math.min(pagination.current_page * pagination.per_page, pagination.total_entries);
+    document.getElementById('paginationInfo').textContent = 
+        `Showing ${start} to ${end} of ${pagination.total_entries.toLocaleString()} entries`;
+    
+    // Generate pagination links
+    let paginationHtml = '';
+    
+    // Previous button
+    paginationHtml += `
+        <li class="page-item ${pagination.current_page === 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="changePage(${pagination.current_page - 1}); return false;">
+                <i class="fas fa-chevron-left"></i>
+            </a>
+        </li>
+    `;
+    
+    // Page numbers
+    const maxVisible = 5;
+    let startPage = Math.max(1, pagination.current_page - 2);
+    let endPage = Math.min(pagination.total_pages, startPage + maxVisible - 1);
+    
+    if (endPage - startPage + 1 < maxVisible) {
+        startPage = Math.max(1, endPage - maxVisible + 1);
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        paginationHtml += `
+            <li class="page-item ${i === pagination.current_page ? 'active' : ''}">
+                <a class="page-link" href="#" onclick="changePage(${i}); return false;">${i}</a>
+            </li>
+        `;
+    }
+    
+    // Next button
+    paginationHtml += `
+        <li class="page-item ${pagination.current_page === pagination.total_pages ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="changePage(${pagination.current_page + 1}); return false;">
+                <i class="fas fa-chevron-right"></i>
+            </a>
+        </li>
+    `;
+    
+    document.getElementById('pagination').innerHTML = paginationHtml;
+}
+
+function changePage(page) {
+    if (page < 1) return;
+    currentPage = page;
+    loadLogs();
+}
+
+function showEmptyState() {
+    document.getElementById('tableContainer').innerHTML = `
+        <div class="empty-state">
+            <i class="fas fa-file-alt"></i>
+            <h5>No Logs Found</h5>
+            <p>No ${currentTab} logs found for the selected filters.</p>
+        </div>
+    `;
+    document.getElementById('paginationPanel').style.display = 'none';
+}
+
+function showError(message) {
+    document.getElementById('tableContainer').innerHTML = `
+        <div class="empty-state">
+            <i class="fas fa-exclamation-triangle"></i>
+            <h5>Error</h5>
+            <p>${escapeHtml(message)}</p>
+        </div>
+    `;
+    document.getElementById('paginationPanel').style.display = 'none';
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+
+<?php
+$content = ob_get_clean();
+include BASEPATH . 'app/views/layouts/main.php';
+?>
