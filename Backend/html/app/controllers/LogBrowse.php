@@ -60,12 +60,12 @@ class LogBrowse extends Base {
         }
         
         if ($start_date) {
-            $where_conditions[] = "b.visit_date >= :start_date";
+            $where_conditions[] = "b.created_at >= :start_date";
             $params['start_date'] = $start_date . ' 00:00:00';
         }
         
         if ($end_date) {
-            $where_conditions[] = "b.visit_date <= :end_date";
+            $where_conditions[] = "b.created_at <= :end_date";
             $params['end_date'] = $end_date . ' 23:59:59';
         }
         
@@ -83,14 +83,14 @@ class LogBrowse extends Base {
         
         // Get paginated data
         $data_sql = "SELECT b.*, m.ip_address, m.username, m.name, m.type,
-                            b.visit_date as date,
+                            b.created_at as date,
                             b.browser,
                             b.url,
                             b.title
                      FROM browser_history_logs b 
                      JOIN tbl_monitor_ips m ON b.monitor_ip_id = m.id 
                      {$where_clause}
-                     ORDER BY b.visit_date DESC 
+                     ORDER BY b.created_at DESC 
                      LIMIT :limit OFFSET :offset";
         
         $params['limit'] = $per_page;
@@ -277,12 +277,12 @@ class LogBrowse extends Base {
         }
         
         if ($start_date) {
-            $where_conditions[] = "visit_date >= :start_date";
+            $where_conditions[] = "created_at >= :start_date";
             $params['start_date'] = $start_date . ' 00:00:00';
         }
         
         if ($end_date) {
-            $where_conditions[] = "visit_date <= :end_date";
+            $where_conditions[] = "created_at <= :end_date";
             $params['end_date'] = $end_date . ' 23:59:59';
         }
         
