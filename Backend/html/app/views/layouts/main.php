@@ -500,6 +500,12 @@
                 </a>
             </div>
             <div class="nav-item">
+                <a class="nav-link <?php echo $active_page === 'export' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>export">
+                    <i class="fas fa-download"></i>
+                    <span>Export</span>
+                </a>
+            </div>
+            <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'logout' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>auth/logout">
                     <i class="fas fa-sign-out-alt"></i>
                     <span>Logout</span>
