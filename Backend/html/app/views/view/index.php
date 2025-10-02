@@ -467,6 +467,15 @@ ob_start();
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
 }
 
+/* Ensure screenshot modal appears above CCTV modal */
+#screenshotModal.modal {
+    z-index: 9999 !important;
+}
+
+#screenshotModal.modal .modal-backdrop {
+    z-index: 9998 !important;
+}
+
 .modal-header {
     border-bottom: 1px solid var(--monitoring-divider);
     padding: 1.5rem;
@@ -1358,6 +1367,8 @@ waitForJQuery(function() {
     $('#screenshotModal').on('hidden.bs.modal', function() {
         $(document).off('keydown.screenshotNavigation');
         window.currentScreenshotId = null;
+        // Reset z-index when modal is closed
+        $('#screenshotModal').css('z-index', '');
     });
     
     // Stop auto-refresh when fullscreen modal is closed
@@ -2065,6 +2076,13 @@ function viewScreenshot(imageUrl, monitorName, ipAddress, screenshotId = null) {
     
     // Store current screenshot ID for navigation
     window.currentScreenshotId = screenshotId;
+    
+    // Check if CCTV modal is open and set higher z-index
+    if ($('#fullscreenModal').hasClass('show')) {
+        $('#screenshotModal').css('z-index', '9999');
+    } else {
+        $('#screenshotModal').css('z-index', '');
+    }
     
     $("#screenshotModal").modal("show");
     
