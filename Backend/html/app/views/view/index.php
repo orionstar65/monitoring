@@ -785,6 +785,209 @@ ob_start();
 .modal-log-container::-webkit-scrollbar-thumb:hover {
     background: var(--monitoring-text-secondary);
 }
+
+/* Full Screen CCTV View Styles */
+.fullscreen-cctv-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 1rem;
+    padding: 1rem;
+    background: #1a1a1a;
+    min-height: 100vh;
+    overflow-y: auto;
+}
+
+/* Full Screen Control Buttons */
+.btn-close-fullscreen {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.8);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+}
+
+.btn-close-fullscreen:hover {
+    background: rgba(244, 67, 54, 0.9);
+    border-color: rgba(244, 67, 54, 0.8);
+    transform: scale(1.1);
+    color: white;
+}
+
+.btn-refresh-fullscreen {
+    position: fixed;
+    top: 20px;
+    right: 80px;
+    z-index: 1000;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.8);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+}
+
+.btn-refresh-fullscreen:hover {
+    background: rgba(25, 118, 210, 0.9);
+    border-color: rgba(25, 118, 210, 0.8);
+    transform: scale(1.1);
+    color: white;
+}
+
+.fullscreen-count {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 25px;
+    font-size: 14px;
+    font-weight: 600;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(10px);
+    user-select: none;
+}
+
+.cctv-screenshot-card {
+    background: #2a2a2a;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 2px solid #333;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+    aspect-ratio: 16/10;
+}
+
+.cctv-screenshot-card:hover {
+    border-color: var(--monitoring-primary);
+    transform: scale(1.02);
+    box-shadow: 0 8px 25px rgba(25, 118, 210, 0.3);
+    z-index: 10;
+}
+
+.cctv-screenshot-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.cctv-screenshot-info {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+    color: white;
+    padding: 1rem 0.5rem 0.5rem;
+    opacity: 1;
+    pointer-events: none;
+}
+
+.cctv-user-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.cctv-username {
+    font-weight: 600;
+    color: #4fc3f7;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex: 1;
+    min-width: 0;
+    font-size: 0.75rem;
+}
+
+.cctv-ip {
+    color: #81c784;
+    font-family: monospace;
+    font-size: 0.7rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-shrink: 0;
+}
+
+.cctv-status-indicator {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1px solid white;
+}
+
+.cctv-status-online {
+    background: var(--monitoring-success);
+    box-shadow: 0 0 8px var(--monitoring-success);
+}
+
+.cctv-status-inactive {
+    background: var(--monitoring-warning);
+    box-shadow: 0 0 8px var(--monitoring-warning);
+}
+
+.cctv-status-offline {
+    background: var(--monitoring-error);
+    box-shadow: 0 0 8px var(--monitoring-error);
+}
+
+/* Responsive CCTV Grid */
+@media (max-width: 1920px) {
+    .fullscreen-cctv-grid {
+        grid-template-columns: repeat(5, 1fr);
+    }
+}
+
+@media (max-width: 1600px) {
+    .fullscreen-cctv-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+@media (max-width: 1200px) {
+    .fullscreen-cctv-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .fullscreen-cctv-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+        padding: 0.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .fullscreen-cctv-grid {
+        grid-template-columns: 1fr;
+    }
+}
 </style>
 
 <!-- Modern Dashboard Container -->
@@ -834,6 +1037,10 @@ ob_start();
                         <option value="50" selected>50</option>
                     </select>
                 </div>
+                <button class="btn btn-outline-primary" id="fullscreenBtn" title="Full Screen View">
+                    <i class="fas fa-expand"></i>
+                    Full Screen
+                </button>
             </div>
         </div>
         <div class="main-content-area">
@@ -879,6 +1086,32 @@ ob_start();
                             <img id="modalImage" src="" alt="Full Screenshot" class="img-fluid">
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Full Screen CCTV View Modal -->
+<div class="modal fade" id="fullscreenModal" tabindex="-1">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-body p-0 position-relative">
+                <!-- Exit Button -->
+                <button type="button" class="btn btn-close-fullscreen" data-bs-dismiss="modal" aria-label="Close" title="Exit Full Screen">
+                    <i class="fas fa-times"></i>
+                </button>
+                
+                <!-- Refresh Button -->
+                <button type="button" class="btn btn-refresh-fullscreen" id="refreshFullscreenBtn" title="Refresh">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+                
+                <!-- Screenshot Count -->
+                <div class="fullscreen-count" id="fullscreenCount">0 screenshots</div>
+                
+                <div id="fullscreenContainer" class="fullscreen-cctv-grid">
+                    <!-- CCTV grid will be populated here -->
                 </div>
             </div>
         </div>
@@ -934,10 +1167,202 @@ waitForJQuery(function() {
     // Event handlers
     setupEventHandlers();
     
+    // Setup full-screen button handler
+    $('#fullscreenBtn').on('click', function() {
+        openFullscreenView();
+    });
+    
+    // Setup refresh button for fullscreen
+    $('#refreshFullscreenBtn').on('click', function() {
+        refreshFullscreenView();
+    });
+    
+    // Full Screen CCTV View Functions
+    let fullscreenRefreshInterval;
+    
+    function openFullscreenView() {
+        // Show loading state
+        $('#fullscreenContainer').html(`
+            <div class="d-flex justify-content-center align-items-center" style="height: 400px; grid-column: 1 / -1;">
+                <div class="text-center text-white">
+                    <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
+                    <div>Loading CCTV View...</div>
+                </div>
+            </div>
+        `);
+        
+        $('#fullscreenModal').modal('show');
+        
+        // Load screenshots for fullscreen view
+        loadFullscreenScreenshots();
+        
+        // Start auto-refresh every 30 seconds
+        startFullscreenAutoRefresh();
+    }
+
+    function loadFullscreenScreenshots() {
+        const params = new URLSearchParams({
+            page: 1,
+            per_page: 1000, // Load more screenshots for fullscreen
+            format: 'fullscreen'
+        });
+        
+        // Add device filter if single monitor is selected
+        if (selectedMonitors.length === 1) {
+            params.append('device_id', selectedMonitors[0].id);
+        }
+        
+        // Show loading indicator on refresh button
+        const refreshBtn = $('#refreshFullscreenBtn');
+        const originalIcon = refreshBtn.html();
+        refreshBtn.html('<i class="fas fa-spinner fa-spin"></i>');
+        
+        fetch(`<?php echo BASE_URL; ?>view/api_screenshots?${params}`)
+            .then(response => response.json())
+            .then(data => {
+                console.log('Fullscreen API response:', data); // Debug log
+                if (data.screenshots && data.screenshots.length > 0) {
+                    displayFullscreenScreenshots(data.screenshots);
+                    const now = new Date();
+                    const timeStr = now.toLocaleTimeString('en-US', { 
+                        hour12: false, 
+                        hour: '2-digit', 
+                        minute: '2-digit', 
+                        second: '2-digit' 
+                    });
+                    $('#fullscreenCount').text(`${data.screenshots.length} screenshots • Updated ${timeStr}`);
+                } else {
+                    showFullscreenError('No screenshots available');
+                }
+            })
+            .catch(error => {
+                console.error('Error loading fullscreen screenshots:', error);
+                showFullscreenError('Error loading screenshots');
+            })
+            .finally(() => {
+                // Restore refresh button icon
+                refreshBtn.html(originalIcon);
+            });
+    }
+
+    function displayFullscreenScreenshots(screenshots) {
+        if (screenshots.length === 0) {
+            showFullscreenError('No screenshots available');
+            return;
+        }
+        
+        let html = '';
+        screenshots.forEach(function(item) {
+            const monitor = item.monitor;
+            const thumbnailUrl = "<?php echo BASE_URL; ?>" + item.thumbnail;
+            const fullUrl = "<?php echo BASE_URL; ?>" + item.screenshot;
+            
+            // Simplified display - no timestamp needed
+            
+            // Since the API doesn't provide status, we'll show a default online status
+            // or try to determine it from existing monitor data
+            const statusClass = 'cctv-status-online'; // Default to online since screenshots exist
+            const statusText = 'Online';
+            
+            html += `
+                <div class="cctv-screenshot-card" 
+                     onclick="viewScreenshot('${fullUrl}', '${monitor.username}', '${monitor.ip_address}', '${item.global_id}')"
+                     title="Click to view full screenshot">
+                    <div class="cctv-status-indicator ${statusClass}" title="Status: ${statusText}"></div>
+                    <img src="${thumbnailUrl}" alt="Screenshot" loading="lazy">
+                    <div class="cctv-screenshot-info">
+                        <div class="cctv-user-info">
+                            <div class="cctv-username">
+                                <i class="fas fa-user"></i>
+                                ${monitor.username || 'Unknown User'}
+                            </div>
+                            <div class="cctv-ip">
+                                <i class="fas fa-desktop"></i>
+                                ${monitor.ip_address}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        $('#fullscreenContainer').html(html);
+    }
+
+    function showFullscreenError(message) {
+        $('#fullscreenContainer').html(`
+            <div class="d-flex justify-content-center align-items-center" style="height: 400px; grid-column: 1 / -1;">
+                <div class="text-center text-white">
+                    <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
+                    <div>${message}</div>
+                </div>
+            </div>
+        `);
+        $('#fullscreenCount').text('0 screenshots');
+    }
+
+    function refreshFullscreenView() {
+        loadFullscreenScreenshots();
+    }
+    
+    function startFullscreenAutoRefresh() {
+        // Clear any existing interval
+        if (fullscreenRefreshInterval) {
+            clearInterval(fullscreenRefreshInterval);
+        }
+        
+        // Set up auto-refresh every 30 seconds
+        fullscreenRefreshInterval = setInterval(function() {
+            if ($('#fullscreenModal').hasClass('show')) {
+                loadFullscreenScreenshots();
+            }
+        }, 30000); // 30 seconds
+    }
+    
+    function stopFullscreenAutoRefresh() {
+        if (fullscreenRefreshInterval) {
+            clearInterval(fullscreenRefreshInterval);
+            fullscreenRefreshInterval = null;
+        }
+    }
+
+    function getMonitorStatusClass(status) {
+        switch(status) {
+            case 'online': return 'cctv-status-online';
+            case 'inactive': return 'cctv-status-inactive';
+            case 'offline': return 'cctv-status-offline';
+            default: return 'cctv-status-offline';
+        }
+    }
+
+    function getMonitorStatusText(status) {
+        switch(status) {
+            case 'online': return 'Online';
+            case 'inactive': return 'Inactive';
+            case 'offline': return 'Offline';
+            default: return 'Unknown';
+        }
+    }
+
+    // Make fullscreen functions globally available
+    window.openFullscreenView = openFullscreenView;
+    window.refreshFullscreenView = refreshFullscreenView;
+    
     // Handle window resize to ensure proper layout
     $(window).on('resize', function() {
         // Force layout recalculation
         $('.dashboard-container').css('width', '100%');
+    });
+    
+    // Clean up keyboard events when modal is closed
+    $('#screenshotModal').on('hidden.bs.modal', function() {
+        $(document).off('keydown.screenshotNavigation');
+        window.currentScreenshotId = null;
+    });
+    
+    // Stop auto-refresh when fullscreen modal is closed
+    $('#fullscreenModal').on('hidden.bs.modal', function() {
+        stopFullscreenAutoRefresh();
     });
     
     // Make functions global so they can be called from onclick attributes
@@ -1760,11 +2185,6 @@ function navigateScreenshot(direction) {
     });
 }
 
-// Clean up keyboard events when modal is closed
-$('#screenshotModal').on('hidden.bs.modal', function() {
-    $(document).off('keydown.screenshotNavigation');
-    window.currentScreenshotId = null;
-});
 </script>
 
 <?php
