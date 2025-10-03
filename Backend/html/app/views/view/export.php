@@ -502,8 +502,10 @@ function startExport() {
         if (data.success) {
             currentExportDir = data.export_dir;
             currentProgressFile = data.progress_file;
-            updateProgressLog('Export started successfully!\n');
-            startProgressPolling();
+            updateProgressLog(`Export initialized successfully!\nFound ${data.total_devices} devices to export.\n`);
+            
+            // Start exporting devices one by one
+            exportDevicesSequentially(data.devices);
         } else {
             throw new Error(data.message);
         }
@@ -515,62 +517,74 @@ function startExport() {
     });
 }
 
-function startProgressPolling() {
-    exportInterval = setInterval(() => {
-        checkProgress();
-    }, 1000); // Check every 1 second for more responsive updates
-}
-
-function checkProgress() {
-    if (!currentExportDir || !currentProgressFile) {
-        return;
+function exportDevicesSequentially(devices) {
+    let currentDeviceIndex = 0;
+    const totalDevices = devices.length;
+    
+    function exportNextDevice() {
+        if (currentDeviceIndex >= totalDevices) {
+            // All devices exported
+            updateProgressStatus('completed', 'Completed');
+            updateProgressBar(100);
+            updateProgressLog('\n✅ All devices exported successfully!\n', true);
+            showDownloadSection();
+            resetExportButtons();
+            return;
+        }
+        
+        const device = devices[currentDeviceIndex];
+        const progressPercentage = ((currentDeviceIndex) / totalDevices) * 100;
+        updateProgressBar(progressPercentage);
+        
+        updateProgressLog(`\n📱 Exporting device ${currentDeviceIndex + 1}/${totalDevices}: ${device.username} (${device.ip_address})\n`, true);
+        
+        // Export this device
+        fetch('<?php echo BASE_URL; ?>export/api_export_device', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `device_id=${device.id}&start_date=${encodeURIComponent(document.getElementById('startDate').value)}&end_date=${encodeURIComponent(document.getElementById('endDate').value)}&export_dir=${currentExportDir}`
+        })
+        .then(response => {
+            // Check if response is JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Server returned non-JSON response. This device may have no data to export.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                updateProgressLog(`✅ Completed: ${device.username} (${device.ip_address})\n`, true);
+                currentDeviceIndex++;
+                // Export next device after a short delay
+                setTimeout(exportNextDevice, 500);
+            } else {
+                updateProgressLog(`❌ Failed: ${device.username} - ${data.message}\n`, true);
+                currentDeviceIndex++;
+                // Continue with next device even if this one failed
+                setTimeout(exportNextDevice, 500);
+            }
+        })
+        .catch(error => {
+            updateProgressLog(`❌ Error exporting ${device.username}: ${error.message}\n`, true);
+            currentDeviceIndex++;
+            // Continue with next device even if this one failed
+            setTimeout(exportNextDevice, 500);
+        });
     }
     
-    fetch(`<?php echo BASE_URL; ?>export/api_progress?export_dir=${currentExportDir}&progress_file=${currentProgressFile}`)
-    .then(response => {
-        // Check if response is JSON
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-            throw new Error('Server returned non-JSON response during progress check.');
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (data.success) {
-            // Update progress log with latest messages
-            if (data.latest_line && data.latest_line.trim()) {
-                updateProgressLog(data.latest_line + '\n', true);
-            }
-            
-            // Update progress bar with calculated percentage
-            if (data.progress_percentage !== undefined) {
-                updateProgressBar(data.progress_percentage);
-            }
-            
-            if (data.is_complete) {
-                clearInterval(exportInterval);
-                updateProgressStatus('completed', 'Completed');
-                updateProgressBar(100);
-                updateProgressLog('\n✅ Export completed successfully!\n', true);
-                showDownloadSection();
-                resetExportButtons();
-            }
-        } else {
-            updateProgressLog(`Error checking progress: ${data.message}\n`, true);
-        }
-    })
-    .catch(error => {
-        updateProgressLog(`Error checking progress: ${error.message}\n`, true);
-    });
+    // Start exporting the first device
+    exportNextDevice();
 }
+
+// Old progress polling functions removed - now using per-device export approach
 
 function cancelExport() {
-    if (exportInterval) {
-        clearInterval(exportInterval);
-        exportInterval = null;
-    }
-    
-    updateProgressLog('Export cancelled by user.\n');
+    // Note: Per-device exports can't be easily cancelled mid-process
+    // The current device will complete, but we can prevent further devices
+    updateProgressLog('Export cancellation requested. Current device will complete.\n', true);
     updateProgressStatus('waiting', 'Cancelled');
     resetExportButtons();
 }

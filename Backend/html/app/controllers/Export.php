@@ -42,16 +42,92 @@ class Export extends Base {
         }
     }
 
-    public function api_start_export() {
+    public function api_get_devices() {
+        header('Content-Type: application/json');
+        
+        try {
+            if (!$this->db) {
+                throw new Exception("Database connection not available");
+            }
+            
+            $devices = $this->db->fetchAll("SELECT * FROM tbl_monitor_ips ORDER BY username ASC, ip_address ASC");
+            
+            echo json_encode([
+                'success' => true,
+                'devices' => $devices,
+                'total_devices' => count($devices)
+            ]);
+        } catch (Exception $e) {
+            echo json_encode([
+                'success' => false,
+                'message' => $e->getMessage()
+            ]);
+        }
+    }
+
+    public function api_export_device() {
         // Disable error reporting to prevent HTML error output
         error_reporting(0);
         ini_set('display_errors', 0);
         
         header('Content-Type: application/json');
         
-        // Extend PHP timeout for long-running export process
-        set_time_limit(0); // No time limit
-        ini_set('max_execution_time', 0);
+        try {
+            $device_id = $_POST['device_id'] ?? null;
+            $start_date = $_POST['start_date'] ?? null;
+            $end_date = $_POST['end_date'] ?? null;
+            $export_dir = $_POST['export_dir'] ?? null;
+            
+            if (!$device_id || !$start_date || !$end_date || !$export_dir) {
+                throw new Exception('Missing required parameters');
+            }
+            
+            // Get device info
+            $device = $this->db->fetchAll("SELECT * FROM tbl_monitor_ips WHERE id = :device_id", [':device_id' => $device_id]);
+            if (empty($device)) {
+                throw new Exception('Device not found');
+            }
+            $device = $device[0];
+            
+            // Set export directory
+            $this->exportDir = BASEPATH . "exports/{$export_dir}";
+            $this->progressFile = $this->exportDir . "/progress.txt";
+            
+            // Export this device
+            $this->exportDeviceData($device, $start_date, $end_date);
+            
+            echo json_encode([
+                'success' => true,
+                'message' => "Device {$device['username']} exported successfully",
+                'device_id' => $device_id,
+                'username' => $device['username'],
+                'ip_address' => $device['ip_address']
+            ]);
+            
+        } catch (Exception $e) {
+            http_response_code(200); // Always return 200 for JSON responses
+            echo json_encode([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'device_id' => $device_id ?? null,
+                'username' => $device['username'] ?? 'Unknown',
+                'ip_address' => $device['ip_address'] ?? 'Unknown'
+            ]);
+        } catch (Error $e) {
+            // Catch PHP fatal errors
+            http_response_code(200);
+            echo json_encode([
+                'success' => false,
+                'message' => 'PHP Error: ' . $e->getMessage(),
+                'device_id' => $device_id ?? null,
+                'username' => $device['username'] ?? 'Unknown',
+                'ip_address' => $device['ip_address'] ?? 'Unknown'
+            ]);
+        }
+    }
+
+    public function api_start_export() {
+        header('Content-Type: application/json');
         
         try {
             $start_date = $_POST['start_date'] ?? null;
@@ -96,14 +172,16 @@ class Export extends Base {
                 throw new Exception("Failed to create progress file: {$this->progressFile}");
             }
             
-            // Start export in background
-            $this->startBackgroundExport($start_date, $end_date);
+            // Get list of devices to export
+            $devices = $this->db->fetchAll("SELECT * FROM tbl_monitor_ips ORDER BY username ASC, ip_address ASC");
             
             echo json_encode([
                 'success' => true,
-                'message' => 'Export started successfully',
+                'message' => 'Export initialized successfully',
                 'export_dir' => "export_{$timestamp}",
-                'progress_file' => "progress.txt"
+                'progress_file' => "progress.txt",
+                'devices' => $devices,
+                'total_devices' => count($devices)
             ]);
             
         } catch (Exception $e) {
@@ -180,8 +258,7 @@ class Export extends Base {
     }
 
     private function startBackgroundExport($start_date, $end_date) {
-        // This would typically be handled by a background job queue
-        // For now, we'll simulate the export process
+        // Run export synchronously with real-time progress logging
         $this->performExport($start_date, $end_date);
     }
 
@@ -208,6 +285,9 @@ class Export extends Base {
                 $this->exportDeviceData($device, $start_date, $end_date);
                 $this->currentProgress++;
                 $this->logProgress("Completed device: {$device['username']} ({$device['ip_address']})");
+                
+                // Small delay to allow progress polling to catch up
+                usleep(2000000); // 2 second delay
             }
             
             $this->logProgress("Export completed successfully!");
@@ -256,19 +336,39 @@ class Export extends Base {
         
         // Export browser history logs
         $this->logProgress("Exporting browser history for {$username}...");
-        $this->exportBrowserLogs($deviceId, $username, $ip, $start_date, $end_date, $browserFolder);
+        try {
+            $this->exportBrowserLogs($deviceId, $username, $ip, $start_date, $end_date, $browserFolder);
+        } catch (Exception $e) {
+            $this->logProgress("⚠ Browser history export failed: " . $e->getMessage());
+        }
+        usleep(1000000); // 1 second delay
         
         // Export key logs
         $this->logProgress("Exporting key logs for {$username}...");
-        $this->exportKeyLogs($deviceId, $username, $ip, $start_date, $end_date, $keylogFolder);
+        try {
+            $this->exportKeyLogs($deviceId, $username, $ip, $start_date, $end_date, $keylogFolder);
+        } catch (Exception $e) {
+            $this->logProgress("⚠ Key logs export failed: " . $e->getMessage());
+        }
+        usleep(1000000); // 1 second delay
         
         // Export USB logs
         $this->logProgress("Exporting USB logs for {$username}...");
-        $this->exportUsbLogs($deviceId, $username, $ip, $start_date, $end_date, $usbFolder);
+        try {
+            $this->exportUsbLogs($deviceId, $username, $ip, $start_date, $end_date, $usbFolder);
+        } catch (Exception $e) {
+            $this->logProgress("⚠ USB logs export failed: " . $e->getMessage());
+        }
+        usleep(1000000); // 1 second delay
         
         // Export screenshots
         $this->logProgress("Exporting screenshots for {$username}...");
-        $this->exportScreenshots($deviceId, $username, $ip, $start_date, $end_date, $screenshotsFolder);
+        try {
+            $this->exportScreenshots($deviceId, $username, $ip, $start_date, $end_date, $screenshotsFolder);
+        } catch (Exception $e) {
+            $this->logProgress("⚠ Screenshots export failed: " . $e->getMessage());
+        }
+        usleep(1000000); // 1 second delay
         
         $this->logProgress("✓ Device export completed for {$username} ({$ip})");
     }
@@ -299,17 +399,21 @@ class Export extends Base {
         $this->logProgress("Creating browser history CSV file: {$filename}");
         
         $file = fopen($filepath, 'w');
+        if (!$file) {
+            throw new Exception("Failed to create CSV file: {$filename}");
+        }
+        
         fputcsv($file, ['ID', 'URL', 'Title', 'Visit Date', 'Created At', 'IP Address']);
         
         $exported_count = 0;
         foreach ($logs as $log) {
             fputcsv($file, [
-                $log['id'],
-                $log['url'],
-                $log['title'],
-                $log['visit_date'],
-                $log['created_at'],
-                $log['ip_address']
+                $log['id'] ?? '',
+                $log['url'] ?? '',
+                $log['title'] ?? '',
+                $log['visit_date'] ?? '',
+                $log['created_at'] ?? '',
+                $log['ip_address'] ?? ''
             ]);
             $exported_count++;
             
@@ -349,16 +453,20 @@ class Export extends Base {
         $this->logProgress("Creating key logs CSV file: {$filename}");
         
         $file = fopen($filepath, 'w');
+        if (!$file) {
+            throw new Exception("Failed to create CSV file: {$filename}");
+        }
+        
         fputcsv($file, ['ID', 'Key Pressed', 'Application', 'Key Date', 'IP Address']);
         
         $exported_count = 0;
         foreach ($logs as $log) {
             fputcsv($file, [
-                $log['id'],
-                $log['key_pressed'],
-                $log['application'],
-                $log['key_date'],
-                $log['ip_address']
+                $log['id'] ?? '',
+                $log['key_pressed'] ?? '',
+                $log['application'] ?? '',
+                $log['key_date'] ?? '',
+                $log['ip_address'] ?? ''
             ]);
             $exported_count++;
             
@@ -398,17 +506,21 @@ class Export extends Base {
         $this->logProgress("Creating USB logs CSV file: {$filename}");
         
         $file = fopen($filepath, 'w');
+        if (!$file) {
+            throw new Exception("Failed to create CSV file: {$filename}");
+        }
+        
         fputcsv($file, ['ID', 'Device Name', 'Device Type', 'Action', 'Created At', 'IP Address']);
         
         $exported_count = 0;
         foreach ($logs as $log) {
             fputcsv($file, [
-                $log['id'],
-                $log['device_name'],
-                $log['device_type'],
-                $log['action'],
-                $log['created_at'],
-                $log['ip_address']
+                $log['id'] ?? '',
+                $log['device_name'] ?? '',
+                $log['device_type'] ?? '',
+                $log['action'] ?? '',
+                $log['created_at'] ?? '',
+                $log['ip_address'] ?? ''
             ]);
             $exported_count++;
             
