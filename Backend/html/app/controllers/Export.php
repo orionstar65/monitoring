@@ -6,6 +6,7 @@ class Export extends Base {
     private $progressFile;
     private $currentProgress = 0;
     private $totalSteps = 0;
+    private $ffmpegPath;
 
     public function __construct() {
         parent::__construct();
@@ -27,12 +28,20 @@ class Export extends Base {
             // Test basic query
             $test = $this->db->fetchAll("SELECT COUNT(*) as count FROM tbl_monitor_ips");
             
+            // Test FFmpeg availability
+            try {
+                $ffmpegTest = $this->testFFmpegEnvironment();
+            } catch (Exception $e) {
+                $ffmpegTest = ['error' => $e->getMessage()];
+            }
+            
             echo json_encode([
                 'success' => true,
                 'message' => 'Export controller is working',
                 'database_connected' => true,
                 'device_count' => $test[0]['count'] ?? 0,
-                'basepath' => BASEPATH
+                'basepath' => BASEPATH,
+                'ffmpeg_test' => $ffmpegTest
             ]);
         } catch (Exception $e) {
             echo json_encode([
@@ -41,7 +50,46 @@ class Export extends Base {
             ]);
         }
     }
-
+    
+    private function testFFmpegEnvironment() {
+        $result = [
+            'php_version' => PHP_VERSION,
+            'php_sapi' => PHP_SAPI,
+            'current_user' => get_current_user(),
+            'path' => getenv('PATH'),
+            'ffmpeg_paths_tested' => [],
+            'working_path' => null
+        ];
+        
+        $ffmpegPaths = [
+            '/usr/local/bin/ffmpeg_xampp',  // XAMPP-compatible wrapper
+            'ffmpeg',
+            '/usr/local/bin/ffmpeg',
+            '/opt/homebrew/bin/ffmpeg',
+            '/Applications/XAMPP/bin/ffmpeg',
+            '/usr/bin/ffmpeg',
+            '/bin/ffmpeg'
+        ];
+        
+        foreach ($ffmpegPaths as $path) {
+            exec("{$path} -version 2>&1", $output, $returnCode);
+            $testResult = [
+                'path' => $path,
+                'return_code' => $returnCode,
+                'available' => $returnCode === 0,
+                'output' => array_slice($output, 0, 3)
+            ];
+            
+            $result['ffmpeg_paths_tested'][] = $testResult;
+            
+            if ($returnCode === 0 && !$result['working_path']) {
+                $result['working_path'] = $path;
+            }
+        }
+        
+        return $result;
+    }
+    
     public function api_get_devices() {
         header('Content-Type: application/json');
         
@@ -302,20 +350,23 @@ class Export extends Base {
         $ip = str_replace('.', '_', $device['ip_address']);
         $deviceId = $device['id'];
         
+        // Sanitize username for folder names - remove spaces and special characters
+        $sanitizedUsername = $this->sanitizeFolderName($username);
+        
         // Create device folder structure
-        $deviceFolder = $this->exportDir . "/{$username}_{$ip}";
+        $deviceFolder = $this->exportDir . "/{$sanitizedUsername}_{$ip}";
         $this->logProgress("Creating folder structure for {$username}...");
         
         if (!file_exists($deviceFolder)) {
             mkdir($deviceFolder, 0755, true);
-            $this->logProgress("Created main device folder: {$username}_{$ip}");
+            $this->logProgress("Created main device folder: {$sanitizedUsername}_{$ip}");
         }
         
-        // Create subfolders
+        // Create subfolders (no spaces in folder names)
         $screenshotsFolder = $deviceFolder . "/screenshots";
         $keylogFolder = $deviceFolder . "/keylog";
-        $usbFolder = $deviceFolder . "/usb log";
-        $browserFolder = $deviceFolder . "/browser history";
+        $usbFolder = $deviceFolder . "/usb_log";
+        $browserFolder = $deviceFolder . "/browser_history";
         
         if (!file_exists($screenshotsFolder)) {
             mkdir($screenshotsFolder, 0755, true);
@@ -337,7 +388,7 @@ class Export extends Base {
         // Export browser history logs
         $this->logProgress("Exporting browser history for {$username}...");
         try {
-            $this->exportBrowserLogs($deviceId, $username, $ip, $start_date, $end_date, $browserFolder);
+            $this->exportBrowserLogs($deviceId, $sanitizedUsername, $ip, $start_date, $end_date, $browserFolder);
         } catch (Exception $e) {
             $this->logProgress("⚠ Browser history export failed: " . $e->getMessage());
         }
@@ -346,7 +397,7 @@ class Export extends Base {
         // Export key logs
         $this->logProgress("Exporting key logs for {$username}...");
         try {
-            $this->exportKeyLogs($deviceId, $username, $ip, $start_date, $end_date, $keylogFolder);
+            $this->exportKeyLogs($deviceId, $sanitizedUsername, $ip, $start_date, $end_date, $keylogFolder);
         } catch (Exception $e) {
             $this->logProgress("⚠ Key logs export failed: " . $e->getMessage());
         }
@@ -355,7 +406,7 @@ class Export extends Base {
         // Export USB logs
         $this->logProgress("Exporting USB logs for {$username}...");
         try {
-            $this->exportUsbLogs($deviceId, $username, $ip, $start_date, $end_date, $usbFolder);
+            $this->exportUsbLogs($deviceId, $sanitizedUsername, $ip, $start_date, $end_date, $usbFolder);
         } catch (Exception $e) {
             $this->logProgress("⚠ USB logs export failed: " . $e->getMessage());
         }
@@ -364,13 +415,37 @@ class Export extends Base {
         // Export screenshots
         $this->logProgress("Exporting screenshots for {$username}...");
         try {
-            $this->exportScreenshots($deviceId, $username, $ip, $start_date, $end_date, $screenshotsFolder);
+            $this->exportScreenshots($deviceId, $sanitizedUsername, $ip, $start_date, $end_date, $screenshotsFolder);
         } catch (Exception $e) {
             $this->logProgress("⚠ Screenshots export failed: " . $e->getMessage());
         }
         usleep(1000000); // 1 second delay
         
         $this->logProgress("✓ Device export completed for {$username} ({$ip})");
+    }
+    
+    private function sanitizeFolderName($name) {
+        // Remove or replace problematic characters for folder names
+        $sanitized = $name;
+        
+        // Replace spaces with underscores
+        $sanitized = str_replace(' ', '_', $sanitized);
+        
+        // Remove other problematic characters
+        $sanitized = preg_replace('/[^a-zA-Z0-9_\-]/', '', $sanitized);
+        
+        // Remove multiple consecutive underscores
+        $sanitized = preg_replace('/_+/', '_', $sanitized);
+        
+        // Remove leading/trailing underscores
+        $sanitized = trim($sanitized, '_');
+        
+        // Ensure it's not empty
+        if (empty($sanitized)) {
+            $sanitized = 'Unknown';
+        }
+        
+        return $sanitized;
     }
 
     private function exportBrowserLogs($deviceId, $username, $ip, $start_date, $end_date, $folder) {
@@ -557,90 +632,212 @@ class Export extends Base {
         $this->logProgress("Starting screenshot export for {$username}...");
         $this->logProgress("Found " . count($screenshots) . " screenshots to export");
         
-        // Debug: Show first screenshot's file path
-        if (!empty($screenshots)) {
-            $firstScreenshot = $screenshots[0];
-            $this->logProgress("Debug - First screenshot file_path: " . $firstScreenshot['file_path']);
-            $this->logProgress("Debug - First screenshot filename: " . $firstScreenshot['filename']);
-        }
-        
-        $dateFolders = [];
-        $exported_count = 0;
-        $total_screenshots = count($screenshots);
-        
+        // Group screenshots by date
+        $screenshotsByDate = [];
         foreach ($screenshots as $screenshot) {
             $captureDate = date('Y-m-d', strtotime($screenshot['capture_datetime']));
+            $screenshotsByDate[$captureDate][] = $screenshot;
+        }
+        
+        $this->logProgress("Creating video slideshows for " . count($screenshotsByDate) . " dates");
+        
+        $totalVideosCreated = 0;
+        foreach ($screenshotsByDate as $date => $dateScreenshots) {
+            $count = count($dateScreenshots);
+            $this->logProgress("Processing date: {$date} ({$count} screenshots)");
             
-            // Create date folder if not exists
-            if (!isset($dateFolders[$captureDate])) {
-                $dateFolder = $folder . "/" . $captureDate;
-                if (!file_exists($dateFolder)) {
-                    mkdir($dateFolder, 0755, true);
-                    $this->logProgress("Created date folder: {$captureDate}");
-                }
-                $dateFolders[$captureDate] = $dateFolder; // Store the actual path
+            // Create date folder
+            $dateFolder = $folder . "/" . $date;
+            if (!file_exists($dateFolder)) {
+                mkdir($dateFolder, 0755, true);
+            }
+            
+            // Create video slideshow for this date
+            $videoPath = $this->createVideoSlideshow($dateScreenshots, $dateFolder, $username, $ip, $date);
+            
+            if ($videoPath) {
+                $totalVideosCreated++;
+                $this->logProgress("✓ Created video: " . basename($videoPath));
             } else {
-                $dateFolder = $dateFolders[$captureDate]; // Get the stored path
-            }
-            
-            // Copy screenshot file
-            $filename = basename($screenshot['filename']);
-            
-            // Try multiple possible source paths
-            $filePath = $screenshot['file_path'];
-            
-            // Remove common prefixes that might cause double paths
-            $cleanPath = $filePath;
-            $cleanPath = ltrim($cleanPath, './');  // Remove leading ./
-            $cleanPath = ltrim($cleanPath, 'html/');  // Remove leading html/ since BASEPATH already includes it
-            
-            // Debug: Show path transformation
-            if ($exported_count < 3) { // Only show first few for debugging
-                $this->logProgress("Debug - Original path: {$filePath}");
-                $this->logProgress("Debug - Clean path: {$cleanPath}");
-                $this->logProgress("Debug - BASEPATH: " . BASEPATH);
-            }
-            
-            $possiblePaths = [
-                BASEPATH . $cleanPath,  // Clean path with BASEPATH
-                BASEPATH . $filePath,  // Original path with BASEPATH
-                BASEPATH . ltrim($filePath, './'),  // Remove only ./
-                BASEPATH . str_replace('./', '', $filePath),  // Remove ./
-                BASEPATH . str_replace('.\/', '', $filePath),  // Remove .\/
-                // Absolute paths
-                $filePath,
-                ltrim($filePath, './'),
-                str_replace('./', '', $filePath)
-            ];
-            
-            $sourcePath = null;
-            foreach ($possiblePaths as $path) {
-                if (file_exists($path)) {
-                    $sourcePath = $path;
-                    break;
-                }
-            }
-            
-            if ($sourcePath) {
-                $destinationPath = $dateFolder . "/" . $filename;
-                if (copy($sourcePath, $destinationPath)) {
-                    $exported_count++;
-                    $this->logProgress("✓ Copied screenshot: {$filename}");
-                } else {
-                    $this->logProgress("⚠ Failed to copy screenshot: {$filename} (copy failed)");
-                }
-            } else {
-                $this->logProgress("⚠ Source file not found: {$filename}");
-                $this->logProgress("   Tried paths: " . implode(', ', $possiblePaths));
-            }
-            
-            // Update progress every 10 screenshots
-            if ($exported_count % 10 == 0 && $exported_count > 0) {
-                $this->logProgress("Copied {$exported_count}/{$total_screenshots} screenshots...");
+                $this->logProgress("⚠ Failed to create video for date: {$date}");
             }
         }
         
-        $this->logProgress("✓ Completed screenshot export: {$exported_count}/{$total_screenshots} screenshots copied for {$username}");
+        $this->logProgress("✓ Completed screenshot export: {$totalVideosCreated} video slideshows created for {$username}");
+    }
+    
+    private function createVideoSlideshow($screenshots, $outputFolder, $username, $ip, $date) {
+        try {
+            // Check if FFmpeg is available
+            if (!$this->isFFmpegAvailable()) {
+                $this->logProgress("⚠ FFmpeg not available, skipping video creation");
+                return $this->fallbackToImageCopy($screenshots, $outputFolder, $username, $ip, $date);
+            }
+            
+            $this->logProgress("Creating video slideshow for {$date}...");
+            
+            $processedCount = 0;
+            $totalScreenshots = count($screenshots);
+            
+            // Copy screenshots directly to the output folder with sequential names
+            foreach ($screenshots as $index => $screenshot) {
+                $sourcePath = $this->resolveScreenshotPath($screenshot);
+                if (!$sourcePath) {
+                    $this->logProgress("⚠ Skipping screenshot: " . $screenshot['filename']);
+                    continue;
+                }
+                
+                // Create sequential filename for FFmpeg
+                $tempFilename = sprintf("img_%04d.jpg", $index);
+                $tempPath = $outputFolder . "/" . $tempFilename;
+                
+                // Copy to output folder
+                if (copy($sourcePath, $tempPath)) {
+                    $processedCount++;
+                    
+                    // Update progress every 50 images
+                    if ($processedCount % 50 == 0) {
+                        $this->logProgress("Copied {$processedCount}/{$totalScreenshots} images to output folder...");
+                    }
+                }
+            }
+            
+            if ($processedCount == 0) {
+                $this->logProgress("⚠ No valid screenshots found for video creation");
+                return false;
+            }
+            
+            $this->logProgress("Found {$processedCount} images ready for video creation");
+            $this->logProgress("Creating video from {$processedCount} images...");
+            
+            // Create video filename
+            $videoFilename = "{$username}_{$ip}_screenshots_{$date}.mp4";
+            $videoPath = $outputFolder . "/" . $videoFilename;
+            
+            // Simple FFmpeg command - no complex escaping
+            $ffmpegCmd = $this->ffmpegPath . " -y -framerate 1 -i " . $outputFolder . "/img_%04d.jpg -c:v libx264 -pix_fmt yuv420p -crf 28 -vf scale=1280:720 " . $videoPath . " 2>&1";
+            
+            $this->logProgress("Running FFmpeg command...");
+            $this->logProgress("Command: " . $ffmpegCmd);
+            
+            exec($ffmpegCmd, $output, $returnCode);
+            
+            $this->logProgress("FFmpeg return code: {$returnCode}");
+            if (!empty($output)) {
+                $this->logProgress("FFmpeg output: " . implode("\n", $output));
+            }
+            
+            // Clean up individual image files after video creation
+            $this->cleanupImageFiles($outputFolder);
+            
+            if ($returnCode === 0 && file_exists($videoPath)) {
+                $fileSize = $this->formatFileSize(filesize($videoPath));
+                $this->logProgress("✓ Video created successfully: {$videoFilename} ({$fileSize})");
+                return $videoPath;
+            } else {
+                $this->logProgress("⚠ FFmpeg failed with return code: {$returnCode}");
+                return false;
+            }
+            
+        } catch (Exception $e) {
+            $this->logProgress("⚠ Video creation failed: " . $e->getMessage());
+            // Clean up any remaining image files
+            $this->cleanupImageFiles($outputFolder);
+            return false;
+        }
+    }
+    
+    private function isFFmpegAvailable() {
+        // Try multiple possible FFmpeg paths
+        $ffmpegPaths = [
+            '/usr/local/bin/ffmpeg_xampp',  // XAMPP-compatible wrapper (preferred)
+            'ffmpeg',  // System PATH
+            '/usr/local/bin/ffmpeg',  // Homebrew
+            '/opt/homebrew/bin/ffmpeg',  // Apple Silicon Homebrew
+            '/Applications/XAMPP/bin/ffmpeg',  // XAMPP
+            '/usr/bin/ffmpeg',  // System default
+            '/bin/ffmpeg'  // Alternative system location
+        ];
+        
+        foreach ($ffmpegPaths as $path) {
+            exec("{$path} -version 2>&1", $output, $returnCode);
+            
+            if ($returnCode === 0) {
+                $this->logProgress("✓ FFmpeg is available at: {$path}");
+                $this->ffmpegPath = $path;  // Store the working path
+                return true;
+            }
+        }
+        
+        $this->logProgress("⚠ FFmpeg is not available");
+        return false;
+    }
+    
+    private function resolveScreenshotPath($screenshot) {
+        $filePath = $screenshot['file_path'];
+        
+        // Remove common prefixes that might cause double paths
+        $cleanPath = $filePath;
+        $cleanPath = ltrim($cleanPath, './');
+        $cleanPath = ltrim($cleanPath, 'html/');
+        
+        $possiblePaths = [
+            BASEPATH . $cleanPath,
+            BASEPATH . $filePath,
+            BASEPATH . ltrim($filePath, './'),
+            $filePath,
+            ltrim($filePath, './'),
+            str_replace('./', '', $filePath)
+        ];
+        
+        foreach ($possiblePaths as $path) {
+            if (file_exists($path)) {
+                return $path;
+            }
+        }
+        
+        return null;
+    }
+    
+    private function cleanupImageFiles($outputFolder) {
+        $this->logProgress("Cleaning up individual image files...");
+        $imageFiles = glob($outputFolder . "/img_*.jpg");
+        $removedCount = 0;
+        
+        foreach ($imageFiles as $file) {
+            if (is_file($file) && unlink($file)) {
+                $removedCount++;
+            }
+        }
+        
+        $this->logProgress("✓ Removed {$removedCount} individual image files");
+    }
+    
+    private function fallbackToImageCopy($screenshots, $outputFolder, $username, $ip, $date) {
+        $this->logProgress("⚠ FFmpeg not available, skipping screenshot export for {$date}");
+        $this->logProgress("⚠ Please install FFmpeg to export screenshots as videos");
+        
+        // Create a note file instead of copying images
+        $noteFile = $outputFolder . "/" . "ffmpeg_required.txt";
+        $noteContent = "Screenshot export skipped for {$date}\n";
+        $noteContent .= "FFmpeg is required to create video slideshows from screenshots.\n";
+        $noteContent .= "Please install FFmpeg and try again.\n";
+        $noteContent .= "Found " . count($screenshots) . " screenshots for this date.\n";
+        
+        file_put_contents($noteFile, $noteContent);
+        
+        return $noteFile;
+    }
+    
+    private function formatFileSize($bytes) {
+        $units = ['B', 'KB', 'MB', 'GB'];
+        $bytes = max($bytes, 0);
+        $pow = floor(($bytes ? log($bytes) : 0) / log(1024));
+        $pow = min($pow, count($units) - 1);
+        
+        $bytes /= pow(1024, $pow);
+        
+        return round($bytes, 2) . ' ' . $units[$pow];
     }
 
     private function logProgress($message) {
