@@ -180,6 +180,7 @@ class Export extends Base {
         try {
             $start_date = $_POST['start_date'] ?? null;
             $end_date = $_POST['end_date'] ?? null;
+            $device_ids = $_POST['device_ids'] ?? null;
             
             if (!$start_date || !$end_date) {
                 throw new Exception('Start date and end date are required');
@@ -220,8 +221,19 @@ class Export extends Base {
                 throw new Exception("Failed to create progress file: {$this->progressFile}");
             }
             
-            // Get list of devices to export
-            $devices = $this->db->fetchAll("SELECT * FROM tbl_monitor_ips ORDER BY username ASC, ip_address ASC");
+            // Get list of devices to export based on selection
+            if ($device_ids) {
+                $device_ids_array = explode(',', $device_ids);
+                $placeholders = str_repeat('?,', count($device_ids_array) - 1) . '?';
+                $sql = "SELECT * FROM tbl_monitor_ips WHERE id IN ({$placeholders}) ORDER BY username ASC, ip_address ASC";
+                $devices = $this->db->fetchAll($sql, $device_ids_array);
+                
+                // Log selected devices
+                file_put_contents($this->progressFile, "Selected devices: " . implode(', ', $device_ids_array) . "\n", FILE_APPEND);
+            } else {
+                $devices = $this->db->fetchAll("SELECT * FROM tbl_monitor_ips ORDER BY username ASC, ip_address ASC");
+                file_put_contents($this->progressFile, "All devices selected\n", FILE_APPEND);
+            }
             
             echo json_encode([
                 'success' => true,
@@ -229,7 +241,8 @@ class Export extends Base {
                 'export_dir' => "export_{$timestamp}",
                 'progress_file' => "progress.txt",
                 'devices' => $devices,
-                'total_devices' => count($devices)
+                'total_devices' => count($devices),
+                'selected_devices' => $device_ids ? explode(',', $device_ids) : []
             ]);
             
         } catch (Exception $e) {

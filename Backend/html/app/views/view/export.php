@@ -36,6 +36,71 @@ ob_start();
     flex: 1;
 }
 
+.device-select-group {
+    margin-bottom: 20px;
+}
+
+.device-select-group label {
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: #333;
+    display: block;
+}
+
+.device-multiselect {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+    background: white;
+    min-height: 120px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.device-multiselect:focus {
+    outline: none;
+    border-color: var(--monitoring-primary);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.device-option {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    margin: 2px 0;
+    transition: background-color 0.2s;
+}
+
+.device-option:hover {
+    background-color: #f8f9fa;
+}
+
+.device-option.selected {
+    background-color: var(--monitoring-primary);
+    color: white;
+}
+
+.device-option input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+.device-select-info {
+    font-size: 12px;
+    color: #666;
+    margin-top: 8px;
+}
+
+.select-all-devices {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
 .date-input-group label {
     font-weight: 500;
     margin-bottom: 8px;
@@ -354,6 +419,25 @@ ob_start();
             </p>
         </div>
         
+        <div class="device-select-group">
+            <label for="deviceSelect">
+                <i class="fas fa-desktop me-1"></i>Select Devices
+            </label>
+            <div class="device-multiselect" id="deviceSelect">
+                <div class="select-all-devices">
+                    <input type="checkbox" id="selectAllDevices" onchange="toggleAllDevices()">
+                    <label for="selectAllDevices"><strong>Select All Devices</strong></label>
+                </div>
+                <div id="deviceList">
+                    <!-- Devices will be loaded here -->
+                </div>
+            </div>
+            <div class="device-select-info">
+                <span id="selectedCount">0 devices selected</span> | 
+                <span id="totalCount">Loading devices...</span>
+            </div>
+        </div>
+        
         <div class="date-range-group">
             <div class="date-input-group">
                 <label for="startDate">Start Date</label>
@@ -412,6 +496,8 @@ Export is ready to start. Please select a date range and click "Start Export" to
 let exportInterval = null;
 let currentExportDir = null;
 let currentProgressFile = null;
+let allDevices = [];
+let selectedDevices = [];
 
 // Initialize date inputs with default values (last 7 days)
 function initializeDateInputs() {
@@ -425,6 +511,112 @@ function initializeDateInputs() {
     // Validate on change
     document.getElementById('startDate').addEventListener('change', validateDateRange);
     document.getElementById('endDate').addEventListener('change', validateDateRange);
+}
+
+// Load devices from API
+async function loadDevices() {
+    try {
+        const response = await fetch(`${window.location.origin}/html/export/api_get_devices`);
+        const data = await response.json();
+        
+        if (data.success) {
+            allDevices = data.devices;
+            selectedDevices = data.devices.map(device => device.id); // Select all by default
+            renderDeviceList();
+            updateDeviceCount();
+        } else {
+            console.error('Failed to load devices:', data.message);
+            document.getElementById('deviceList').innerHTML = '<div style="padding: 10px; color: #dc3545;">Failed to load devices</div>';
+        }
+    } catch (error) {
+        console.error('Error loading devices:', error);
+        document.getElementById('deviceList').innerHTML = '<div style="padding: 10px; color: #dc3545;">Error loading devices</div>';
+    }
+}
+
+// Render device list in the multiselect
+function renderDeviceList() {
+    const deviceList = document.getElementById('deviceList');
+    deviceList.innerHTML = '';
+    
+    allDevices.forEach(device => {
+        const deviceDiv = document.createElement('div');
+        deviceDiv.className = 'device-option';
+        deviceDiv.innerHTML = `
+            <input type="checkbox" 
+                   id="device_${device.id}" 
+                   value="${device.id}" 
+                   ${selectedDevices.includes(device.id) ? 'checked' : ''}
+                   onchange="toggleDevice(${device.id})">
+            <label for="device_${device.id}">
+                ${device.username || 'Unknown'} (${device.ip_address})
+                ${device.name ? `<br><small style="color: #666;">${device.name}</small>` : ''}
+            </label>
+        `;
+        
+        if (selectedDevices.includes(device.id)) {
+            deviceDiv.classList.add('selected');
+        }
+        
+        deviceList.appendChild(deviceDiv);
+    });
+    
+    // Update select all checkbox state
+    const selectAllCheckbox = document.getElementById('selectAllDevices');
+    selectAllCheckbox.checked = selectedDevices.length === allDevices.length;
+}
+
+// Toggle individual device selection
+function toggleDevice(deviceId) {
+    const checkbox = document.getElementById(`device_${deviceId}`);
+    const deviceDiv = checkbox.closest('.device-option');
+    
+    if (checkbox.checked) {
+        if (!selectedDevices.includes(deviceId)) {
+            selectedDevices.push(deviceId);
+        }
+        deviceDiv.classList.add('selected');
+    } else {
+        selectedDevices = selectedDevices.filter(id => id !== deviceId);
+        deviceDiv.classList.remove('selected');
+    }
+    
+    updateDeviceCount();
+    updateSelectAllState();
+}
+
+// Toggle all devices selection
+function toggleAllDevices() {
+    const selectAllCheckbox = document.getElementById('selectAllDevices');
+    
+    if (selectAllCheckbox.checked) {
+        selectedDevices = allDevices.map(device => device.id);
+    } else {
+        selectedDevices = [];
+    }
+    
+    renderDeviceList();
+    updateDeviceCount();
+}
+
+// Update select all checkbox state
+function updateSelectAllState() {
+    const selectAllCheckbox = document.getElementById('selectAllDevices');
+    if (selectedDevices.length === allDevices.length) {
+        selectAllCheckbox.indeterminate = false;
+        selectAllCheckbox.checked = true;
+    } else if (selectedDevices.length === 0) {
+        selectAllCheckbox.indeterminate = false;
+        selectAllCheckbox.checked = false;
+    } else {
+        selectAllCheckbox.indeterminate = true;
+    }
+}
+
+// Update device count display
+function updateDeviceCount() {
+    document.getElementById('selectedCount').textContent = `${selectedDevices.length} devices selected`;
+    document.getElementById('totalCount').textContent = `${allDevices.length} total devices`;
 }
 
 function validateDateRange() {
@@ -470,6 +662,12 @@ function startExport() {
         return;
     }
     
+    // Validate device selection
+    if (selectedDevices.length === 0) {
+        showValidationMessage('Please select at least one device to export.', 'error');
+        return;
+    }
+    
     const startDate = document.getElementById('startDate').value;
     const endDate = document.getElementById('endDate').value;
     
@@ -488,7 +686,7 @@ function startExport() {
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: `start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`
+        body: `start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}&device_ids=${encodeURIComponent(selectedDevices.join(','))}`
     })
     .then(response => {
         // Check if response is JSON
@@ -642,6 +840,7 @@ function downloadExport() {
 document.addEventListener('DOMContentLoaded', function() {
     initializeDateInputs();
     validateDateRange();
+    loadDevices(); // Load devices for selection
 });
 </script>
 
