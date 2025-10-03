@@ -1,252 +1,427 @@
-# Monitor UI - Web Interface
+# Employee Monitoring System - Server Installation Guide
 
-A simple CodeIgniter-like PHP web interface for the monitoring system with authentication and real-time data viewing capabilities.
+## 📋 Overview
 
-## Features
+This is a comprehensive employee monitoring system built with CodeIgniter 4 that tracks browser history, keyboard activity, USB device usage, and screenshots. The system includes advanced features like video slideshow generation from screenshots using FFmpeg.
 
-- **User Authentication**: Login system with admin and user roles
-- **User Management**: Admin can create, edit, and delete users
-- **IP-Username Mapping**: Manage monitor IP addresses and associate them with usernames
-- **Real-time Screenshots**: View latest screenshots from all monitors with auto-refresh every 30 seconds
-- **Log Management**: Browse browser history, key logs, and USB logs for each monitor
-- **Responsive Design**: Modern Bootstrap-based UI that works on desktop and mobile
+## 🎯 Features
 
-## Requirements
+- **Real-time Monitoring**: Live screenshot viewing with CCTV-style interface
+- **Comprehensive Logging**: Browser history, key logs, USB device logs
+- **Data Export**: CSV exports and organized file exports with video slideshows
+- **Usage Reports**: Daily/weekly/monthly monitoring statistics
+- **Video Archiving**: Automatic conversion of screenshots to MP4 videos using FFmpeg
+- **Multi-device Support**: Monitor multiple devices simultaneously
+- **Responsive Web Interface**: Modern, mobile-friendly dashboard
 
-- PHP 7.4 or higher
-- MySQL/MariaDB
-- Web server (Apache/Nginx)
-- PDO extension for PHP
-- GD extension for image processing (optional)
+## 🔧 System Requirements
 
-## Installation
+### Minimum Requirements
+- **PHP**: 8.0 or higher
+- **Database**: MySQL 5.7+ or MariaDB 10.3+
+- **Web Server**: Apache 2.4+ or Nginx 1.18+
+- **FFmpeg**: For video slideshow generation (required for screenshot export)
+- **Memory**: 2GB RAM minimum, 4GB recommended
+- **Storage**: 10GB minimum for logs and screenshots
 
-### 1. Database Setup
+### PHP Extensions Required
+- `pdo_mysql` - Database connectivity
+- `gd` or `imagick` - Image processing
+- `mbstring` - Multibyte string support
+- `curl` - HTTP requests
+- `json` - JSON processing
+- `fileinfo` - File type detection
 
-First, ensure your MySQL database is running and create the required tables:
+## 📦 Installation Guide
 
-```sql
--- Run the setup script
-mysql -u root -p < setup_database.sql
+### 🍎 macOS Installation
+
+#### 1. Install XAMPP
+```bash
+# Download and install XAMPP from https://www.apachefriends.org/
+# Or use Homebrew
+brew install --cask xampp
 ```
 
-Or manually execute the SQL commands in `setup_database.sql`.
+#### 2. Install FFmpeg
+```bash
+# Using Homebrew (recommended)
+brew install ffmpeg
 
-### 2. Configuration
-
-Edit the database configuration in `app/config/config.php`:
-
-```php
-define('DB_HOST', 'localhost');
-define('DB_USER', 'root');
-define('DB_PASS', 'acc_monitor');
-define('DB_NAME', 'monitoring_db');
+# Verify installation
+ffmpeg -version
 ```
 
-### 3. File Permissions
+#### 3. Setup Project
+```bash
+# Navigate to XAMPP htdocs
+cd /Applications/XAMPP/htdocs
 
-Ensure the web server has read access to the data directories:
+# Clone or copy your project
+git clone <your-repo> monitoring-system
+cd monitoring-system
+
+# Set permissions
+sudo chown -R daemon:daemon html/
+sudo chmod -R 755 html/
+```
+
+#### 4. Database Setup
+```bash
+# Start XAMPP services
+sudo /Applications/XAMPP/xamppfiles/xampp start
+
+# Access phpMyAdmin at http://localhost/phpmyadmin
+# Create database: monitoring_db
+# Import the SQL schema file
+```
+
+#### 5. Configure Environment
+```bash
+# Copy environment file
+cp html/app/Config/App.php.example html/app/Config/App.php
+
+# Edit database configuration
+nano html/app/Config/Database.php
+```
+
+#### 6. FFmpeg Integration (Important!)
+Since XAMPP on macOS may have library conflicts with system FFmpeg, create a wrapper:
 
 ```bash
-chmod -R 755 ../data/
+# Create FFmpeg wrapper for XAMPP compatibility
+sudo nano /usr/local/bin/ffmpeg_xampp
+
+# Add this content:
+#!/bin/bash
+export DYLD_LIBRARY_PATH="/usr/local/lib:$DYLD_LIBRARY_PATH"
+exec /usr/local/bin/ffmpeg "$@"
+
+# Make executable
+sudo chmod +x /usr/local/bin/ffmpeg_xampp
 ```
 
-### 4. Web Server Configuration
+### 🪟 Windows Installation
 
-#### Apache (.htaccess)
-Create a `.htaccess` file in the root directory:
+#### 1. Install XAMPP
+1. Download XAMPP from https://www.apachefriends.org/
+2. Install with default settings
+3. Start Apache and MySQL services
 
-```apache
-RewriteEngine On
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ index.php/$1 [L]
+#### 2. Install FFmpeg
+**Option A: Using Chocolatey (Recommended)**
+```powershell
+# Install Chocolatey first (if not installed)
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# Install FFmpeg
+choco install ffmpeg
 ```
 
-#### Nginx
-Add this to your nginx configuration:
+**Option B: Manual Installation**
+1. Download FFmpeg from https://ffmpeg.org/download.html#build-windows
+2. Extract to `C:\ffmpeg`
+3. Add `C:\ffmpeg\bin` to Windows PATH:
+   - Open System Properties → Environment Variables
+   - Add `C:\ffmpeg\bin` to PATH variable
 
-```nginx
-location / {
-    try_files $uri $uri/ /index.php?$query_string;
-}
+**Verify Installation:**
+```cmd
+ffmpeg -version
 ```
 
-## Default Login Credentials
+#### 3. Setup Project
+```cmd
+# Navigate to XAMPP htdocs
+cd C:\xampp\htdocs
 
-- **Admin User**:
-  - Username: `admin`
-  - Password: `admin123`
-  - Role: Admin (full access)
-
-- **Regular User**:
-  - Username: `user`
-  - Password: `user123`
-  - Role: User (limited access)
-
-## Usage
-
-### Dashboard
-- Overview of system statistics
-- Recent monitor activity
-- Quick access to all features
-
-### User Management (Admin Only)
-- Create new users
-- Edit existing users
-- Delete users
-- Assign roles (admin/user)
-
-### IP Mapping
-- Add new monitor IP addresses
-- Associate IPs with usernames
-- Edit monitor information
-- View monitor status
-
-### View Data
-
-#### Screenshots
-- Real-time screenshots from all monitors
-- Auto-refresh every 30 seconds
-- Click to view full-size images
-- Toggle auto-refresh on/off
-
-#### Logs
-- Browse logs by monitor
-- View browser history, key logs, and USB logs
-- Click to view log file contents
-- File size and modification time display
-
-## File Structure
-
-```
-html/
-├── app/
-│   ├── config/
-│   │   ├── config.php          # Main configuration
-│   │   └── database.php        # Database connection class
-│   ├── controllers/
-│   │   ├── Base.php            # Base controller
-│   │   ├── Auth.php            # Authentication controller
-│   │   ├── Dashboard.php       # Dashboard controller
-│   │   ├── Users.php           # User management
-│   │   ├── Monitors.php        # IP mapping management
-│   │   └── View.php            # Data viewing controller
-│   └── views/
-│       ├── layouts/
-│       │   └── main.php        # Main layout template
-│       ├── auth/               # Authentication views
-│       ├── dashboard/          # Dashboard views
-│       ├── users/              # User management views
-│       ├── monitors/           # IP mapping views
-│       └── view/               # Data viewing views
-├── public/                     # Public assets
-├── index.php                   # Main entry point
-├── setup_database.sql          # Database setup script
-└── README.md                   # This file
+# Copy your project files
+# Set permissions (Windows handles this automatically)
 ```
 
-## API Endpoints
+#### 4. Database Setup
+1. Access phpMyAdmin at http://localhost/phpmyadmin
+2. Create database: `monitoring_db`
+3. Import SQL schema file
 
-### Authentication
-- `POST /auth/login` - User login
-- `GET /auth/logout` - User logout
-- `POST /auth/register` - Create new user (admin only)
+#### 5. Configure Environment
+1. Copy `html/app/Config/App.php.example` to `html/app/Config/App.php`
+2. Edit `html/app/Config/Database.php` with your database credentials
 
-### Dashboard
-- `GET /dashboard` - Main dashboard
+#### 6. Windows-Specific FFmpeg Configuration
+The system will automatically detect FFmpeg in these locations:
+- `C:\ffmpeg\bin\ffmpeg.exe`
+- `C:\ProgramData\chocolatey\bin\ffmpeg.exe`
+- System PATH `ffmpeg`
 
-### User Management
-- `GET /users` - List all users
-- `GET /users/create` - Create user form
-- `POST /users/create` - Create new user
-- `GET /users/edit/{id}` - Edit user form
-- `POST /users/edit/{id}` - Update user
-- `GET /users/delete/{id}` - Delete user
+### 🐧 Ubuntu/Debian Installation
 
-### Monitor Management
-- `GET /monitors` - List all monitors
-- `GET /monitors/create` - Create monitor form
-- `POST /monitors/create` - Create new monitor
-- `GET /monitors/edit/{id}` - Edit monitor form
-- `POST /monitors/edit/{id}` - Update monitor
-- `GET /monitors/delete/{id}` - Delete monitor
+#### 1. Install LAMP Stack
+```bash
+# Update system
+sudo apt update && sudo apt upgrade -y
 
-### Data Viewing
-- `GET /view` - Main view page
-- `GET /view/screenshots` - Screenshots page
-- `GET /view/logs` - Logs overview
-- `GET /view/logs/{id}` - Specific monitor logs
-- `GET /view/api_screenshots` - Screenshots API (JSON)
-- `GET /view/api_logs/{id}` - Logs API (JSON)
+# Install Apache, MySQL, PHP
+sudo apt install apache2 mysql-server php8.1 php8.1-mysql php8.1-gd php8.1-mbstring php8.1-curl php8.1-json php8.1-fileinfo -y
 
-## Security Features
+# Enable Apache modules
+sudo a2enmod rewrite
+sudo systemctl restart apache2
+```
 
-- Password hashing using PHP's `password_hash()`
-- Session-based authentication
-- Role-based access control
-- SQL injection prevention with prepared statements
-- XSS protection with `htmlspecialchars()`
+#### 2. Install FFmpeg
+```bash
+# Install FFmpeg
+sudo apt install ffmpeg -y
 
-## Customization
+# Verify installation
+ffmpeg -version
+```
 
-### Styling
-The application uses Bootstrap 5. You can customize the appearance by:
-- Modifying the CSS in `app/views/layouts/main.php`
-- Adding custom CSS files to the `public/css/` directory
-- Overriding Bootstrap classes
+#### 3. Setup Project
+```bash
+# Navigate to web root
+cd /var/www/html
 
-### Configuration
-Edit `app/config/config.php` to modify:
-- Database settings
-- Application name and version
-- File paths
-- Session timeout
+# Copy your project
+sudo cp -r /path/to/your/project .
 
-### Adding New Features
-1. Create a new controller in `app/controllers/`
-2. Extend the `Base` controller
-3. Create corresponding views in `app/views/`
-4. Add navigation links in `app/views/layouts/main.php`
+# Set permissions
+sudo chown -R www-data:www-data monitoring-system/
+sudo chmod -R 755 monitoring-system/html/
+```
 
-## Troubleshooting
+#### 4. Database Setup
+```bash
+# Secure MySQL installation
+sudo mysql_secure_installation
+
+# Create database
+sudo mysql -u root -p
+CREATE DATABASE monitoring_db;
+CREATE USER 'monitoring_user'@'localhost' IDENTIFIED BY 'your_password';
+GRANT ALL PRIVILEGES ON monitoring_db.* TO 'monitoring_user'@'localhost';
+FLUSH PRIVILEGES;
+EXIT;
+```
+
+#### 5. Configure Apache Virtual Host
+```bash
+# Create virtual host
+sudo nano /etc/apache2/sites-available/monitoring.conf
+
+# Add this configuration:
+<VirtualHost *:80>
+    ServerName monitoring.local
+    DocumentRoot /var/www/html/monitoring-system/html
+    
+    <Directory /var/www/html/monitoring-system/html>
+        AllowOverride All
+        Require all granted
+    </Directory>
+    
+    ErrorLog ${APACHE_LOG_DIR}/monitoring_error.log
+    CustomLog ${APACHE_LOG_DIR}/monitoring_access.log combined
+</VirtualHost>
+
+# Enable site
+sudo a2ensite monitoring.conf
+sudo systemctl reload apache2
+```
+
+## 🔧 Configuration
+
+### Database Configuration
+Edit `html/app/Config/Database.php`:
+```php
+public $default = [
+    'DSN'      => '',
+    'hostname' => 'localhost',
+    'username' => 'monitoring_user',
+    'password' => 'your_password',
+    'database' => 'monitoring_db',
+    'DBDriver' => 'MySQLi',
+    'DBPrefix' => '',
+    'pConnect' => false,
+    'DBDebug'  => true,
+    'charset'  => 'utf8',
+    'DBCollat' => 'utf8_general_ci',
+    'swapPre'  => '',
+    'encrypt'  => false,
+    'compress' => false,
+    'strictOn' => false,
+    'failover' => [],
+    'saveQueries' => true,
+];
+```
+
+### FFmpeg Configuration
+The system automatically detects FFmpeg in these locations:
+
+**macOS:**
+- `/usr/local/bin/ffmpeg_xampp` (XAMPP wrapper - recommended)
+- `/usr/local/bin/ffmpeg`
+- `/opt/homebrew/bin/ffmpeg`
+
+**Windows:**
+- `C:\ffmpeg\bin\ffmpeg.exe`
+- `C:\ProgramData\chocolatey\bin\ffmpeg.exe`
+- System PATH `ffmpeg`
+
+**Linux:**
+- `/usr/bin/ffmpeg`
+- `/usr/local/bin/ffmpeg`
+
+### Video Export Settings
+The system creates MP4 videos with these optimized settings:
+- **Resolution**: 1280x720 (720p)
+- **Frame Rate**: 1 FPS (1 second per screenshot)
+- **Codec**: H.264 with CRF 28 (good compression)
+- **Format**: MP4 for maximum compatibility
+
+## 🚀 Usage
+
+### 1. Access the System
+- **URL**: `http://localhost/monitoring-system/html/`
+- **Default Login**: Configure in your authentication system
+
+### 2. Key Features
+
+#### Real-time Monitoring
+- View live screenshots from all monitored devices
+- CCTV-style full-screen view with auto-refresh
+- Device status indicators
+
+#### Data Export
+- **Selective Export**: Choose specific devices or all devices
+- **Date Range**: Export data for any date range (max 31 days)
+- **Video Slideshows**: Screenshots automatically converted to MP4 videos
+- **Organized Structure**: Data organized by device and date
+
+#### Reports
+- **Usage Statistics**: Daily, weekly, monthly reports
+- **Activity Analysis**: Captured hours, offline hours, activity gaps
+- **CSV Export**: Download reports as CSV files
+
+### 3. File Structure
+```
+exports/
+├── export_2025-10-03_14-30-15/
+│   ├── progress.txt                    # Export progress log
+│   ├── User1_192_168_1_100/           # Device folder (sanitized names)
+│   │   ├── screenshots/
+│   │   │   ├── 2025-10-03/
+│   │   │   │   └── User1_192_168_1_100_screenshots_2025-10-03.mp4
+│   │   ├── keylog/
+│   │   │   └── keylog_2025-10-03.csv
+│   │   ├── usb_log/
+│   │   │   └── usb_log_2025-10-03.csv
+│   │   └── browser_history/
+│   │       └── browser_history_2025-10-03.csv
+```
+
+## 🔧 Troubleshooting
 
 ### Common Issues
 
-1. **Database Connection Error**
-   - Check database credentials in `app/config/config.php`
-   - Ensure MySQL service is running
-   - Verify database exists
+#### 1. FFmpeg Not Found
+**Error**: `FFmpeg is not available`
+**Solution**:
+```bash
+# Check if FFmpeg is installed
+ffmpeg -version
 
-2. **Permission Denied**
-   - Check file permissions on data directories
-   - Ensure web server can read/write to required directories
-
-3. **404 Errors**
-   - Check web server configuration (Apache .htaccess or Nginx config)
-   - Verify URL rewriting is enabled
-
-4. **Images Not Loading**
-   - Check file paths in configuration
-   - Verify image files exist in data directories
-   - Check web server permissions
-
-### Debug Mode
-To enable debug mode, add this to `app/config/config.php`:
-
-```php
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
+# If not found, install according to your OS above
+# For XAMPP on macOS, ensure the wrapper is created
 ```
 
-## Support
+#### 2. Permission Issues
+**Error**: `Failed to create export directory`
+**Solution**:
+```bash
+# macOS/Linux
+sudo chown -R daemon:daemon html/exports/
+sudo chmod -R 755 html/exports/
 
-For issues and questions:
-1. Check the troubleshooting section above
-2. Verify all requirements are met
-3. Check web server error logs
-4. Ensure database setup is complete
+# Windows - Run as Administrator or check folder permissions
+```
 
-## License
+#### 3. Video Creation Fails
+**Error**: `Video creation failed: Failed to create temporary directory`
+**Solution**:
+- Check PHP `sys_get_temp_dir()` permissions
+- Ensure FFmpeg is properly installed and accessible
+- Verify PHP `exec()` function is enabled
 
-This project is part of the monitoring system and follows the same license terms. 
+#### 4. Database Connection Issues
+**Error**: `Database connection failed`
+**Solution**:
+- Verify database credentials in `Database.php`
+- Ensure MySQL/MariaDB service is running
+- Check database exists and user has proper permissions
+
+### Debug Mode
+Enable debug mode in `html/app/Config/App.php`:
+```php
+public $CI_ENVIRONMENT = 'development';
+```
+
+## 📊 Performance Optimization
+
+### 1. Database Optimization
+```sql
+-- Add indexes for better performance
+ALTER TABLE screenshot_metadata ADD INDEX idx_monitor_datetime (monitor_ip_id, capture_datetime);
+ALTER TABLE key_logs ADD INDEX idx_monitor_datetime (monitor_ip_id, created_at);
+ALTER TABLE browser_history_logs ADD INDEX idx_monitor_datetime (monitor_ip_id, created_at);
+ALTER TABLE usb_logs ADD INDEX idx_monitor_datetime (monitor_ip_id, created_at);
+```
+
+### 2. PHP Configuration
+```ini
+# Increase PHP limits in php.ini
+max_execution_time = 300
+memory_limit = 512M
+upload_max_filesize = 100M
+post_max_size = 100M
+```
+
+### 3. Storage Management
+- Regularly clean old export files
+- Monitor disk space for screenshot storage
+- Consider implementing automatic cleanup policies
+
+## 🔒 Security Considerations
+
+### 1. Access Control
+- Implement proper authentication and authorization
+- Restrict access to sensitive endpoints
+- Use HTTPS in production environments
+
+### 2. Data Protection
+- Encrypt sensitive data in transit and at rest
+- Implement proper backup strategies
+- Follow data retention policies
+
+### 3. Network Security
+- Use firewall rules to restrict access
+- Monitor network traffic
+- Implement intrusion detection
+
+## 📞 Support
+
+For technical support or questions:
+1. Check this README for common solutions
+2. Review the troubleshooting section
+3. Check PHP error logs: `html/writable/logs/`
+4. Verify FFmpeg installation and permissions
+
+## 📄 License
+
+This project is proprietary software. Please ensure compliance with local laws and regulations regarding employee monitoring.
+
+---
+
+**Last Updated**: October 2025  
+**Version**: 1.0.0  
+**Compatible OS**: macOS, Windows, Ubuntu/Debian
