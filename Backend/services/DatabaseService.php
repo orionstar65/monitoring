@@ -58,6 +58,7 @@ class DatabaseService {
     
     /**
      * Add browser history logs to database
+     * Handles data from all platforms: Windows, macOS, Ubuntu
      */
     public function addBrowserHistoryLogs($browserHistories, $ip_address = null, $mac_address = null) {
         $ip_id = $this->getMonitorIpId($ip_address, $mac_address);
@@ -76,8 +77,15 @@ class DatabaseService {
             $browser = $browserHistory['browser'] ?? '';
             $url = $browserHistory['url'] ?? '';
             $title = $browserHistory['title'] ?? '';
-            $lastVisit = $browserHistory['last_visit'] ?? date('Y-m-d H:i:s');
-            $visitDate = $browserHistory['date'] ?? date('Y-m-d H:i:s');
+            
+            // Handle different platform data formats
+            $lastVisit = $this->normalizeDateTime($browserHistory['last_visit'] ?? null);
+            $visitDate = $this->normalizeDateTime($browserHistory['date'] ?? null);
+            
+            // Skip records with missing required fields
+            if (empty($browser) || empty($url)) {
+                continue;
+            }
             
             $stmt->bind_param("isssss", $ip_id, $browser, $url, $title, $lastVisit, $visitDate);
             if ($stmt->execute()) {
@@ -92,7 +100,50 @@ class DatabaseService {
     }
     
     /**
+     * Normalize datetime values from different platforms
+     * Handles: Int64 timestamps (macOS), String datetimes (Windows), Missing fields (Ubuntu)
+     */
+    private function normalizeDateTime($value) {
+        if ($value === null || $value === '') {
+            return date('Y-m-d H:i:s');
+        }
+        
+        // If it's a numeric timestamp (macOS sends Int64)
+        if (is_numeric($value)) {
+            $timestamp = (int)$value;
+            
+            // Handle different timestamp formats
+            if ($timestamp > 1000000000000) {
+                // Milliseconds since epoch (JavaScript style)
+                return date('Y-m-d H:i:s', $timestamp / 1000);
+            } elseif ($timestamp > 1000000000) {
+                // Seconds since epoch (Unix timestamp)
+                return date('Y-m-d H:i:s', $timestamp);
+            } else {
+                // Microseconds since epoch (some browsers)
+                return date('Y-m-d H:i:s', $timestamp / 1000000);
+            }
+        }
+        
+        // If it's already a string, try to parse it
+        if (is_string($value)) {
+            // Try to parse common datetime formats
+            $parsed = strtotime($value);
+            if ($parsed !== false) {
+                return date('Y-m-d H:i:s', $parsed);
+            }
+            
+            // If parsing fails, return as-is (might be valid MySQL datetime)
+            return $value;
+        }
+        
+        // Fallback to current time
+        return date('Y-m-d H:i:s');
+    }
+    
+    /**
      * Add key logs to database
+     * Handles data from all platforms: Windows, macOS, Ubuntu
      */
     public function addKeyLogs($keyLogs, $ip_address = null, $mac_address = null) {
         $ip_id = $this->getMonitorIpId($ip_address, $mac_address);
@@ -108,9 +159,14 @@ class DatabaseService {
         
         $inserted_count = 0;
         foreach ($keyLogs as $keyLog) {
-            $keyDate = $keyLog['date'] ?? date('Y-m-d H:i:s');
+            $keyDate = $this->normalizeDateTime($keyLog['date'] ?? null);
             $application = $keyLog['application'] ?? '';
             $keyPressed = $keyLog['key'] ?? '';
+            
+            // Skip records with missing required fields
+            if (empty($application) || empty($keyPressed)) {
+                continue;
+            }
             
             $stmt->bind_param("isss", $ip_id, $keyDate, $application, $keyPressed);
             if ($stmt->execute()) {
@@ -126,6 +182,7 @@ class DatabaseService {
     
     /**
      * Add USB device logs to database
+     * Handles data from all platforms: Windows, macOS, Ubuntu
      */
     public function addUSBDeviceLogs($usbLogs, $ip_address = null, $mac_address = null) {
         $ip_id = $this->getMonitorIpId($ip_address, $mac_address);
@@ -141,11 +198,17 @@ class DatabaseService {
         
         $inserted_count = 0;
         foreach ($usbLogs as $usbLog) {
-            $deviceDate = $usbLog['date'] ?? date('Y-m-d H:i:s');
+            $deviceDate = $this->normalizeDateTime($usbLog['date'] ?? null);
             $deviceName = $usbLog['device_name'] ?? '';
             $devicePath = $usbLog['device_path'] ?? '';
             $deviceType = $usbLog['device_type'] ?? '';
             $action = $usbLog['action'] ?? 'Connected';
+            
+            // Skip records with missing required fields
+            if (empty($deviceName)) {
+                continue;
+            }
+            
             $stmt->bind_param("isssss", $ip_id, $deviceDate, $deviceName, $devicePath, $deviceType, $action);
             if ($stmt->execute()) {
                 $inserted_count++;
