@@ -196,7 +196,7 @@ ORDER BY u.device_date DESC;
 -- =====================================================
 
 -- Insert default admin user
--- Password: admin123 (hashed with password_hash())
+-- Password: admin (hashed with password_hash())
 INSERT INTO users (username, email, password, role) VALUES 
 ('admin', 'admin@monitoring.local', '$2y$10$KKoTCx08WTwAD844SiV2u.zEJRsmKwmabqrZibYuScDyWVk5Iz4jW', 'admin');
 

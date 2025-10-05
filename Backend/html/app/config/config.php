@@ -2,13 +2,13 @@
 // Database configuration
 define('DB_HOST', 'localhost');
 define('DB_USER', 'root');
-define('DB_PASS', 'acc0924');
+define('DB_PASS', '');
 define('DB_NAME', 'monitoring_db');
 
 // Application configuration
 define('APP_NAME', 'ACC-Monitor');
 define('APP_VERSION', '1.0.0');
-define('BASE_URL', 'http://192.168.1.40:8924/html/');
+define('BASE_URL', 'http://192.168.1.105:8924/html/');
 
 // Debug mode
 error_reporting(E_ALL);
