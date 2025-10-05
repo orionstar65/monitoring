@@ -198,7 +198,7 @@ ORDER BY u.device_date DESC;
 -- Insert default admin user
 -- Password: admin123 (hashed with password_hash())
 INSERT INTO users (username, email, password, role) VALUES 
-('admin', 'admin@monitoring.local', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin');
+('admin', 'admin@monitoring.local', '$2y$10$KKoTCx08WTwAD844SiV2u.zEJRsmKwmabqrZibYuScDyWVk5Iz4jW', 'admin');
 
 -- Insert default viewer user
 -- Password: viewer123 (hashed with password_hash())
