@@ -24,134 +24,123 @@ USE monitoring_db;
 -- =====================================================
 
 -- Monitor IPs table - stores client information
-CREATE TABLE tbl_monitor_ips (
-    id INT(11) NOT NULL AUTO_INCREMENT,
-    ip_address VARCHAR(45) NOT NULL,
-    mac_address VARCHAR(17) NULL,
-    name VARCHAR(255) NULL,
-    username VARCHAR(50) NULL,
-    type VARCHAR(50) NULL DEFAULT 'user',
-    os_status TINYINT(4) NULL DEFAULT 0,
-    monitor_status TINYINT(4) NULL DEFAULT 0,
-    last_monitor_tic DATETIME NULL,
-    last_browser_tic DATETIME NULL,
-    app_version VARCHAR(50) NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_ip_address (ip_address),
-    KEY idx_mac_address (mac_address),
-    KEY idx_username (username),
-    KEY idx_created_at (created_at),
-    KEY idx_updated_at (updated_at)
+CREATE TABLE `tbl_monitor_ips` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `ip_address` varchar(45) NOT NULL,
+  `mac_address` varchar(17) DEFAULT NULL,
+  `name` varchar(255) DEFAULT NULL,
+  `username` varchar(50) DEFAULT NULL,
+  `type` varchar(50) DEFAULT 'Laptop',
+  `os_status` tinyint(4) DEFAULT 0,
+  `monitor_status` tinyint(4) DEFAULT 0,
+  `last_monitor_tic` datetime DEFAULT NULL,
+  `last_browser_tic` datetime DEFAULT NULL,
+  `app_version` varchar(50) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_ip_address` (`ip_address`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Users table - system users for web interface
-CREATE TABLE users (
-    id INT(11) NOT NULL AUTO_INCREMENT,
-    username VARCHAR(50) NOT NULL,
-    email VARCHAR(255) NULL,
-    password VARCHAR(255) NOT NULL,
-    role ENUM('admin', 'user', 'viewer') NULL DEFAULT 'user',
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_username (username),
-    UNIQUE KEY uk_email (email),
-    KEY idx_role (role),
-    KEY idx_created_at (created_at)
+CREATE TABLE `users` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `username` varchar(50) NOT NULL,
+  `email` varchar(255) DEFAULT NULL,
+  `password` varchar(255) NOT NULL,
+  `role` enum('admin','user','viewer') DEFAULT 'user',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Browser history logs table
-CREATE TABLE browser_history_logs (
-    id BIGINT(20) NOT NULL AUTO_INCREMENT,
-    monitor_ip_id INT(11) NOT NULL,
-    browser VARCHAR(50) NOT NULL,
-    url TEXT NOT NULL,
-    title TEXT NULL,
-    last_visit DATETIME NULL,
-    visit_date DATETIME NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    KEY idx_monitor_ip_id (monitor_ip_id),
-    KEY idx_browser (browser),
-    KEY idx_visit_date (visit_date),
-    KEY idx_last_visit (last_visit),
-    KEY idx_created_at (created_at),
-    CONSTRAINT fk_browser_history_monitor_ip FOREIGN KEY (monitor_ip_id) REFERENCES tbl_monitor_ips(id) ON DELETE CASCADE
+CREATE TABLE `browser_history_logs` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `monitor_ip_id` int(11) NOT NULL,
+  `browser` varchar(50) NOT NULL,
+  `url` text NOT NULL,
+  `title` text DEFAULT NULL,
+  `last_visit` datetime DEFAULT NULL,
+  `visit_date` datetime NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_monitor_ip_id` (`monitor_ip_id`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_browser_device_created_at` (`monitor_ip_id`,`created_at`),
+  CONSTRAINT `browser_history_logs_ibfk_1` FOREIGN KEY (`monitor_ip_id`) REFERENCES `tbl_monitor_ips` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Key logs table
-CREATE TABLE key_logs (
-    id BIGINT(20) NOT NULL AUTO_INCREMENT,
-    monitor_ip_id INT(11) NOT NULL,
-    key_date DATETIME NOT NULL,
-    application VARCHAR(255) NOT NULL,
-    key_pressed VARCHAR(100) NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    KEY idx_monitor_ip_id (monitor_ip_id),
-    KEY idx_key_date (key_date),
-    KEY idx_application (application),
-    KEY idx_created_at (created_at),
-    CONSTRAINT fk_key_logs_monitor_ip FOREIGN KEY (monitor_ip_id) REFERENCES tbl_monitor_ips(id) ON DELETE CASCADE
+CREATE TABLE `key_logs` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `monitor_ip_id` int(11) NOT NULL,
+  `key_date` datetime NOT NULL,
+  `application` varchar(255) NOT NULL,
+  `key_pressed` varchar(100) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_monitor_ip_id` (`monitor_ip_id`),
+  KEY `idx_key_date` (`key_date`),
+  KEY `idx_key_device_date` (`monitor_ip_id`,`key_date`),
+  CONSTRAINT `key_logs_ibfk_1` FOREIGN KEY (`monitor_ip_id`) REFERENCES `tbl_monitor_ips` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- USB device logs table
-CREATE TABLE usb_device_logs (
-    id BIGINT(20) NOT NULL AUTO_INCREMENT,
-    monitor_ip_id INT(11) NOT NULL,
-    device_date DATETIME NOT NULL,
-    device_name VARCHAR(255) NOT NULL,
-    device_path VARCHAR(500) NULL,
-    device_type VARCHAR(100) NULL,
-    action ENUM('Connected', 'Disconnected') NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    KEY idx_monitor_ip_id (monitor_ip_id),
-    KEY idx_device_date (device_date),
-    KEY idx_device_name (device_name),
-    KEY idx_action (action),
-    KEY idx_created_at (created_at),
-    CONSTRAINT fk_usb_logs_monitor_ip FOREIGN KEY (monitor_ip_id) REFERENCES tbl_monitor_ips(id) ON DELETE CASCADE
+CREATE TABLE `usb_device_logs` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `monitor_ip_id` int(11) NOT NULL,
+  `device_date` datetime NOT NULL,
+  `device_name` varchar(255) NOT NULL,
+  `device_path` varchar(500) DEFAULT NULL,
+  `device_type` varchar(100) DEFAULT NULL,
+  `action` enum('Connected','Disconnected') NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_monitor_ip_id` (`monitor_ip_id`),
+  KEY `idx_device_date` (`device_date`),
+  KEY `idx_usb_device_date` (`monitor_ip_id`,`device_date`),
+  KEY `idx_usb_device_created_at` (`monitor_ip_id`,`created_at`),
+  KEY `idx_usb_date_desc` (`device_date`),
+  KEY `idx_usb_stats` (`monitor_ip_id`,`device_date`),
+  CONSTRAINT `usb_device_logs_ibfk_1` FOREIGN KEY (`monitor_ip_id`) REFERENCES `tbl_monitor_ips` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Screenshot metadata table
-CREATE TABLE screenshot_metadata (
-    id BIGINT(20) NOT NULL AUTO_INCREMENT,
-    monitor_ip_id INT(11) NOT NULL,
-    filename VARCHAR(255) NOT NULL,
-    file_path VARCHAR(500) NOT NULL,
-    thumbnail_path VARCHAR(500) NULL,
-    capture_datetime DATETIME NOT NULL,
-    file_size BIGINT(20) NULL,
-    image_width INT(11) NULL,
-    image_height INT(11) NULL,
-    file_extension VARCHAR(10) NULL DEFAULT 'jpg',
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    KEY idx_monitor_ip_id (monitor_ip_id),
-    KEY idx_filename (filename),
-    KEY idx_capture_datetime (capture_datetime),
-    KEY idx_created_at (created_at),
-    CONSTRAINT fk_screenshot_metadata_monitor_ip FOREIGN KEY (monitor_ip_id) REFERENCES tbl_monitor_ips(id) ON DELETE CASCADE
+CREATE TABLE `screenshot_metadata` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `monitor_ip_id` int(11) NOT NULL,
+  `filename` varchar(255) NOT NULL,
+  `file_path` varchar(500) NOT NULL,
+  `thumbnail_path` varchar(500) DEFAULT NULL,
+  `capture_datetime` datetime NOT NULL,
+  `file_size` bigint(20) DEFAULT NULL,
+  `image_width` int(11) DEFAULT NULL,
+  `image_height` int(11) DEFAULT NULL,
+  `file_extension` varchar(10) DEFAULT 'jpg',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_monitor_ip_id` (`monitor_ip_id`),
+  KEY `idx_capture_datetime` (`capture_datetime`),
+  KEY `idx_screenshot_device_datetime` (`monitor_ip_id`,`capture_datetime`),
+  CONSTRAINT `screenshot_metadata_ibfk_1` FOREIGN KEY (`monitor_ip_id`) REFERENCES `tbl_monitor_ips` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Storage statistics table
-CREATE TABLE storage_statistics (
-    id INT(11) NOT NULL AUTO_INCREMENT,
-    monitor_ip_id INT(11) NOT NULL,
-    data_type ENUM('browser_history', 'key_logs', 'usb_logs', 'screenshots') NOT NULL,
-    month_year VARCHAR(7) NOT NULL,
-    record_count BIGINT(20) NULL DEFAULT 0,
-    total_size BIGINT(20) NULL DEFAULT 0,
-    last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_monitor_data_month (monitor_ip_id, data_type, month_year),
-    KEY idx_monitor_ip_id (monitor_ip_id),
-    KEY idx_data_type (data_type),
-    KEY idx_month_year (month_year),
-    CONSTRAINT fk_storage_statistics_monitor_ip FOREIGN KEY (monitor_ip_id) REFERENCES tbl_monitor_ips(id) ON DELETE CASCADE
+CREATE TABLE `storage_statistics` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `monitor_ip_id` int(11) NOT NULL,
+  `data_type` enum('browser_history','key_logs','usb_logs','screenshots') NOT NULL,
+  `month_year` varchar(7) NOT NULL,
+  `record_count` bigint(20) DEFAULT 0,
+  `total_size` bigint(20) DEFAULT 0,
+  `last_updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_stat` (`monitor_ip_id`,`data_type`,`month_year`),
+  KEY `idx_monitor_ip_id` (`monitor_ip_id`),
+  KEY `idx_data_type` (`data_type`),
+  KEY `idx_month_year` (`month_year`),
+  CONSTRAINT `storage_statistics_ibfk_1` FOREIGN KEY (`monitor_ip_id`) REFERENCES `tbl_monitor_ips` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- =====================================================
