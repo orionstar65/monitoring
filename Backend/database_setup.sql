@@ -260,6 +260,13 @@ mysql -u root -p < database_setup.sql
 OR FROM MYSQL COMMAND LINE:
 source database_setup.sql;
 
+> mysql -u root -p
+> Alter user 'root'@'localhost' identified by 'acc0924';
+> FLUSH PRIVILEGES;
+> exit;
+
+Restart mysql service!
+
 AFTER SETUP:
 1. Update admin password: UPDATE users SET password = PASSWORD_HASH('your_new_password', PASSWORD_DEFAULT) WHERE username = 'admin';
 2. Create additional users as needed
