@@ -19,7 +19,8 @@ class View extends Base {
         // Add basic status based on database data only
         foreach ($monitors as &$monitor) {
             // Determine status based on last_monitor_tic
-            $last_tic = strtotime($monitor['last_monitor_tic']);
+            $last_tic_value = $monitor['last_monitor_tic'] ?? null;
+            $last_tic = ($last_tic_value !== null && $last_tic_value !== '') ? strtotime($last_tic_value) : 0;
             $time_diff = time() - $last_tic;
             
             if ($time_diff <= 300) { // 5 minutes
@@ -271,7 +272,8 @@ class View extends Base {
         // Add status based on database data only
         foreach ($monitors as &$monitor) {
             // Use last_monitor_tic for real-time status (updated by client Tic events every 5 minutes)
-            $last_tic = $monitor['last_monitor_tic'] ? strtotime($monitor['last_monitor_tic']) : 0;
+            $last_tic_value = $monitor['last_monitor_tic'] ?? null;
+            $last_tic = ($last_tic_value !== null && $last_tic_value !== '') ? strtotime($last_tic_value) : 0;
             $time_diff = time() - $last_tic;
             
             if ($last_tic === 0) {
@@ -684,7 +686,8 @@ class View extends Base {
         // Add basic status based on database data only
         foreach ($monitors as &$monitor) {
             // Determine status based on last_monitor_tic
-            $last_tic = strtotime($monitor['last_monitor_tic']);
+            $last_tic_value = $monitor['last_monitor_tic'] ?? null;
+            $last_tic = ($last_tic_value !== null && $last_tic_value !== '') ? strtotime($last_tic_value) : 0;
             $time_diff = time() - $last_tic;
             
             if ($time_diff <= 300) { // 5 minutes

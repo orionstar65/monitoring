@@ -12,6 +12,14 @@ require_once 'services/DatabaseService.php';
 // Initialize configuration
 $config = new JConfig();
 
+// Check if GD extension is available
+if (!extension_loaded('gd')) {
+    error_log("GD extension is not loaded. Please enable GD extension in php.ini");
+    http_response_code(500);
+    echo json_encode(['error' => 'GD extension is required for image processing. Please contact administrator.']);
+    exit;
+}
+
 // Initialize database connection
 $mysqli = new mysqli($config->dbhost, $config->dbuser, $config->dbpassword, $config->dbname);
 
@@ -201,10 +209,12 @@ function createThumbnail($source_path, $thumb_path, $max_width, $max_height) {
             $source_image = imagecreatefromgif($source_path);
             break;
         default:
+            error_log("Unsupported image type: $source_type");
             return false;
     }
     
     if (!$source_image) {
+        error_log("Failed to create image resource from: $source_path (type: $source_type)");
         return false;
     }
     
