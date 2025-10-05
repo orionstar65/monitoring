@@ -51,19 +51,26 @@ class Export extends Base {
         }
     }
     
-    private function testFFmpegEnvironment() {
+    public function testFFmpegEnvironment() {
         $result = [
             'php_version' => PHP_VERSION,
             'php_sapi' => PHP_SAPI,
+            'php_os_family' => PHP_OS_FAMILY,
             'current_user' => get_current_user(),
             'path' => getenv('PATH'),
             'ffmpeg_paths_tested' => [],
-            'working_path' => null
+            'working_path' => null,
+            'recommendations' => []
         ];
         
         $ffmpegPaths = [
+            // Windows paths (check first for Windows systems)
+            'ffmpeg',  // System PATH (Windows)
+            'ffmpeg.exe',  // Windows executable
+            'C:\\ffmpeg\\bin\\ffmpeg.exe',  // Common Windows installation
+            
+            // Unix/Linux/macOS paths
             '/usr/local/bin/ffmpeg_xampp',  // XAMPP-compatible wrapper
-            'ffmpeg',
             '/usr/local/bin/ffmpeg',
             '/opt/homebrew/bin/ffmpeg',
             '/Applications/XAMPP/bin/ffmpeg',
@@ -85,6 +92,23 @@ class Export extends Base {
             if ($returnCode === 0 && !$result['working_path']) {
                 $result['working_path'] = $path;
             }
+        }
+        
+        // Add recommendations based on OS
+        if (PHP_OS_FAMILY === 'Windows') {
+            $result['recommendations'] = [
+                '1. Download FFmpeg from https://ffmpeg.org/download.html',
+                '2. Extract to C:\\ffmpeg\\',
+                '3. Add C:\\ffmpeg\\bin to your system PATH',
+                '4. Or copy ffmpeg.exe to your XAMPP bin directory (D:\\xampp\\bin\\)',
+                '5. Restart Apache after installation'
+            ];
+        } else {
+            $result['recommendations'] = [
+                '1. Install FFmpeg via package manager (brew, apt, yum, etc.)',
+                '2. Or download from https://ffmpeg.org/download.html',
+                '3. Ensure FFmpeg is in your system PATH'
+            ];
         }
         
         return $result;
@@ -763,8 +787,18 @@ class Export extends Base {
     private function isFFmpegAvailable() {
         // Try multiple possible FFmpeg paths
         $ffmpegPaths = [
+            // Windows paths (check first for Windows systems)
+            'ffmpeg',  // System PATH (Windows)
+            'ffmpeg.exe',  // Windows executable
+            'C:\\ffmpeg\\bin\\ffmpeg.exe',  // Common Windows installation
+            'C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe',  // Program Files
+            'C:\\Program Files (x86)\\ffmpeg\\bin\\ffmpeg.exe',  // Program Files x86
+            'D:\\ffmpeg\\bin\\ffmpeg.exe',  // D drive installation
+            'D:\\xampp\\bin\\ffmpeg.exe',  // XAMPP bin directory
+            'D:\\xampp\\bin\\ffmpeg',  // XAMPP bin directory (no extension)
+            
+            // Unix/Linux/macOS paths
             '/usr/local/bin/ffmpeg_xampp',  // XAMPP-compatible wrapper (preferred)
-            'ffmpeg',  // System PATH
             '/usr/local/bin/ffmpeg',  // Homebrew
             '/opt/homebrew/bin/ffmpeg',  // Apple Silicon Homebrew
             '/Applications/XAMPP/bin/ffmpeg',  // XAMPP
@@ -773,16 +807,38 @@ class Export extends Base {
         ];
         
         foreach ($ffmpegPaths as $path) {
-            exec("{$path} -version 2>&1", $output, $returnCode);
+            // On Windows, try both with and without quotes for paths with spaces
+            if (PHP_OS_FAMILY === 'Windows') {
+                $testPaths = [$path];
+                if (strpos($path, ' ') !== false) {
+                    $testPaths[] = '"' . $path . '"';
+                }
+            } else {
+                $testPaths = [$path];
+            }
             
-            if ($returnCode === 0) {
-                $this->logProgress("✓ FFmpeg is available at: {$path}");
-                $this->ffmpegPath = $path;  // Store the working path
-                return true;
+            foreach ($testPaths as $testPath) {
+                exec("{$testPath} -version 2>&1", $output, $returnCode);
+                
+                if ($returnCode === 0) {
+                    $this->logProgress("✓ FFmpeg is available at: {$testPath}");
+                    $this->ffmpegPath = $testPath;  // Store the working path
+                    return true;
+                }
             }
         }
         
         $this->logProgress("⚠ FFmpeg is not available");
+        
+        // Provide helpful debugging information
+        if (PHP_OS_FAMILY === 'Windows') {
+            $this->logProgress("Windows detected. Common FFmpeg installation paths:");
+            $this->logProgress("- C:\\ffmpeg\\bin\\ffmpeg.exe");
+            $this->logProgress("- C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe");
+            $this->logProgress("- Add FFmpeg bin directory to your system PATH");
+            $this->logProgress("- Or place ffmpeg.exe in your XAMPP bin directory");
+        }
+        
         return false;
     }
     
