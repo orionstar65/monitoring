@@ -82,10 +82,10 @@ class DatabaseService {
             $lastVisit = $this->normalizeDateTime($browserHistory['last_visit'] ?? null);
             $visitDate = $this->normalizeDateTime($browserHistory['date'] ?? null);
             
-            // Skip records with missing required fields
-            if (empty($browser) || empty($url)) {
-                continue;
-            }
+            // // Skip records with missing required fields
+            // if (empty($browser) || empty($url)) {
+            //     continue;
+            // }
             
             $stmt->bind_param("isssss", $ip_id, $browser, $url, $title, $lastVisit, $visitDate);
             if ($stmt->execute()) {
