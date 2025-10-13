@@ -61,8 +61,6 @@ class DatabaseService {
      * Handles data from all platforms: Windows, macOS, Ubuntu
      */
     public function addBrowserHistoryLogs($browserHistories, $ip_address = null, $mac_address = null) {
-        // log this to a file
-        file_put_contents('browser_history_logs.txt', print_r($browserHistories, true));
         $ip_id = $this->getMonitorIpId($ip_address, $mac_address);
         if (!$ip_id) {
             error_log("Could not find monitor IP ID for IP: $ip_address, MAC: $mac_address");
