@@ -148,6 +148,7 @@ ob_start();
                         <th>ID</th>
                         <th>IP Address</th>
                         <th>Username</th>
+                        <th>Slack ID</th>
                         <th>Type</th>
                         <th>Status</th>
                         <th>Last Activity</th>
@@ -196,6 +197,13 @@ ob_start();
                                 <i class="fas fa-user me-1"></i><?php echo htmlspecialchars($monitor['username']); ?>
                             <?php else: ?>
                                 <span class="text-muted">No username</span>
+                            <?php endif; ?>
+                        </td>
+                        <td>
+                            <?php if ($monitor['slack_id']): ?>
+                                <i class="fab fa-slack me-1"></i><?php echo htmlspecialchars($monitor['slack_id']); ?>
+                            <?php else: ?>
+                                <span class="text-muted">No Slack ID</span>
                             <?php endif; ?>
                         </td>
                         <td>

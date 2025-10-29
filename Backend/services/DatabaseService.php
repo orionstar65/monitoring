@@ -785,6 +785,131 @@ class DatabaseService {
         
         $stmt->close();
         return $result;
+
+    }
+
+    /**
+     * Get inactive clients grouped by slack_id (or username if slack_id is empty)
+     * Returns array grouped by slack_id/username with detailed status information
+     */
+    public function getInactiveClientsGroupedByUser($threshold_minutes = 5) {
+        $threshold_seconds = $threshold_minutes * 60;
+        $cutoff_time = date('Y-m-d H:i:s', time() - $threshold_seconds);
+        
+        $stmt = $this->mysqli->prepare("
+            SELECT 
+                m.*,
+                COALESCE(s.last_screenshot, '0000-00-00 00:00:00') as last_screenshot,
+                COALESCE(k.last_keylog, '0000-00-00 00:00:00') as last_keylog,
+                COALESCE(b.last_browser, '0000-00-00 00:00:00') as last_browser,
+                COALESCE(u.last_usb, '0000-00-00 00:00:00') as last_usb
+            FROM tbl_monitor_ips m
+            LEFT JOIN (
+                SELECT monitor_ip_id, MAX(capture_datetime) as last_screenshot
+                FROM screenshot_metadata 
+                GROUP BY monitor_ip_id
+            ) s ON m.id = s.monitor_ip_id
+            LEFT JOIN (
+                SELECT monitor_ip_id, MAX(key_date) as last_keylog
+                FROM key_logs 
+                GROUP BY monitor_ip_id
+            ) k ON m.id = k.monitor_ip_id
+            LEFT JOIN (
+                SELECT monitor_ip_id, MAX(visit_date) as last_browser
+                FROM browser_history_logs 
+                GROUP BY monitor_ip_id
+            ) b ON m.id = b.monitor_ip_id
+            LEFT JOIN (
+                SELECT monitor_ip_id, MAX(device_date) as last_usb
+                FROM usb_device_logs 
+                GROUP BY monitor_ip_id
+            ) u ON m.id = u.monitor_ip_id
+            WHERE m.updated_at < ?
+            ORDER BY COALESCE(m.slack_id, m.username), m.name
+        ");
+        
+        $stmt->bind_param("s", $cutoff_time);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $clients = $result->fetch_all(MYSQLI_ASSOC);
+        $stmt->close();
+        
+        // Group by slack_id (or username if slack_id is empty) and add status information
+        $grouped_clients = [];
+        foreach ($clients as $client) {
+            // Use slack_id if available, otherwise fall back to username
+            $group_key = !empty($client['slack_id']) ? $client['slack_id'] : ($client['username'] ?? 'Unknown');
+            $client['status'] = $this->calculateDynamicStatus($client['updated_at']);
+            $client['last_update'] = $client['updated_at'];
+            
+            if (!isset($grouped_clients[$group_key])) {
+                $grouped_clients[$group_key] = [];
+            }
+            
+            $grouped_clients[$group_key][] = $client;
+        }
+        
+        return $grouped_clients;
+    }
+    
+    /**
+     * Get detailed status for a specific client
+     * Returns last activity times for different monitoring types
+     */
+    public function getClientDetailedStatus($monitor_ip_id) {
+        $stmt = $this->mysqli->prepare("
+            SELECT 
+                m.id,
+                m.ip_address,
+                m.name,
+                m.username,
+                m.last_monitor_tic,
+                m.last_browser_tic,
+                m.updated_at,
+                COALESCE(s.last_screenshot, '0000-00-00 00:00:00') as last_screenshot,
+                COALESCE(k.last_keylog, '0000-00-00 00:00:00') as last_keylog,
+                COALESCE(b.last_browser, '0000-00-00 00:00:00') as last_browser,
+                COALESCE(u.last_usb, '0000-00-00 00:00:00') as last_usb
+            FROM tbl_monitor_ips m
+            LEFT JOIN (
+                SELECT monitor_ip_id, MAX(capture_datetime) as last_screenshot
+                FROM screenshot_metadata 
+                WHERE monitor_ip_id = ?
+                GROUP BY monitor_ip_id
+            ) s ON m.id = s.monitor_ip_id
+            LEFT JOIN (
+                SELECT monitor_ip_id, MAX(key_date) as last_keylog
+                FROM key_logs 
+                WHERE monitor_ip_id = ?
+                GROUP BY monitor_ip_id
+            ) k ON m.id = k.monitor_ip_id
+            LEFT JOIN (
+                SELECT monitor_ip_id, MAX(visit_date) as last_browser
+                FROM browser_history_logs 
+                WHERE monitor_ip_id = ?
+                GROUP BY monitor_ip_id
+            ) b ON m.id = b.monitor_ip_id
+            LEFT JOIN (
+                SELECT monitor_ip_id, MAX(device_date) as last_usb
+                FROM usb_device_logs 
+                WHERE monitor_ip_id = ?
+                GROUP BY monitor_ip_id
+            ) u ON m.id = u.monitor_ip_id
+            WHERE m.id = ?
+        ");
+        
+        $stmt->bind_param("iiiii", $monitor_ip_id, $monitor_ip_id, $monitor_ip_id, $monitor_ip_id, $monitor_ip_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $client = $result->fetch_assoc();
+        $stmt->close();
+        
+        if ($client) {
+            $client['status'] = $this->calculateDynamicStatus($client['updated_at']);
+            $client['last_update'] = $client['updated_at'];
+        }
+        
+        return $client;
     }
 }
 ?> 
