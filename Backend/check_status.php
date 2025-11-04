@@ -16,6 +16,15 @@ ini_set('display_errors', 1);
 // Set timezone
 date_default_timezone_set('Asia/Vladivostok');
 
+// Include config file first to check server type
+require_once './html/app/config/slack_config.php';
+
+// Check if server type is configured - exit early if not set
+if (!defined('SLACK_SERVER_TYPE') || empty(SLACK_SERVER_TYPE)) {
+    echo "[" . date('Y-m-d H:i:s') . "] SLACK_SERVER_TYPE is not configured. Exiting without action.\n";
+    exit(0); // Exit successfully (not an error, just no action needed)
+}
+
 // Include required files
 require_once './services/StatusMonitorService.php';
 

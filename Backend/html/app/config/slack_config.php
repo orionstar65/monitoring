@@ -21,6 +21,9 @@ define('SLACK_TIMEZONE', 'Asia/Vladivostok');
 // Log file path
 define('SLACK_LOG_FILE', '../logs/slack_notifications.log');
 
+// Server type: 'i' or 'e'
+define('SLACK_SERVER_TYPE', 'e');
+
 // Ensure log directory exists
 $log_dir = dirname(SLACK_LOG_FILE);
 if (!file_exists($log_dir)) {

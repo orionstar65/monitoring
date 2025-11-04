@@ -65,9 +65,10 @@ class SlackService {
             return false;
         }
         
+        $server_type = strtoupper(SLACK_SERVER_TYPE ?? 'E');
         $payload = [
             'text' => $message,
-            'username' => 'Monitor Bot',
+            'username' => "[{$server_type}] Monitor Bot",
             'icon_emoji' => ':warning:'
         ];
         
@@ -151,10 +152,11 @@ class SlackService {
         
         // Build the summary message
         $message = "";
+        $server_type = strtoupper(SLACK_SERVER_TYPE ?? 'E');
         
         $attachments = [[
             'color' => "#FF0000",
-            'title' => "Monitoring System Status - {$current_date} {$current_time}",
+            'title' => "[{$server_type}] Monitoring System Status - {$current_date} {$current_time}",
             'fields' => [],
             'footer' => "Last check: {$current_time} • Total inactive: {$total_computers} computers",
             'ts' => time()
@@ -176,6 +178,7 @@ class SlackService {
         }
         
         $current_time = date('H:i');
+        $server_type = strtoupper(SLACK_SERVER_TYPE ?? 'E');
         $messages = [];
         
         foreach ($inactive_clients_by_user as $group_key => $clients) {
@@ -215,7 +218,7 @@ class SlackService {
             $message = ""; // Empty message, just the attachment
             $attachments = [[
                 'color' => $this->getAttachmentColor($clients),
-                'title' => "🫵🏻 <@{$display_name}>",
+                'title' => "[{$server_type}] 🫵🏻 <@{$display_name}>",
                 'text' => implode("\n\n", $attachment_text_lines),
                 'footer' => "Last checked: {$current_time}",
                 'ts' => time()
