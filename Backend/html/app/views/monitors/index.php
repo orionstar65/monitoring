@@ -14,6 +14,44 @@ ob_start();
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding: 0.75rem 0.5rem;
+    transition: background-color 0.2s ease;
+}
+
+.monitor-table th:hover {
+    background-color:rgb(4, 99, 194);
+}
+
+.monitor-table th.sortable {
+    padding-right: 1.5rem;
+}
+
+.monitor-table th .sort-indicator {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.7rem;
+    opacity: 0.5;
+    transition: opacity 0.2s ease;
+}
+
+.monitor-table th.sort-asc .sort-indicator,
+.monitor-table th.sort-desc .sort-indicator {
+    opacity: 1;
+}
+
+.monitor-table th.sort-asc .sort-indicator::before {
+    content: '▲';
+    color: #fff;
+}
+
+.monitor-table th.sort-desc .sort-indicator::before {
+    content: '▼';
+    color: #fff;
 }
 
 .monitor-table td {
@@ -21,12 +59,27 @@ ob_start();
     padding: 0.75rem 0.5rem;
 }
 
+.monitor-table tbody tr {
+    transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.monitor-table tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.03);
+    transform: translateX(2px);
+}
+
 .monitor-table .btn-group .btn {
     margin-right: 2px;
+    transition: all 0.2s ease;
 }
 
 .monitor-table .btn-group .btn:last-child {
     margin-right: 0;
+}
+
+.monitor-table .btn-group .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .monitor-table code {
@@ -34,15 +87,133 @@ ob_start();
     background: #f8f9fa;
     padding: 0.25rem 0.5rem;
     border-radius: 0.25rem;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
 }
 
 .monitor-table .badge {
     font-size: 0.75rem;
     font-weight: 500;
+    padding: 0.35rem 0.65rem;
 }
 
 .monitor-table .text-muted {
     font-size: 0.8rem;
+}
+
+/* Filter Panel Styles */
+.filter-panel {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.filter-panel .filter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.filter-panel .filter-header h5 {
+    margin: 0;
+    font-weight: 600;
+    color: #495057;
+    font-size: 1rem;
+}
+
+.filter-panel .filter-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.filter-panel .filter-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.filter-panel .filter-group label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+}
+
+.filter-panel .filter-group input,
+.filter-panel .filter-group select {
+    border: 1px solid #ced4da;
+    border-radius: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+}
+
+.filter-panel .filter-group input:focus,
+.filter-panel .filter-group select:focus {
+    border-color: #80bdff;
+    outline: none;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.filter-panel .filter-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #dee2e6;
+}
+
+.filter-panel .btn-clear {
+    background: #6c757d;
+    border-color: #6c757d;
+    color: white;
+    transition: all 0.2s ease;
+}
+
+.filter-panel .btn-clear:hover {
+    background: #5a6268;
+    border-color: #545b62;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Enhanced table card */
+.table-card {
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+.table-card .card-body {
+    padding: 0;
+}
+
+.table-card .table-responsive {
+    border-radius: 0.5rem;
+}
+
+.table-card .table {
+    margin-bottom: 0;
+}
+
+/* Results counter */
+.results-counter {
+    padding: 0.75rem 1.25rem;
+    background:rgb(236, 236, 236);
+    border-bottom: 1px solid #dee2e6;
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-weight: 500;
+    border: 1px solidrgb(207, 207, 207);
 }
 
 /* Responsive adjustments */
@@ -58,6 +229,18 @@ ob_start();
     .monitor-table .btn-group .btn {
         margin-bottom: 2px;
         margin-right: 0;
+    }
+    
+    .filter-panel .filter-row {
+        grid-template-columns: 1fr;
+    }
+    
+    .filter-panel .filter-actions {
+        flex-direction: column;
+    }
+    
+    .filter-panel .filter-actions .btn {
+        width: 100%;
     }
 }
 </style>
@@ -139,19 +322,65 @@ ob_start();
     <strong>Note:</strong> Usernames can be updated by monitoring clients via API or tic events. The username field shows the current username from the client.
 </div>
 
-<div class="card">
+<!-- Filter Panel -->
+<div class="filter-panel">
+    <div class="filter-header">
+        <h5><i class="fas fa-filter me-2"></i>Filters</h5>
+    </div>
+    <div class="filter-row">
+        <div class="filter-group">
+            <label for="filter-ip">IP Address</label>
+            <input type="text" id="filter-ip" class="form-control" placeholder="Filter by IP...">
+        </div>
+        <div class="filter-group">
+            <label for="filter-username">Username</label>
+            <input type="text" id="filter-username" class="form-control" placeholder="Filter by username...">
+        </div>
+        <div class="filter-group">
+            <label for="filter-slack">Slack ID</label>
+            <input type="text" id="filter-slack" class="form-control" placeholder="Filter by Slack ID...">
+        </div>
+        <div class="filter-group">
+            <label for="filter-type">Type</label>
+            <select id="filter-type" class="form-select">
+                <option value="">All Types</option>
+                <option value="desktop">Desktop</option>
+                <option value="laptop">Laptop</option>
+                <option value="server">Server</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label for="filter-status">Status</label>
+            <select id="filter-status" class="form-select">
+                <option value="">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+            </select>
+        </div>
+    </div>
+    <div class="filter-actions">
+        <button type="button" class="btn btn-clear btn-sm" id="clear-filters">
+            <i class="fas fa-times me-2"></i>Clear Filters
+        </button>
+    </div>
+</div>
+
+<div class="card table-card">
+    <div class="results-counter" id="results-counter">
+        Showing <span id="results-count"><?php echo count($monitors); ?></span> of <?php echo count($monitors); ?> monitors
+    </div>
     <div class="card-body">
         <div class="table-responsive">
             <table class="table table-striped table-hover monitor-table">
                 <thead class="table-dark">
                     <tr>
-                        <th>ID</th>
-                        <th>IP Address</th>
-                        <th>Username</th>
-                        <th>Slack ID</th>
-                        <th>Type</th>
-                        <th>Status</th>
-                        <th>Last Activity</th>
+                        <th class="sortable" data-sort="id">ID<span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="ip">IP Address<span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="username">Username<span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="slack">Slack ID<span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="type">Type<span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="status">Status<span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="activity">Last Activity<span class="sort-indicator"></span></th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -185,7 +414,13 @@ ob_start();
     $last_activity_timestamp = $monitor['updated_at'] ? strtotime($monitor['updated_at']) : null;
     $last_activity_display = $monitor['updated_at'] ? date('M j, Y H:i', strtotime($monitor['updated_at'])) : 'Never';
 ?>
-                    <tr>
+                    <tr data-id="<?php echo $monitor['id']; ?>"
+                        data-ip="<?php echo strtolower(htmlspecialchars($monitor['ip_address'])); ?>"
+                        data-username="<?php echo strtolower(htmlspecialchars($monitor['username'] ?: 'no username')); ?>"
+                        data-slack="<?php echo strtolower(htmlspecialchars($monitor['slack_id'] ?: 'no slack id')); ?>"
+                        data-type="<?php echo strtolower($type); ?>"
+                        data-status="<?php echo $monitor['dynamic_status']; ?>"
+                        data-activity="<?php echo $last_activity_timestamp ?: '0'; ?>">
                         <td>
                             <span class="badge bg-secondary"><?php echo $monitor['id']; ?></span>
                         </td>
@@ -257,37 +492,245 @@ ob_start();
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // State management
+    let currentSort = { column: null, direction: 'asc' };
+    let allRows = Array.from(document.querySelectorAll('tbody tr'));
+    let totalCount = allRows.length;
+    
+    // Store original index for each row to restore original order
+    allRows.forEach((row, index) => {
+        row.setAttribute('data-original-index', index);
+    });
+    
+    // Filter elements
+    const filterIp = document.getElementById('filter-ip');
+    const filterUsername = document.getElementById('filter-username');
+    const filterSlack = document.getElementById('filter-slack');
+    const filterType = document.getElementById('filter-type');
+    const filterStatus = document.getElementById('filter-status');
+    const clearFiltersBtn = document.getElementById('clear-filters');
+    const resultsCount = document.getElementById('results-count');
+    const tbody = document.querySelector('tbody');
+    
+    // Debounce function for text inputs
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+    
+    // Filter function
+    function applyFilters() {
+        const ipValue = filterIp.value.toLowerCase().trim();
+        const usernameValue = filterUsername.value.toLowerCase().trim();
+        const slackValue = filterSlack.value.toLowerCase().trim();
+        const typeValue = filterType.value.toLowerCase();
+        const statusValue = filterStatus.value.toLowerCase();
+        
+        let visibleCount = 0;
+        
+        allRows.forEach(row => {
+            const ip = row.getAttribute('data-ip') || '';
+            const username = row.getAttribute('data-username') || '';
+            const slack = row.getAttribute('data-slack') || '';
+            const type = row.getAttribute('data-type') || '';
+            const status = row.getAttribute('data-status') || '';
+            
+            let visible = true;
+            
+            // Apply filters
+            if (ipValue && !ip.includes(ipValue)) visible = false;
+            if (usernameValue && !username.includes(usernameValue)) visible = false;
+            if (slackValue && !slack.includes(slackValue)) visible = false;
+            if (typeValue && type !== typeValue) visible = false;
+            if (statusValue && status !== statusValue) visible = false;
+            
+            if (visible) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        
+        // Update results counter
+        resultsCount.textContent = visibleCount;
+        
+        // Apply sorting to visible rows
+        applySort();
+    }
+    
+    // Sort function
+    function applySort() {
+        const visibleRows = allRows.filter(row => row.style.display !== 'none');
+        const hiddenRows = allRows.filter(row => row.style.display === 'none');
+        
+        if (currentSort.column) {
+            visibleRows.sort((a, b) => {
+                let aVal, bVal;
+                
+                switch(currentSort.column) {
+                    case 'id':
+                        aVal = parseInt(a.getAttribute('data-id')) || 0;
+                        bVal = parseInt(b.getAttribute('data-id')) || 0;
+                        break;
+                    case 'ip':
+                        aVal = a.getAttribute('data-ip') || '';
+                        bVal = b.getAttribute('data-ip') || '';
+                        break;
+                    case 'username':
+                        aVal = a.getAttribute('data-username') || '';
+                        bVal = b.getAttribute('data-username') || '';
+                        break;
+                    case 'slack':
+                        aVal = a.getAttribute('data-slack') || '';
+                        bVal = b.getAttribute('data-slack') || '';
+                        break;
+                    case 'type':
+                        aVal = a.getAttribute('data-type') || '';
+                        bVal = b.getAttribute('data-type') || '';
+                        break;
+                    case 'status':
+                        aVal = a.getAttribute('data-status') || '';
+                        bVal = b.getAttribute('data-status') || '';
+                        break;
+                    case 'activity':
+                        aVal = parseInt(a.getAttribute('data-activity')) || 0;
+                        bVal = parseInt(b.getAttribute('data-activity')) || 0;
+                        break;
+                    default:
+                        return 0;
+                }
+                
+                let comparison = 0;
+                if (typeof aVal === 'number') {
+                    comparison = aVal - bVal;
+                } else {
+                    comparison = aVal.localeCompare(bVal);
+                }
+                
+                return currentSort.direction === 'asc' ? comparison : -comparison;
+            });
+        } else {
+            // Restore original order
+            visibleRows.sort((a, b) => {
+                const aIndex = parseInt(a.getAttribute('data-original-index')) || 0;
+                const bIndex = parseInt(b.getAttribute('data-original-index')) || 0;
+                return aIndex - bIndex;
+            });
+        }
+        
+        // Reorder DOM
+        tbody.innerHTML = '';
+        visibleRows.forEach(row => tbody.appendChild(row));
+        hiddenRows.forEach(row => tbody.appendChild(row));
+        
+        // Re-update time display after reordering
+        updateTimeDisplay();
+    }
+    
+    // Update sort indicators
+    function updateSortIndicators() {
+        document.querySelectorAll('.sortable').forEach(th => {
+            th.classList.remove('sort-asc', 'sort-desc');
+            const indicator = th.querySelector('.sort-indicator');
+            if (indicator) {
+                indicator.textContent = '';
+            }
+        });
+        
+        if (currentSort.column) {
+            const activeTh = document.querySelector(`th[data-sort="${currentSort.column}"]`);
+            if (activeTh) {
+                activeTh.classList.add(currentSort.direction === 'asc' ? 'sort-asc' : 'sort-desc');
+            }
+        }
+    }
+    
+    // Sort handler
+    function handleSort(column) {
+        if (currentSort.column === column) {
+            // Toggle direction
+            currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+        } else {
+            // New column, start with ascending
+            currentSort.column = column;
+            currentSort.direction = 'asc';
+        }
+        
+        updateSortIndicators();
+        applySort();
+    }
+    
+    // Event listeners
+    filterIp.addEventListener('input', debounce(applyFilters, 300));
+    filterUsername.addEventListener('input', debounce(applyFilters, 300));
+    filterSlack.addEventListener('input', debounce(applyFilters, 300));
+    filterType.addEventListener('change', applyFilters);
+    filterStatus.addEventListener('change', applyFilters);
+    
+    clearFiltersBtn.addEventListener('click', function() {
+        filterIp.value = '';
+        filterUsername.value = '';
+        filterSlack.value = '';
+        filterType.value = '';
+        filterStatus.value = '';
+        currentSort = { column: null, direction: 'asc' };
+        updateSortIndicators();
+        applyFilters();
+    });
+    
+    // Sortable headers
+    document.querySelectorAll('.sortable').forEach(th => {
+        th.addEventListener('click', function() {
+            const column = this.getAttribute('data-sort');
+            if (column) {
+                handleSort(column);
+            }
+        });
+    });
+    
     // Convert server timestamps to client local timezone
     const timeElements = document.querySelectorAll('.local-time[data-timestamp]');
     
-    timeElements.forEach(function(element) {
-        const timestamp = element.getAttribute('data-timestamp');
-        const serverTime = element.getAttribute('data-server-time');
-        
-        if (timestamp && timestamp !== 'null') {
-            // Convert Unix timestamp to client local time
-            const date = new Date(parseInt(timestamp) * 1000);
+    function updateTimeDisplay() {
+        timeElements.forEach(function(element) {
+            const timestamp = element.getAttribute('data-timestamp');
+            const serverTime = element.getAttribute('data-server-time');
             
-            // Format for display (e.g., "Jan 15, 2024 14:30")
-            const options = {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false
-            };
-            
-            const localTime = date.toLocaleString('en-US', options);
-            
-            // Update the display
-            element.textContent = localTime;
-            
-            // Add tooltip showing server time for reference
-            element.setAttribute('title', 'Server time: ' + serverTime);
-            element.style.cursor = 'help';
-        }
-    });
+            if (timestamp && timestamp !== 'null' && timestamp !== '0') {
+                // Convert Unix timestamp to client local time
+                const date = new Date(parseInt(timestamp) * 1000);
+                
+                // Format for display (e.g., "Jan 15, 2024 14:30")
+                const options = {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                };
+                
+                const localTime = date.toLocaleString('en-US', options);
+                
+                // Update the display
+                element.textContent = localTime;
+                
+                // Add tooltip showing server time for reference
+                element.setAttribute('title', 'Server time: ' + serverTime);
+                element.style.cursor = 'help';
+            }
+        });
+    }
+    
+    updateTimeDisplay();
     
     // Optional: Add timezone indicator
     const timezoneInfo = document.createElement('div');
