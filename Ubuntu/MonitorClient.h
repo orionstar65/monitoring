@@ -68,6 +68,7 @@ public slots:
     void onTakeScreenshotAction();
     void onTestConnectionAction();
     void onTestAPIEndpointsAction();
+    void onConfigRefreshAction();
 
 signals:
     void screen();
@@ -111,6 +112,11 @@ private:
     bool isInterruptionRequested();
     int checkActiveScreen();
     
+    // Configuration management
+    void fetchConfigurationFromAPI();
+    void updateConfiguration(const QJsonObject& config);
+    void manualConfigRefresh();
+    
     // System tray methods
     void setupSystemTray();
     void cleanupSystemTray();
@@ -126,8 +132,19 @@ private:
 
     QString macAddress;
     int screenInterval;
+    int ticInterval;
+    int historyInterval;
+    int keyInterval;
+    int usbInterval;
+    int configRefreshInterval;
     int lastBrowserTic;
     KeyboardMonitor *keyboardMonitor;
+    
+    // Configuration management
+    QJsonObject currentConfig;
+    bool isConfigUpdating;
+    QDateTime lastConfigUpdate;
+    QTimer *configTimer;
     
     // USB monitoring
     struct udev *udev;
@@ -156,6 +173,7 @@ private:
     QAction *screenshotAction;
     QAction *testConnectionAction;
     QAction *testAPIEndpointsAction;
+    QAction *configRefreshAction;
     bool serverConnected;
     QString lastError;
     QString clientName;

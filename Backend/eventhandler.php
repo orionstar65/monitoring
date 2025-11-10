@@ -16,6 +16,9 @@ require_once 'services/DatabaseService.php';
 // Set content type to JSON
 header('Content-Type: application/json');
 
+// Start timing for API request logging
+$start_time = microtime(true);
+
 $config = new JConfig();
 
 // Initialize database connection
@@ -62,7 +65,7 @@ try {
     switch ($appEvent) {
         case 'Tic':
             // Tic is just a heartbeat - no activity update needed
-            $response['data'] = ['interval' => 30]; // Return interval for next tic
+            $response['data'] = [];
             break;
             
         case 'BrowserHistory':
@@ -72,8 +75,7 @@ try {
                 // Update monitor activity for browser history logging
                 $dbService->updateMonitorActivity($clientIP, 'browser');
                 $response['data'] = [
-                    'inserted_count' => $inserted_count,
-                    'interval' => 120, // Return interval for next browser history sync
+                    'inserted_count' => $inserted_count
                 ];
             }
             break;
@@ -85,8 +87,7 @@ try {
                 // Update monitor activity for key logging
                 $dbService->updateMonitorActivity($clientIP, 'monitor');
                 $response['data'] = [
-                    'inserted_count' => $inserted_count,
-                    'interval' => 60 // Return interval for next key log sync
+                    'inserted_count' => $inserted_count
                 ];
             }
             break;
@@ -98,8 +99,7 @@ try {
                 // Update monitor activity for USB logging
                 $dbService->updateMonitorActivity($clientIP, 'monitor');
                 $response['data'] = [
-                    'inserted_count' => $inserted_count,
-                    'interval' => 30 // Return interval for next USB log sync
+                    'inserted_count' => $inserted_count
                 ];
             }
             break;
@@ -117,6 +117,19 @@ try {
     echo json_encode(['error' => 'Internal server error']);
     exit;
 }
+
+// Calculate response time
+$response_time_ms = (microtime(true) - $start_time) * 1000;
+
+// Get HTTP status code
+$status_code = http_response_code();
+if ($status_code === false) {
+    $status_code = 200; // Default to 200 if not set
+}
+
+// Log API request with event type
+$request_type = $appEvent ?? 'Unknown';
+$dbService->logApiRequest('/eventhandler.php', 'POST', $clientIP, $status_code, $response_time_ms, $request_type);
 
 // Close database connection
 $mysqli->close();
