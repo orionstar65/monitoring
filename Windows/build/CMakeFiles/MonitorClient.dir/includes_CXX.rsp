@@ -1,1 +1,1 @@
--IC:/Users/johnk/monitoring/Windows -IC:/Users/johnk/monitoring/Windows/include -IC:/msys64/mingw64/include/jsoncpp
+-ID:/monitoring/Windows -ID:/monitoring/Windows/include -IC:/msys64/mingw64/include/jsoncpp

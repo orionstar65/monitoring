@@ -1,5 +1,5 @@
 CMakeFiles/MonitorClient.dir/MonitorClient.cpp.obj: \
- C:\Users\johnk\monitoring\Windows\MonitorClient.cpp \
+ D:\monitoring\Windows\MonitorClient.cpp \
  C:/msys64/mingw64/include/windows.h C:/msys64/mingw64/include/_mingw.h \
  C:/msys64/mingw64/include/_mingw_mac.h \
  C:/msys64/mingw64/include/_mingw_secapi.h \
