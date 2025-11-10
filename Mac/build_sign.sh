@@ -8,7 +8,7 @@ set -e
 # Configuration
 APP_NAME="MonitorClient"
 BUNDLE_ID="com.airentech.MonitorClient"
-VERSION="1.2"
+VERSION=""
 BUILD_DIR="build"
 PACKAGE_DIR="package"
 SIGNING_IDENTITY=""
@@ -102,6 +102,31 @@ get_team_id() {
             print_success "Team ID: $TEAM_ID"
         fi
     fi
+}
+
+# Get version from user input
+get_version() {
+    print_status "Version input required for package creation"
+    echo ""
+    read -p "Enter version number (e.g., 1.2, 1.2.0, 2.0.1): " VERSION
+    
+    # Validate version is not empty
+    if [ -z "$VERSION" ]; then
+        print_error "Version cannot be empty. Please provide a version number."
+        exit 1
+    fi
+    
+    # Basic validation: version should contain at least one digit
+    if ! echo "$VERSION" | grep -qE '^[0-9]+(\.[0-9]+)*$'; then
+        print_warning "Version format may be invalid. Expected format: X.Y.Z (e.g., 1.2.0)"
+        read -p "Continue anyway? (y/n): " confirm
+        if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+            print_error "Build cancelled by user"
+            exit 1
+        fi
+    fi
+    
+    print_success "Version set to: $VERSION"
 }
 
 # Clean previous builds
@@ -411,7 +436,7 @@ create_notarization_script() {
     
     print_status "Creating notarization script..."
     
-    cat > notarize.sh << 'EOF'
+    cat > notarize.sh << EOF
 #!/bin/bash
 
 # Notarization script for MonitorClient
@@ -420,7 +445,7 @@ create_notarization_script() {
 set -e
 
 APP_NAME="MonitorClient"
-VERSION="1.0"
+VERSION="$VERSION"
 BUNDLE_ID="com.airentech.MonitorClient"
 
 echo "=== MonitorClient Notarization ==="
@@ -478,6 +503,7 @@ main() {
     fi
     
     check_prerequisites
+    get_version
     auto_detect_signing_identity
     get_team_id
     clean_build
