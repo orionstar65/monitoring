@@ -131,6 +131,18 @@ ob_start();
                     </div>
                     
                     <div class="mb-3">
+                        <label for="slack_id" class="form-label">
+                            <i class="fab fa-slack me-1"></i>Slack ID
+                        </label>
+                        <input type="text" class="form-control" id="slack_id" name="slack_id" 
+                               value="<?php echo htmlspecialchars($monitor['slack_id'] ?: ''); ?>"
+                               placeholder="Enter Slack ID (optional)">
+                        <div class="form-text">
+                            Slack ID for grouping notifications. Leave empty to use username.
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
                         <label for="type" class="form-label">
                             <i class="fas fa-desktop me-1"></i>Device Type
                         </label>

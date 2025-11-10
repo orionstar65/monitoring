@@ -121,6 +121,7 @@ class Monitors extends Base {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $type = $_POST['type'] ?? 'desktop';
             $username = trim($_POST['username'] ?? '');
+            $slack_id = trim($_POST['slack_id'] ?? '');
             
             // Validate type
             if (!in_array($type, ['desktop', 'laptop', 'server'])) {
@@ -128,10 +129,11 @@ class Monitors extends Base {
             } else {
                 // No username uniqueness check needed - multiple monitors can have same username
                 if (empty($error)) {
-                    // Update username and type fields (but NOT updated_at - that's only for monitoring events)
+                    // Update username, slack_id and type fields (but NOT updated_at - that's only for monitoring events)
                     $update_data = [
                         'type' => $type,
-                        'username' => $username
+                        'username' => $username,
+                        'slack_id' => $slack_id
                     ];
                     
                     $this->db->update('tbl_monitor_ips', $update_data, 'id = :id', ['id' => $id]);
