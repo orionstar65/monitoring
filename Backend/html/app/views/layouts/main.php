@@ -225,7 +225,6 @@
         /* Content Area */
         .content-area {
             padding: 24px;
-            max-width: 1200px;
             margin: 0 auto;
         }
 
@@ -491,6 +490,12 @@
                 <a class="nav-link <?php echo $active_page === 'logbrowse' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>logbrowse">
                     <i class="fas fa-file-alt"></i>
                     <span>Log Browse</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a class="nav-link <?php echo $active_page === 'api-logs' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>apilogs">
+                    <i class="fas fa-list-alt"></i>
+                    <span>API Logs</span>
                 </a>
             </div>
             <div class="nav-item">

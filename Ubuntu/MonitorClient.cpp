@@ -48,7 +48,7 @@
 #define HISTORY_INTERVAL 120
 #define KEY_INTERVAL 60
 // #define USB_INTERVAL 60
-#define SCREEN_INTERVAL 30
+#define SCREEN_INTERVAL 10
 #define STORAGE_CHECK_INTERVAL 5
 
 MonitorClient::MonitorClient()
@@ -58,6 +58,19 @@ MonitorClient::MonitorClient()
     
     macAddress = getMacAddress();
     lastBrowserTic = -1;
+    
+    // Initialize configuration intervals with defaults
+    screenInterval = 10;  // Ubuntu default (no screenshot by default)
+    ticInterval = TIC_INTERVAL;
+    historyInterval = HISTORY_INTERVAL;
+    keyInterval = KEY_INTERVAL;
+    usbInterval = 30;
+    configRefreshInterval = 300;
+    
+    // Initialize configuration management
+    isConfigUpdating = false;
+    configTimer = new QTimer(this);
+    connect(configTimer, &QTimer::timeout, this, &MonitorClient::fetchConfigurationFromAPI);
     
     // Debug: Print loaded settings
     qDebug() << "Loaded Server IP:" << getServerIP();
@@ -89,6 +102,9 @@ MonitorClient::MonitorClient()
     
     // Initialize system tray
     setupSystemTray();
+    
+    // Fetch configuration from API
+    fetchConfigurationFromAPI();
     
     // Initialize connection status
     serverConnected = false;
@@ -937,6 +953,7 @@ void MonitorClient::run()
     qint64 lastHistoryTime = lastTicTime;
     qint64 lastScreenshotTime = lastTicTime;
     qint64 lastKeyLogTime = lastTicTime;
+    qint64 lastUsbLogTime = lastTicTime;
     
     while (!isInterruptionRequested()) {
         if (checkActiveScreen() > 0)
@@ -957,33 +974,36 @@ void MonitorClient::run()
                 }
             }
 
-            // Send tic every TIC_INTERVAL seconds
-            if (currentTime - lastTicTime >= TIC_INTERVAL) {
+            // Send tic every ticInterval seconds (from config)
+            if (currentTime - lastTicTime >= ticInterval) {
                 emit tic();
                 lastTicTime = currentTime;
             }
             
-            // Send browser histories every HISTORY_INTERVAL seconds
-            if (currentTime - lastScreenshotTime >= SCREEN_INTERVAL && screenshotEnabled) {
+            // Send screenshots every screenInterval seconds (from config)
+            if (currentTime - lastScreenshotTime >= screenInterval && screenshotEnabled) {
                 emit screen();
                 lastScreenshotTime = currentTime;
             }
             
-            // Send browser histories every HISTORY_INTERVAL seconds
-            if (currentTime - lastHistoryTime >= HISTORY_INTERVAL && browserHistoryEnabled) {
+            // Send browser histories every historyInterval seconds (from config)
+            if (currentTime - lastHistoryTime >= historyInterval && browserHistoryEnabled) {
                 if (lastBrowserTic != -1) {
                     emit browserHistory();
                     lastHistoryTime = currentTime;
                 }
             }
             
-            // Send key logs every KEY_INTERVAL seconds
-            if (currentTime - lastKeyLogTime >= KEY_INTERVAL && keylogEnabled) {
+            // Send key logs every keyInterval seconds (from config)
+            if (currentTime - lastKeyLogTime >= keyInterval && keylogEnabled) {
                 emit keyLog();
-                if (usbMonitoringEnabled) {
-                    emit usbLog();
-                }
                 lastKeyLogTime = currentTime;
+            }
+            
+            // Send USB logs every usbInterval seconds (from config)
+            if (currentTime - lastUsbLogTime >= usbInterval && usbMonitoringEnabled) {
+                emit usbLog();
+                lastUsbLogTime = currentTime;
             }
         }
         
@@ -1269,6 +1289,7 @@ void MonitorClient::setupSystemTray()
     configureAction = new QAction("Configure...", this);
     testConnectionAction = new QAction("Test Connection", this);
     testAPIEndpointsAction = new QAction("Test API Endpoints", this);
+    configRefreshAction = new QAction("Refresh Configuration", this);
     sendAllAction = new QAction("Send All Data", this);
     
     // Add actions to menu
@@ -1278,6 +1299,7 @@ void MonitorClient::setupSystemTray()
     trayMenu->addAction(configureAction);
     trayMenu->addAction(testConnectionAction);
     trayMenu->addAction(testAPIEndpointsAction);
+    trayMenu->addAction(configRefreshAction);
     trayMenu->addSeparator();
     trayMenu->addAction(sendAllAction);
     
@@ -1291,6 +1313,7 @@ void MonitorClient::setupSystemTray()
     connect(screenshotAction, &QAction::triggered, this, &MonitorClient::onTakeScreenshotAction);
     connect(testConnectionAction, &QAction::triggered, this, &MonitorClient::onTestConnectionAction);
     connect(testAPIEndpointsAction, &QAction::triggered, this, &MonitorClient::onTestAPIEndpointsAction);
+    connect(configRefreshAction, &QAction::triggered, this, &MonitorClient::onConfigRefreshAction);
     
     // Show tray icon
     trayIcon->show();
@@ -1362,6 +1385,7 @@ void MonitorClient::updateTrayMenu()
     statusText += QString("Keylog: %1\n").arg(formatLastSentTime(lastKeySentTime));
     statusText += QString("Browser History: %1\n").arg(formatLastSentTime(lastBrowserSentTime));
     statusText += QString("USB Logs: %1\n").arg(formatLastSentTime(lastUsbSentTime));
+    statusText += QString("Tic Events: %1\n").arg(formatLastSentTime(QDateTime())); // TODO: Add lastTicSentTime tracking
     
     statusText += "\n=== Monitoring Status ===\n";
     statusText += QString("Screenshot: %1\n").arg(screenshotEnabled ? "Enabled" : "Disabled");
@@ -1606,6 +1630,116 @@ void MonitorClient::onTestAPIEndpointsAction()
             trayIcon->showMessage("API Test", "API endpoints failed - check server", QSystemTrayIcon::Warning, 5000);
         }
     }
+}
+
+// Configuration Management Methods
+void MonitorClient::fetchConfigurationFromAPI()
+{
+    if (isConfigUpdating) {
+        qDebug() << "Configuration update already in progress, skipping";
+        return;
+    }
+    
+    isConfigUpdating = true;
+    qDebug() << "Fetching configuration from API";
+    
+    QString serverIP = getServerIP();
+    int serverPort = getServerPort();
+    QString configURL = QString("http://%1:%2/webapi_config.php?platform=ubuntu").arg(serverIP).arg(serverPort);
+    
+    QNetworkRequest request(configURL);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    
+    QNetworkReply *reply = networkManager->get(request);
+    
+    connect(reply, &QNetworkReply::finished, [this, reply]() {
+        isConfigUpdating = false;
+        
+        if (reply->error() == QNetworkReply::NoError) {
+            QByteArray data = reply->readAll();
+            QJsonParseError error;
+            QJsonDocument doc = QJsonDocument::fromJson(data, &error);
+            
+            if (error.error == QJsonParseError::NoError) {
+                QJsonObject root = doc.object();
+                
+                if (root["success"].toBool()) {
+                    QJsonObject config = root["data"].toObject();
+                    updateConfiguration(config);
+                    qDebug() << "Configuration updated successfully";
+                } else {
+                    qDebug() << "Configuration fetch failed:" << root["error"].toString();
+                }
+            } else {
+                qDebug() << "Configuration parsing failed:" << error.errorString();
+            }
+        } else {
+            qDebug() << "Configuration fetch failed:" << reply->errorString();
+        }
+        
+        reply->deleteLater();
+    });
+}
+
+void MonitorClient::updateConfiguration(const QJsonObject& config)
+{
+    // Update intervals
+    if (config.contains("intervals")) {
+        QJsonObject intervals = config["intervals"].toObject();
+        
+        if (intervals.contains("screenshot")) {
+            screenInterval = intervals["screenshot"].toInt();
+        }
+        if (intervals.contains("tic")) {
+            ticInterval = intervals["tic"].toInt();
+        }
+        if (intervals.contains("history")) {
+            historyInterval = intervals["history"].toInt();
+        }
+        if (intervals.contains("keylog")) {
+            keyInterval = intervals["keylog"].toInt();
+        }
+        if (intervals.contains("usb")) {
+            usbInterval = intervals["usb"].toInt();
+        }
+        if (intervals.contains("config_refresh")) {
+            configRefreshInterval = intervals["config_refresh"].toInt();
+        }
+    }
+    
+    // Store current configuration
+    currentConfig = config;
+    lastConfigUpdate = QDateTime::currentDateTime();
+    
+    // Restart configuration timer with new interval
+    configTimer->stop();
+    configTimer->start(configRefreshInterval * 1000);
+    
+    // Log configuration update
+    qDebug() << "Configuration updated:";
+    qDebug() << "  Screenshot:" << screenInterval << "s";
+    qDebug() << "  Tic:" << ticInterval << "s";
+    qDebug() << "  History:" << historyInterval << "s";
+    qDebug() << "  Keylog:" << keyInterval << "s";
+    qDebug() << "  USB:" << usbInterval << "s";
+    qDebug() << "  Config Refresh:" << configRefreshInterval << "s";
+}
+
+void MonitorClient::manualConfigRefresh()
+{
+    qDebug() << "Manual configuration refresh requested";
+    fetchConfigurationFromAPI();
+}
+
+void MonitorClient::onConfigRefreshAction()
+{
+    qDebug() << "Configuration refresh requested from system tray";
+    
+    if (trayIcon) {
+        trayIcon->showMessage("Configuration", "Refreshing configuration...", QSystemTrayIcon::Information, 2000);
+    }
+    
+    manualConfigRefresh();
 }
 
 QString MonitorClient::formatLastSentTime(const QDateTime& time)

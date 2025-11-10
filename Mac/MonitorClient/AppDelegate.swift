@@ -19,10 +19,17 @@ let API_ROUTE = "/webapi.php"
 let TIC_ROUTE = "/eventhandler.php"
 var APP_VERSION = "1.0"
 
-var TIME_INTERVAL = 60      // Screenshots every 60 seconds (optimized from 1)
-let TIC_INTERVAL = 300      // Tic every 5 minutes (optimized from 30 seconds)
-let HISTORY_INTERVAL = 600  // History every 10 minutes (optimized from 2 minutes)
-let KEY_INTERVAL = 300      // Keys every 5 minutes (optimized from 1 minute)
+// Configuration variables (will be updated from API)
+var TIME_INTERVAL = 60      // Screenshots every 60 seconds (default)
+var TIC_INTERVAL = 300      // Tic every 5 minutes (default)
+var HISTORY_INTERVAL = 600  // History every 10 minutes (default)
+var KEY_INTERVAL = 300      // Keys every 5 minutes (default)
+var USB_INTERVAL = 300      // USB monitoring every 5 minutes (default)
+var CONFIG_REFRESH_INTERVAL = 300 // Config refresh every 5 minutes (default)
+
+// Current configuration
+var currentConfig: ClientConfig?
+var lastConfigUpdate: Date?
 var timer: Timer? = nil
 var macAddress: String = ""
 var activeRunning: Bool = false
@@ -34,11 +41,11 @@ var operaChecked: Int64? = nil
 var yandexChecked: Int64? = nil
 var vivaldiChecked: Int64? = nil
 var braveChecked: Int64? = nil
-var lastBrowserTic: Double? = nil
 var lastScreenshotCheck: Date = Date()
 var lastHistoryCheck: Date = Date()
 var lastTicCheck: Date = Date()
 var lastKeyCheck: Date = Date()
+var lastUSBCheck: Date = Date()
 
 // Browser bundle identifiers
 private let browserBundleIDs = [
@@ -72,6 +79,56 @@ struct USBDeviceLog: Codable {
     let device_path: String
     let device_type: String
     let action: String
+}
+
+// Configuration structures
+struct ClientConfig: Codable {
+    let intervals: IntervalsConfig
+    let server: ServerConfig
+    let features: FeaturesConfig
+    let platform: String
+    let version: String
+    let last_updated: String
+    let client_info: ClientInfo?
+}
+
+struct IntervalsConfig: Codable {
+    let screenshot: Int
+    let tic: Int
+    let history: Int
+    let keylog: Int
+    let usb: Int
+    let config_refresh: Int
+}
+
+struct ServerConfig: Codable {
+    let max_retry_attempts: Int
+    let connection_timeout: Int
+    let request_timeout: Int
+    let chunk_size: Int
+    let compression_enabled: Bool
+}
+
+struct FeaturesConfig: Codable {
+    let screenshot_enabled: Bool
+    let browser_history_enabled: Bool
+    let keylog_enabled: Bool
+    let usb_monitoring_enabled: Bool
+    let debug_logging_enabled: Bool
+    let auto_update_enabled: Bool
+}
+
+struct ClientInfo: Codable {
+    let ip: String
+    let user_agent: String
+    let timestamp: Int
+    let request_id: String
+}
+
+struct ConfigResponse: Codable {
+    let success: Bool
+    let data: ClientConfig?
+    let error: String?
 }
 
 // Global callback function for CGEvent tap
@@ -160,6 +217,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     
     // Client information (cached)
     private var clientIPAddress: String = "Unknown"
+
+    // Configuration management
+    private var configTimer: Timer?
+    private var isConfigUpdating: Bool = false
 
     // Logging system (optimized with buffering)
     let logFile = "MonitorClient.log"
@@ -265,9 +326,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         Log file location: \(logURL?.path ?? "console only")
         Current directory: \(FileManager.default.currentDirectoryPath)
         Home directory: \(NSHomeDirectory())
-        """
+        ==========================================
         
-        // Startup info logged
+        """
         
         // Write to log file if available
         if let data = startupInfo.data(using: .utf8) {
@@ -275,11 +336,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             logFileHandle?.synchronizeFile()
         }
         
-        // System log disabled for production performance
+        // Log the log file location to console for easy access
+        print("MonitorClient log file: \(logURL?.path ?? "console only")")
     }
     
     func logMessage(_ message: String, level: LogLevel = .info) {
-        // Logging disabled for production performance
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let timestamp = formatter.string(from: Date())
+        let logEntry = "[\(timestamp)] [\(level.rawValue)] \(message)\n"
+        
+        if let data = logEntry.data(using: .utf8) {
+            logFileHandle?.write(data)
+            logFileHandle?.synchronizeFile()
+        }
     }
     
     private func flushLogBuffer() {
@@ -292,8 +363,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         }
         logBuffer.removeAll()
     }
-    
-
     
     enum LogLevel: String {
         case debug = "DEBUG"
@@ -312,15 +381,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     }
     
     private func logMonitoringEvent(_ event: String, details: String? = nil) {
-        // Logging disabled for production performance
+        // INFO logging disabled - only warnings and errors are logged
     }
     
     private func logError(_ error: String, context: String? = nil) {
-        // Logging disabled for production performance
+        let message = context != nil ? "[\(context!)] \(error)" : error
+        logMessage(message, level: .error)
     }
     
     private func logSuccess(_ action: String, details: String? = nil) {
-        // Logging disabled for production performance
+        // INFO logging disabled - only warnings and errors are logged
     }
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
@@ -346,13 +416,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
 
         // Load settings from file
         loadSettings()
+        
+        // Fetch configuration from API
+        fetchConfigurationFromAPI()
 
         // Configure server IP if not already set
         if storage.string(forKey: "server-ip") == nil {
             storage.set("192.168.1.45:8924", forKey: "server-ip")
-            logMessage("Server IP configured: 192.168.1.45:8924", level: .info)
+            // logMessage("Server IP configured: 192.168.1.45:8924", level: .info)
         } else {
-            logMessage("Server IP already configured: \(storage.string(forKey: "server-ip") ?? "unknown")", level: .info)
+            // logMessage("Server IP already configured: \(storage.string(forKey: "server-ip") ?? "unknown")", level: .info)
         }
         
         // Check permissions based on app mode and previous state
@@ -366,7 +439,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         let address = getMacAddress()
         if !address.isEmpty {
             macAddress = address
-            logMessage("Mac Address obtained: \(address)", level: .info)
+            // logMessage("Mac Address obtained: \(address)", level: .info)
         } else {
             logMessage("Warning: Could not get MacAddress", level: .warning)
             macAddress = ""
@@ -374,7 +447,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         
         // Get Client IP Address (once at startup)
         clientIPAddress = getClientIPAddress()
-        logMessage("Client IP Address obtained: \(clientIPAddress)", level: .info)
+        // logMessage("Client IP Address obtained: \(clientIPAddress)", level: .info)
 
         // Setup logging after basic initialization
         setupLogging()
@@ -459,12 +532,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     }
     
     @objc func sessionDidBecomeActive(notification: Notification) {
-        logMessage("User switched back to this session", level: .info)
+        // logMessage("User switched back to this session", level: .info)
         activeRunning = true
     }
 
     @objc func sessionDidResignActive(notification: Notification) {
-        logMessage("User switched away from this session", level: .info)
+        // logMessage("User switched away from this session", level: .info)
         activeRunning = false
     }
     
@@ -498,7 +571,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     private func checkPermissionsOnStartup() {
         // Determine if we're in development or production mode
         let isDevelopment = Bundle.main.bundlePath.contains("DerivedData") || Bundle.main.bundlePath.contains("Debug")
-        logMessage("App mode: \(isDevelopment ? "DEVELOPMENT" : "PRODUCTION")", level: .info)
+        // logMessage("App mode: \(isDevelopment ? "DEVELOPMENT" : "PRODUCTION")", level: .info)
         
         // Check accessibility permission
         let accessibilityWasGranted = storage.bool(forKey: "accessibility-was-granted")
@@ -511,10 +584,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         } else if !accessibilityWasGranted && accessibilityCurrentGranted {
             // Permission was newly granted, update the flag
             storage.set(true, forKey: "accessibility-was-granted")
-            logMessage("Accessibility permission newly granted", level: .info)
+            // logMessage("Accessibility permission newly granted", level: .info)
         }
         
-        logMessage("Accessibility permission status: \(accessibilityCurrentGranted ? "GRANTED" : "DENIED") (was previously granted: \(accessibilityWasGranted))", level: .info)
+        // logMessage("Accessibility permission status: \(accessibilityCurrentGranted ? "GRANTED" : "DENIED") (was previously granted: \(accessibilityWasGranted))", level: .info)
         
         // Check screen recording permission
         if #available(macOS 10.15, *) {
@@ -528,10 +601,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             } else if !screenRecordingWasGranted && screenRecordingCurrentGranted {
                 // Permission was newly granted, update the flag
                 storage.set(true, forKey: "screen-recording-was-granted")
-                logMessage("Screen recording permission newly granted", level: .info)
+                // logMessage("Screen recording permission newly granted", level: .info)
             }
             
-            logMessage("Screen recording permission status: \(screenRecordingCurrentGranted ? "GRANTED" : "DENIED") (was previously granted: \(screenRecordingWasGranted))", level: .info)
+            // logMessage("Screen recording permission status: \(screenRecordingCurrentGranted ? "GRANTED" : "DENIED") (was previously granted: \(screenRecordingWasGranted))", level: .info)
             
             // Determine if we should request permissions
             let shouldRequestAccessibility = !accessibilityCurrentGranted && shouldRequestPermission(
@@ -548,14 +621,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             
             // Request permissions if needed
             if shouldRequestAccessibility {
-                logMessage("Requesting accessibility permission on startup", level: .info)
+                // logMessage("Requesting accessibility permission on startup", level: .info)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                     self.requestAccessibilityPermission()
                 }
             }
             
             if shouldRequestScreenRecording {
-                logMessage("Requesting screen recording permission on startup", level: .info)
+                // logMessage("Requesting screen recording permission on startup", level: .info)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                     self.requestScreenRecordingPermission()
                 }
@@ -595,7 +668,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         if #available(macOS 10.15, *) {
             // Check if we already have permission
             if CGPreflightScreenCaptureAccess() {
-                logMessage("Screen recording permission already granted", level: .info)
+                // logMessage("Screen recording permission already granted", level: .info)
                 storage.set(true, forKey: "screen-recording-was-granted")
                 return
             }
@@ -609,18 +682,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             logMessage("Screen recording permission check - wasPreviouslyGranted: \(wasPreviouslyGranted), promptShown: \(promptShown)", level: .debug)
             
             if promptShown && !wasPreviouslyGranted {
-                logMessage("Screen recording prompt already shown this session and permission was never granted, but will show again for debugging", level: .info)
+                // logMessage("Screen recording prompt already shown this session and permission was never granted, but will show again for debugging", level: .info)
                 // Don't return - continue to show the permission request
             }
             
-            logMessage("Requesting screen recording permission...", level: .info)
+            // logMessage("Requesting screen recording permission...", level: .info)
             
             // Method 1: Try CGRequestScreenCaptureAccess() first
-            logMessage("Calling CGRequestScreenCaptureAccess() to trigger system dialog", level: .info)
+            // logMessage("Calling CGRequestScreenCaptureAccess() to trigger system dialog", level: .info)
             CGRequestScreenCaptureAccess()
             
             // Method 2: Also try to capture screen as backup - this will trigger the system dialog if permission not granted
-            logMessage("Attempting to capture screen to trigger permission dialog", level: .info)
+            // logMessage("Attempting to capture screen to trigger permission dialog", level: .info)
             let _ = CGWindowListCreateImage(CGRect.null, .optionOnScreenOnly, kCGNullWindowID, .bestResolution)
             
             // Show detailed notification based on previous state
@@ -655,7 +728,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                 
                 Without this permission, screenshot monitoring will not work.
                 """
-                logMessage("First time requesting screen recording permission", level: .info)
+                // logMessage("First time requesting screen recording permission", level: .info)
             }
             
             notification.soundName = NSUserNotificationDefaultSoundName
@@ -671,7 +744,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                 checkCount += 1
                 
                 if CGPreflightScreenCaptureAccess() {
-                    self.logMessage("Screen recording permission granted after \(checkCount) checks", level: .info)
+                    // self.logMessage("Screen recording permission granted after \(checkCount) checks", level: .info)
                     self.storage.set(true, forKey: "screen-recording-was-granted")
                     // Clear the prompt flag when permission is granted so we can show it again if revoked
                     self.storage.removeObject(forKey: promptKey)
@@ -686,9 +759,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                 }
             }
             
-            logMessage("Screen recording permission request sent", level: .info)
+            // logMessage("Screen recording permission request sent", level: .info)
         } else {
-            logMessage("Screen recording permission not required on this macOS version", level: .info)
+            // logMessage("Screen recording permission not required on this macOS version", level: .info)
         }
     }
 
@@ -748,7 +821,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             DispatchQueue.global(qos: .background).async {
                 self.sendKeyLogs()
             }
-            logMonitoringEvent("USB log monitoring triggered", details: "USB events collected: \(usbDeviceLogs.count)")
+            lastKeyCheck = currentDate
+        }
+        
+        // Check if it's time for USB log (using configurable interval)
+        if currentDate.timeIntervalSince(lastUSBCheck) >= TimeInterval(USB_INTERVAL) {
+            logMonitoringEvent("USB log monitoring triggered", details: "Interval: \(USB_INTERVAL)s, USB events collected: \(usbDeviceLogs.count)")
             DispatchQueue.global(qos: .background).async {
                 do {
                     try self.sendUSBLogs()
@@ -756,7 +834,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                     self.logError("Error sending usb logs: \(error)", context: "USBLog")
                 }
             }
-            lastKeyCheck = currentDate
+            lastUSBCheck = currentDate
         }
     }
 
@@ -810,7 +888,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     private func performEventTapValidation() {
         // Quick check first - if event tap is nil, we need to re-establish
         guard let tap = eventTap else {
-            logMessage("Event tap is nil, re-establishing...", level: .info)
+            // logMessage("Event tap is nil, re-establishing...", level: .info)
             reestablishEventTapAsync()
             return
         }
@@ -818,7 +896,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         // Check if tap is enabled (this is a lightweight operation)
         let isEnabled = CGEvent.tapIsEnabled(tap: tap)
         if !isEnabled {
-            logMessage("Event tap became disabled, re-establishing...", level: .info)
+            // logMessage("Event tap became disabled, re-establishing...", level: .info)
             reestablishEventTapAsync()
             return
         }
@@ -826,7 +904,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         // Additional validation: check if mach port is still valid
         let portValid = CFMachPortIsValid(tap)
         if !portValid {
-            logMessage("Event tap mach port is invalid, re-establishing...", level: .info)
+            // logMessage("Event tap mach port is invalid, re-establishing...", level: .info)
             reestablishEventTapAsync()
             return
         }
@@ -864,7 +942,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             
             do {
                 self.setupKeyboardMonitoring()
-                self.logMessage("Event tap re-establishment completed successfully", level: .info)
+                // self.logMessage("Event tap re-establishment completed successfully", level: .info)
             } catch {
                 self.logMessage("Event tap re-establishment failed: \(error)", level: .error)
             }
@@ -965,7 +1043,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         return temporaryPath
     }
 
-    private func processChromeBasedProfiles(profilesPath: String, browser: String, checkedVariable: inout Int64?, lastBrowserTic: Double) throws -> [BrowserHistoryLog] {
+    private func processChromeBasedProfiles(profilesPath: String, browser: String, checkedVariable: inout Int64?) throws -> [BrowserHistoryLog] {
         let fileMan = FileManager()
         let username = NSUserName()
         var visitDate = ""
@@ -973,28 +1051,53 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         var browseHist: [BrowserHistoryLog] = []
         var highestTimestamp: Int64? = checkedVariable
         
+        // logMessage("=== Starting \(browser) history collection ===", level: .info)
+        logMessage("Profiles path: \(profilesPath)", level: .debug)
+        logMessage("Current checkedVariable (highestTimestamp): \(checkedVariable?.description ?? "nil")", level: .debug)
+        
         if fileMan.fileExists(atPath: profilesPath) {
-            let fileEnum = fileMan.enumerator(atPath: profilesPath)
+            // logMessage("\(browser) profiles folder found at: \(profilesPath)", level: .info)
             
-            while let each = fileEnum?.nextObject() as? String {
-                // Check if this is a profile directory (Default, Profile 1, Profile 2, etc.)
-                if each != "System Profile" && each != "Guest Profile" && !each.hasPrefix(".") {
-                    let historyPath = "\(profilesPath)\(each)/History"
+            // Only check top-level directories that are actual profiles
+            // Chrome profiles are: "Default", "Profile 1", "Profile 2", etc.
+            // Skip: "System Profile", "Guest Profile", hidden directories, and subdirectories
+            do {
+                let contents = try fileMan.contentsOfDirectory(atPath: profilesPath)
+                for profileName in contents {
+                    // Skip system profiles and hidden directories
+                    if profileName == "System Profile" || profileName == "Guest Profile" || profileName.hasPrefix(".") {
+                        continue
+                    }
+                    
+                    // Only process if it's a directory (not a file)
+                    var isDirectory: ObjCBool = false
+                    let profilePath = "\(profilesPath)\(profileName)"
+                    if !fileMan.fileExists(atPath: profilePath, isDirectory: &isDirectory) || !isDirectory.boolValue {
+                        continue
+                    }
+                    
+                    // Check if this directory contains a History file (indicating it's a real profile)
+                    let historyPath = "\(profilePath)/History"
+                    logMessage("Checking profile: \(profileName), history path: \(historyPath)", level: .debug)
                     if fileMan.fileExists(atPath: historyPath) {
+                        logMessage("History file found for profile: \(profileName)", level: .debug)
                         let temporaryPath:String = try createTemporaryCopy(historyPath, browser: browser)
+                        logMessage("Created temporary copy: \(temporaryPath)", level: .debug)
                         
                         var db : OpaquePointer?
                         let dbURL = URL(fileURLWithPath: temporaryPath)
                         
                         // Check if file is a valid SQLite database
+                        logMessage("Opening SQLite database: \(dbURL.path)", level: .debug)
                         let openResult = sqlite3_open(dbURL.path, &db)
                         if openResult != SQLITE_OK {
                             let errorMessage = String(cString: sqlite3_errmsg(db))
-                            debugPrint("[-] Could not open the \(browser) History file \(historyPath) for user \(username) - SQLite error: \(errorMessage)")
+                            logError("Could not open \(browser) History file \(historyPath) - SQLite error: \(errorMessage)", context: "\(browser)History")
                             sqlite3_close(db)
                             try? FileManager.default.removeItem(atPath: temporaryPath)
                             continue
                         }
+                        logMessage("SQLite database opened successfully", level: .debug)
                         
                         // Verify database is not corrupted with better error handling
                         var isCorrupted = false
@@ -1028,18 +1131,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                         }
                         sqlite3_finalize(headerCheck)
                         
-                        // Initialize timestamp if needed
+                        // Initialize timestamp if needed - collect from last 7 days on first run
                         if highestTimestamp == nil {
-                            let currentDate = Date(timeIntervalSince1970: lastBrowserTic ?? Date().timeIntervalSince1970 - 86400) // Default to 24 hours ago
+                            let defaultTime = Date().timeIntervalSince1970 - (7 * 24 * 3600) // 7 days ago
+                            let currentDate = Date(timeIntervalSince1970: defaultTime)
                             highestTimestamp = (Int64(currentDate.timeIntervalSince1970) + 11644473600) * 1000000
+                            // logMessage("Initialized timestamp from 7 days ago: \(highestTimestamp ?? 0)", level: .info)
+                        } else {
+                            logMessage("Using existing timestamp: \(highestTimestamp ?? 0)", level: .debug)
                         }
                         
-                        let queryString = "select datetime(visit_time/1000000-11644473600, 'unixepoch', '+10:00') as last_visit_time, urls.url, visit_time from urls, visits where visits.url = urls.id and visit_time > \(highestTimestamp ?? 0) order by visit_time;"
+                        // Use >= instead of > to include entries at the exact timestamp boundary, and add LIMIT to prevent excessive data
+                        let queryString = "select datetime(visit_time/1000000-11644473600, 'unixepoch', '+10:00') as last_visit_time, urls.url, visit_time from urls, visits where visits.url = urls.id and visit_time >= \(highestTimestamp ?? 0) order by visit_time LIMIT 10000;"
+                        logMessage("Executing query with timestamp >= \(highestTimestamp ?? 0)", level: .debug)
                         
                         var queryStatement: OpaquePointer? = nil
+                        var entryCount = 0
                         
                         if sqlite3_prepare_v2(db, queryString, -1, &queryStatement, nil) == SQLITE_OK {
+                            logMessage("Query prepared successfully", level: .debug)
                             while sqlite3_step(queryStatement) == SQLITE_ROW {
+                                entryCount += 1
                                 let col1 = sqlite3_column_text(queryStatement, 0)
                                 if col1 != nil {
                                     visitDate = String(cString: col1!)
@@ -1055,6 +1167,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                                     highestTimestamp = visitTime
                                 }
                                 
+                                // Log first few entries for debugging
+                                if entryCount <= 3 {
+                                    logMessage("Entry \(entryCount): URL=\(histURL), visit_time=\(visitTime), date=\(visitDate)", level: .debug)
+                                }
+                                
                                 browseHist.append(BrowserHistoryLog(
                                     browser: browser,
                                     url: histURL,
@@ -1065,24 +1182,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                             }
                             
                             sqlite3_finalize(queryStatement)
+                            // logMessage("Query completed: found \(entryCount) entries from profile \(profileName)", level: .info)
+                            logMessage("Updated highestTimestamp to: \(highestTimestamp ?? 0)", level: .debug)
                         } else {
                             let errorMsg = String(cString: sqlite3_errmsg(db))
-                            debugPrint("[-] Failed to prepare \(browser) history query: \(errorMsg)")
+                            logError("Could not prepare query for \(browser) History - SQLite error: \(errorMsg)", context: "\(browser)History")
                         }
                         
                         sqlite3_close(db)
-
                         try? FileManager.default.removeItem(atPath: temporaryPath)
+                        logMessage("Closed database and removed temporary file", level: .debug)
                     }
                 }
+            } catch {
+                logError("Error reading \(browser) profiles directory: \(error)", context: "\(browser)History")
             }
         } else {
-            debugPrint("[-] \(browser) profiles directory not found for user \(username)\r")
+            logMessage("\(browser) profiles folder not found at: \(profilesPath)", level: .warning)
         }
         
         // Update the original checkedVariable with the highest timestamp found across all profiles
         checkedVariable = highestTimestamp
-        
+        // logMessage("=== Completed \(browser) history collection: \(browseHist.count) total entries ===", level: .info)
+        logMessage("Updated checkedVariable to: \(checkedVariable?.description ?? "nil")", level: .debug)
         return browseHist
     }
 
@@ -1098,19 +1220,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         // Safari history check
         if fileMan.fileExists(atPath: "/Users/\(username)/Library/Safari/History.db", isDirectory: &isDir) {
             let temporaryPath:String = try createTemporaryCopy("/Users/\(username)/Library/Safari/History.db", browser: "Safari")
+            logMessage("Created temporary copy: \(temporaryPath)", level: .debug)
             
             var db : OpaquePointer?
             let dbURL = URL(fileURLWithPath: temporaryPath)
             
             // Check if file is a valid SQLite database with better error handling
+            logMessage("Opening SQLite database: \(dbURL.path)", level: .debug)
             let openResult = sqlite3_open(dbURL.path, &db)
             if openResult != SQLITE_OK {
                 let errorMessage = String(cString: sqlite3_errmsg(db))
-                debugPrint("[-] Could not open the Safari History.db file for user \(username) - SQLite error: \(errorMessage)")
+                logError("Could not open Safari History.db - SQLite error: \(errorMessage)", context: "SafariHistory")
                 sqlite3_close(db)
                 try? FileManager.default.removeItem(atPath: temporaryPath)
                 return []
             }
+            logMessage("SQLite database opened successfully", level: .debug)
             
             // Verify database is not corrupted with better error handling
             var isCorrupted = false
@@ -1145,15 +1270,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             sqlite3_finalize(headerCheck)
             
             if safariChecked == nil{
-                let currentDate = Date(timeIntervalSince1970: lastBrowserTic ?? Date().timeIntervalSince1970 - 86400) // Default to 24 hours ago
+                // Collect from last 7 days on first run
+                let defaultTime = Date().timeIntervalSince1970 - (7 * 24 * 3600) // 7 days ago
+                let currentDate = Date(timeIntervalSince1970: defaultTime)
                 safariChecked = currentDate.timeIntervalSince1970 - 978307200
+                // logMessage("Initialized safariChecked from 7 days ago: \(safariChecked ?? 0)", level: .info)
+            } else {
+                logMessage("Using existing safariChecked: \(safariChecked ?? 0)", level: .debug)
             }
-            // Convert timestamp to VLAT timestring
-            let queryString = "select datetime(history_visits.visit_time + 978307200, 'unixepoch', '+10:00') as last_visited, history_items.url, history_visits.visit_time from history_visits, history_items where history_visits.history_item=history_items.id and history_visits.visit_time > \(safariChecked ?? 0) order by history_visits.visit_time;"
+            // Convert timestamp to VLAT timestring - use >= and add LIMIT to prevent excessive data
+            let queryString = "select datetime(history_visits.visit_time + 978307200, 'unixepoch', '+10:00') as last_visited, history_items.url, history_visits.visit_time from history_visits, history_items where history_visits.history_item=history_items.id and history_visits.visit_time >= \(safariChecked ?? 0) order by history_visits.visit_time LIMIT 10000;"
+            logMessage("Executing query with timestamp >= \(safariChecked ?? 0)", level: .debug)
             var queryStatement: OpaquePointer? = nil
+            var entryCount = 0
 
             if sqlite3_prepare_v2(db, queryString, -1, &queryStatement, nil) == SQLITE_OK{
+                logMessage("Query prepared successfully", level: .debug)
                 while sqlite3_step(queryStatement) == SQLITE_ROW{
+                    entryCount += 1
                     let col1 = sqlite3_column_text(queryStatement, 0)
                     if col1 != nil{
                         visitDate = String(cString: col1!)
@@ -1167,6 +1301,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                     if (safariChecked! < visitTime) {
                         safariChecked = visitTime
                     }
+                    
+                    // Log first few entries for debugging
+                    if entryCount <= 3 {
+                        logMessage("Entry \(entryCount): URL=\(histURL), visit_time=\(visitTime), date=\(visitDate)", level: .debug)
+                    }
 
                     browseHist.append(BrowserHistoryLog(
                         browser: "Safari",
@@ -1177,26 +1316,36 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                     ))
                 }
                 sqlite3_finalize(queryStatement)
+                // logMessage("Query completed: found \(entryCount) entries", level: .info)
+                logMessage("Updated safariChecked to: \(safariChecked ?? 0)", level: .debug)
             } else {
                 let errorMsg = String(cString: sqlite3_errmsg(db))
-                debugPrint("[-] Failed to prepare Safari history query: \(errorMsg)")
+                logError("Could not prepare query for Safari History - SQLite error: \(errorMsg)", context: "SafariHistory")
             }
             
             sqlite3_close(db)
-
             try? FileManager.default.removeItem(atPath: temporaryPath)
+            logMessage("Closed database and removed temporary file", level: .debug)
         }
         else {
-            debugPrint("[-] Safari History.db database not found for user \(username)\r")
+            logMessage("Safari History.db database not found at: /Users/\(username)/Library/Safari/History.db", level: .warning)
         }
-
+        
+        // logMessage("=== Completed Safari history collection: \(browseHist.count) total entries ===", level: .info)
         return browseHist
     }
 
     func getChromeHistories() throws -> [BrowserHistoryLog]? {
+        let fileMan = FileManager()
         let username = NSUserName()
         let chromeProfilesPath = "/Users/\(username)/Library/Application Support/Google/Chrome/"
-        return try processChromeBasedProfiles(profilesPath: chromeProfilesPath, browser: "Chrome", checkedVariable: &chromeChecked, lastBrowserTic: lastBrowserTic ?? Date().timeIntervalSince1970 - 86400)
+        
+        if !fileMan.fileExists(atPath: chromeProfilesPath) {
+            logMessage("Chrome profiles folder not found at: \(chromeProfilesPath)", level: .debug)
+            return []
+        }
+        
+        return try processChromeBasedProfiles(profilesPath: chromeProfilesPath, browser: "Chrome", checkedVariable: &chromeChecked)
     }
 
     func getFirefoxHistories() throws -> [BrowserHistoryLog]? {
@@ -1207,26 +1356,35 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         var histURL = ""
         var browseHist: [BrowserHistoryLog] = []
         
+        // logMessage("=== Starting Firefox history collection ===", level: .info)
+        logMessage("Current firefoxChecked: \(firefoxChecked?.description ?? "nil")", level: .debug)
+        
+        let firefoxPath = "/Users/\(username)/Library/Application Support/Firefox/Profiles/"
         // Firefox history check
-        if fileMan.fileExists(atPath: "/Users/\(username)/Library/Application Support/Firefox/Profiles/"){
+        if fileMan.fileExists(atPath: firefoxPath){
+            // logMessage("Firefox Profiles folder found at: \(firefoxPath)", level: .info)
             let fileEnum = fileMan.enumerator(atPath: "/Users/\(username)/Library/Application Support/Firefox/Profiles/")
 
             while let each = fileEnum?.nextObject() as? String {
                 if each.hasSuffix("places.sqlite") {
                     let placesDBPath = "/Users/\(username)/Library/Application Support/Firefox/Profiles/\(each)"
+                    logMessage("Found Firefox profile: \(each)", level: .debug)
                     let temporaryPath:String = try createTemporaryCopy(placesDBPath, browser: "Firefox")
+                    logMessage("Created temporary copy: \(temporaryPath)", level: .debug)
                     var db : OpaquePointer?
                     let dbURL = URL(fileURLWithPath: temporaryPath)
 
                     // Check if file is a valid SQLite database
+                    logMessage("Opening SQLite database: \(dbURL.path)", level: .debug)
                     let openResult = sqlite3_open(dbURL.path, &db)
                     if openResult != SQLITE_OK {
                         let errorMessage = String(cString: sqlite3_errmsg(db))
-                        debugPrint("[-] Could not open the Firefox \(temporaryPath) file for user \(username) - SQLite error: \(errorMessage)")
+                        logError("Could not open Firefox \(temporaryPath) - SQLite error: \(errorMessage)", context: "FirefoxHistory")
                         sqlite3_close(db)
                         try? FileManager.default.removeItem(atPath: temporaryPath)
                         continue
                     }
+                    logMessage("SQLite database opened successfully", level: .debug)
                     
                     // Verify database is not corrupted with better error handling
                     var isCorrupted = false
@@ -1261,16 +1419,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                     sqlite3_finalize(headerCheck)
                     
                     if firefoxChecked == nil{
-                        let currentDate = Date(timeIntervalSince1970: lastBrowserTic ?? Date().timeIntervalSince1970 - 86400) // Default to 24 hours ago
-                        firefoxChecked = Int64(currentDate.timeIntervalSince1970 * 1000000)
+                        // Collect from last 7 days on first run
+                        let defaultTime = Date().timeIntervalSince1970 - (7 * 24 * 3600) // 7 days ago
+                        firefoxChecked = Int64(defaultTime * 1000000)
+                        // logMessage("Initialized firefoxChecked from 7 days ago: \(firefoxChecked ?? 0)", level: .info)
+                    } else {
+                        logMessage("Using existing firefoxChecked: \(firefoxChecked ?? 0)", level: .debug)
                     }
 
                     let queryString = "select datetime(visit_date/1000000, 'unixepoch', '+10:00') as time, url, visit_date FROM moz_places, moz_historyvisits where moz_places.id=moz_historyvisits.place_id and visit_date > \(firefoxChecked ?? 0) order by visit_date;"
+                    logMessage("Executing query with visit_date > \(firefoxChecked ?? 0)", level: .debug)
 
                     var queryStatement: OpaquePointer? = nil
+                    var entryCount = 0
 
                     if sqlite3_prepare_v2(db, queryString, -1, &queryStatement, nil) == SQLITE_OK{
+                        logMessage("Query prepared successfully", level: .debug)
                         while sqlite3_step(queryStatement) == SQLITE_ROW{
+                            entryCount += 1
                             let col1 = sqlite3_column_text(queryStatement, 0)
                             if col1 != nil{
                                 visitDate = String(cString: col1!)
@@ -1285,6 +1451,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                             if (firefoxChecked! < visitTime) {
                                 firefoxChecked = visitTime
                             }
+                            
+                            // Log first few entries for debugging
+                            if entryCount <= 3 {
+                                logMessage("Entry \(entryCount): URL=\(histURL), visit_date=\(visitTime), date=\(visitDate)", level: .debug)
+                            }
 
                             browseHist.append(BrowserHistoryLog(
                                 browser: "Firefox",
@@ -1296,49 +1467,89 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                         }
 
                         sqlite3_finalize(queryStatement)
+                        // logMessage("Query completed: found \(entryCount) entries from profile \(each)", level: .info)
+                        logMessage("Updated firefoxChecked to: \(firefoxChecked ?? 0)", level: .debug)
+                    } else {
+                        let errorMsg = String(cString: sqlite3_errmsg(db))
+                        logError("Could not prepare query for Firefox History - SQLite error: \(errorMsg)", context: "FirefoxHistory")
                     }
                     
                     sqlite3_close(db)
-
                     try? FileManager.default.removeItem(atPath: temporaryPath)
+                    logMessage("Closed database and removed temporary file", level: .debug)
                 }
             }
+        } else {
+            logMessage("Firefox Profiles folder not found at: /Users/\(username)/Library/Application Support/Firefox/Profiles/", level: .warning)
         }
-        else {
-            debugPrint("[-] Firefox places.sqlite database not found for user \(username)\r")
-        }
-
+        
+        // logMessage("=== Completed Firefox history collection: \(browseHist.count) total entries ===", level: .info)
         return browseHist
     }
     
     func getEdgeHistories() throws -> [BrowserHistoryLog]? {
+        let fileMan = FileManager()
         let username = NSUserName()
         let edgeProfilesPath = "/Users/\(username)/Library/Application Support/Microsoft Edge/"
-        return try processChromeBasedProfiles(profilesPath: edgeProfilesPath, browser: "Edge", checkedVariable: &edgeChecked, lastBrowserTic: lastBrowserTic ?? Date().timeIntervalSince1970 - 86400)
+        
+        if !fileMan.fileExists(atPath: edgeProfilesPath) {
+            logMessage("Edge profiles folder not found at: \(edgeProfilesPath)", level: .debug)
+            return []
+        }
+        
+        return try processChromeBasedProfiles(profilesPath: edgeProfilesPath, browser: "Edge", checkedVariable: &edgeChecked)
     }
     
     func getOperaHistories() throws -> [BrowserHistoryLog]? {
+        let fileMan = FileManager()
         let username = NSUserName()
         let operaProfilesPath = "/Users/\(username)/Library/Application Support/com.operasoftware.Opera/"
-        return try processChromeBasedProfiles(profilesPath: operaProfilesPath, browser: "Opera", checkedVariable: &operaChecked, lastBrowserTic: lastBrowserTic ?? Date().timeIntervalSince1970 - 86400)
+        
+        if !fileMan.fileExists(atPath: operaProfilesPath) {
+            logMessage("Opera profiles folder not found at: \(operaProfilesPath)", level: .debug)
+            return []
+        }
+        
+        return try processChromeBasedProfiles(profilesPath: operaProfilesPath, browser: "Opera", checkedVariable: &operaChecked)
     }
     
     func getYandexHistories() throws -> [BrowserHistoryLog]? {
+        let fileMan = FileManager()
         let username = NSUserName()
         let yandexProfilesPath = "/Users/\(username)/Library/Application Support/Yandex/YandexBrowser/"
-        return try processChromeBasedProfiles(profilesPath: yandexProfilesPath, browser: "Yandex", checkedVariable: &yandexChecked, lastBrowserTic: lastBrowserTic ?? Date().timeIntervalSince1970 - 86400)
+        
+        if !fileMan.fileExists(atPath: yandexProfilesPath) {
+            logMessage("Yandex profiles folder not found at: \(yandexProfilesPath)", level: .debug)
+            return []
+        }
+        
+        return try processChromeBasedProfiles(profilesPath: yandexProfilesPath, browser: "Yandex", checkedVariable: &yandexChecked)
     }
     
     func getVivaldiHistories() throws -> [BrowserHistoryLog]? {
+        let fileMan = FileManager()
         let username = NSUserName()
         let vivaldiProfilesPath = "/Users/\(username)/Library/Application Support/Vivaldi/"
-        return try processChromeBasedProfiles(profilesPath: vivaldiProfilesPath, browser: "Vivaldi", checkedVariable: &vivaldiChecked, lastBrowserTic: lastBrowserTic ?? Date().timeIntervalSince1970 - 86400)
+        
+        if !fileMan.fileExists(atPath: vivaldiProfilesPath) {
+            logMessage("Vivaldi profiles folder not found at: \(vivaldiProfilesPath)", level: .debug)
+            return []
+        }
+        
+        return try processChromeBasedProfiles(profilesPath: vivaldiProfilesPath, browser: "Vivaldi", checkedVariable: &vivaldiChecked)
     }
     
     func getBraveHistories() throws -> [BrowserHistoryLog]? {
+        let fileMan = FileManager()
         let username = NSUserName()
         let braveProfilesPath = "/Users/\(username)/Library/Application Support/BraveSoftware/Brave-Browser/"
-        return try processChromeBasedProfiles(profilesPath: braveProfilesPath, browser: "Brave", checkedVariable: &braveChecked, lastBrowserTic: lastBrowserTic ?? Date().timeIntervalSince1970 - 86400)
+        
+        if !fileMan.fileExists(atPath: braveProfilesPath) {
+            logMessage("Brave profiles folder not found at: \(braveProfilesPath)", level: .debug)
+            return []
+        }
+        
+        return try processChromeBasedProfiles(profilesPath: braveProfilesPath, browser: "Brave", checkedVariable: &braveChecked)
     }
     
     func getBrowserHistories() throws -> [BrowserHistoryLog]? {
@@ -1449,14 +1660,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         var browserHistories: [BrowserHistoryLog] = []
         do {
             browserHistories = try getBrowserHistories() ?? []
-            logMessage("Browser history collection completed: \(browserHistories.count) entries found", level: .info)
+            // logMessage("Browser history collection completed: \(browserHistories.count) entries found", level: .info)
+            
+            // If no entries found, log debug info
+            if browserHistories.count == 0 {
+            }
         } catch {
             logError("Error reading browser history: \(error)", context: "BrowserHistory")
             return
         }
         
         if (browserHistories.count > 0) {
-            logMessage("Sending \(browserHistories.count) browser history entries to server", level: .info)
+            // logMessage("Sending \(browserHistories.count) browser history entries to server", level: .info)
             
             // Log a sample of the histories for debugging
             let sampleCount = min(3, browserHistories.count)
@@ -1470,7 +1685,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             lastBrowserHistorySent = Date()
             logSuccess("Browser history data sent to server", details: "\(browserHistories.count) entries")
         } else {
-            logMessage("No browser history entries found to send", level: .info)
+            // logMessage("No browser history entries found to send. This may be normal if no new history since last check.", level: .info)
         }
     }
 
@@ -1557,16 +1772,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                             if let data = data, let responseString = String(data: data, encoding: .utf8) {
                                 self?.logMessage("Response data size: \(data.count) bytes", level: .debug)
                                 self?.lastTicSent = Date()
-                                
-                                let jdata = self?.convertToDictionary(text: responseString)
-                                if jdata != nil && (jdata?["LastBrowserTic"]) != nil {
-                                    let lastTic = jdata!["LastBrowserTic"] as! Double
-                                    
-                                    if lastBrowserTic == nil {
-                                        lastBrowserTic = lastTic
-                                        self?.logMessage("LastBrowserTic set to: \(lastTic)", level: .debug)
-                                    }
-                                }
                             }
                         } else {
                             self?.logError("Tic event HTTP error: \(httpResponse.statusCode)", context: "TicEvent")
@@ -1753,35 +1958,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                     self?.logSuccess("Screenshot uploaded successfully", details: "Response: \(responseString)")
                     self?.lastScreenshotSent = Date()
                     
-                    // Parse server response for interval control
+                    // Parse server response for confirmation
                     if let jdata = self?.convertToDictionary(text: responseString) {
                         // Check for success status
                         if let status = jdata["status"] as? String, status == "success" {
-                            self?.logMessage("Screenshot upload confirmed by server", level: .info)
-                            
-                            // Extract interval from data object (backend format)
-                            if let dataObj = jdata["data"] as? [String: Any],
-                               let interval = dataObj["interval"] as? Int {
-                                if interval > 0 && interval != TIME_INTERVAL {
-                                    let oldInterval = TIME_INTERVAL
-                                    TIME_INTERVAL = interval
-                                    self?.logMessage("Screenshot interval updated by server: \(oldInterval)s → \(interval)s", level: .info)
-                                    
-                                    // Show notification about interval change
-                                    let notification = NSUserNotification()
-                                    notification.title = "MonitorClient - Screenshot Interval Updated"
-                                    notification.informativeText = "Server updated screenshot interval to \(interval) seconds"
-                                    notification.soundName = nil
-                                    NSUserNotificationCenter.default.deliver(notification)
-                                } else {
-                                    self?.logMessage("Screenshot interval remains: \(interval)s", level: .debug)
-                                }
-                            }
+                            // self?.logMessage("Screenshot upload confirmed by server", level: .info)
                             
                             // Log additional server response data
                             if let dataObj = jdata["data"] as? [String: Any] {
                                 if let filename = dataObj["filename"] as? String {
-                                    self?.logMessage("Screenshot saved as: \(filename)", level: .info)
+                                    // self?.logMessage("Screenshot saved as: \(filename)", level: .info)
                                 }
                                 if let fileSize = dataObj["file_size"] as? Int {
                                     self?.logMessage("File size: \(fileSize) bytes", level: .debug)
@@ -1950,11 +2136,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     private func startKeyboardMonitoring() {
         // Check permission before starting monitoring
         if isInputMonitoringEnabled() {
-            logMessage("Accessibility permission already granted, starting keyboard monitoring", level: .info)
+            // logMessage("Accessibility permission already granted, starting keyboard monitoring", level: .info)
             setupKeyboardMonitoring()
         } else {
             // Start a timer to periodically check for permission
-            logMessage("Accessibility permission not granted, requesting access", level: .info)
+            // logMessage("Accessibility permission not granted, requesting access", level: .info)
             requestAccessibilityPermission()
             
             // Use a more robust permission checking mechanism
@@ -1971,7 +2157,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                 
                 if self.isInputMonitoringEnabled() {
                     // Permission granted, start monitoring
-                    self.logMessage("Accessibility permission granted after \(permissionCheckCount) seconds, starting keyboard monitoring", level: .info)
+                    // self.logMessage("Accessibility permission granted after \(permissionCheckCount) seconds, starting keyboard monitoring", level: .info)
                     self.setupKeyboardMonitoring()
                     timer.invalidate()
                 } else if permissionCheckCount >= maxPermissionChecks {
@@ -1980,7 +2166,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                     timer.invalidate()
                 } else if permissionCheckCount % 10 == 0 {
                     // Log progress every 10 seconds
-                    self.logMessage("Still waiting for accessibility permission... (\(permissionCheckCount)s)", level: .info)
+                    // self.logMessage("Still waiting for accessibility permission... (\(permissionCheckCount)s)", level: .info)
                 }
                 
                 // Don't add permission denied logs to keyLogs as it floods the logs
@@ -2126,21 +2312,120 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         if let settings = NSDictionary(contentsOfFile: settingsPath) {
             if let username = settings["username"] as? String {
                 storage.set(username, forKey: "username")
-                logMessage("Loaded username from settings: \(username)", level: .info)
+                // logMessage("Loaded username from settings: \(username)", level: .info)
             }
             if let serverIP = settings["serverIP"] as? String {
                 // Extract IP from full address if needed
                 let ip = serverIP.contains(":") ? String(serverIP.split(separator: ":")[0]) : serverIP
                 storage.set(ip, forKey: "server-ip")
-                logMessage("Loaded server IP from settings: \(ip)", level: .info)
+                // logMessage("Loaded server IP from settings: \(ip)", level: .info)
             }
             if let serverPort = settings["serverPort"] as? String {
                 storage.set(serverPort, forKey: "server-port")
-                logMessage("Loaded server port from settings: \(serverPort)", level: .info)
+                // logMessage("Loaded server port from settings: \(serverPort)", level: .info)
             }
         } else {
-            logMessage("No settings file found, using defaults", level: .info)
+            // logMessage("No settings file found, using defaults", level: .info)
         }
+    }
+    
+    // MARK: - Configuration Management
+    
+    private func fetchConfigurationFromAPI() {
+        guard !isConfigUpdating else {
+            logMessage("Configuration update already in progress, skipping", level: .debug)
+            return
+        }
+        
+        isConfigUpdating = true
+        // logMessage("Fetching configuration from API", level: .info)
+        
+        guard let serverIP = storage.string(forKey: "server-ip"),
+              let serverPort = storage.string(forKey: "server-port") else {
+            logMessage("Server configuration not available, using defaults", level: .warning)
+            isConfigUpdating = false
+            return
+        }
+        
+        let configURL = "http://\(serverIP):\(serverPort)/webapi_config.php?platform=macos"
+        
+        guard let url = URL(string: configURL) else {
+            logMessage("Invalid configuration URL: \(configURL)", level: .error)
+            isConfigUpdating = false
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 10.0
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            DispatchQueue.main.async {
+                self?.isConfigUpdating = false
+                
+                if let error = error {
+                    self?.logMessage("Configuration fetch failed: \(error.localizedDescription)", level: .error)
+                    return
+                }
+                
+                guard let data = data else {
+                    self?.logMessage("No configuration data received", level: .error)
+                    return
+                }
+                
+                do {
+                    let configResponse = try JSONDecoder().decode(ConfigResponse.self, from: data)
+                    
+                    if configResponse.success, let config = configResponse.data {
+                        self?.updateConfiguration(config: config)
+                        // self?.logMessage("Configuration updated successfully", level: .info)
+                    } else {
+                        self?.logMessage("Configuration fetch failed: \(configResponse.error ?? "Unknown error")", level: .error)
+                    }
+                } catch {
+                    self?.logMessage("Configuration parsing failed: \(error.localizedDescription)", level: .error)
+                }
+            }
+        }.resume()
+    }
+    
+    private func updateConfiguration(config: ClientConfig) {
+        // Update global interval variables
+        TIME_INTERVAL = config.intervals.screenshot
+        TIC_INTERVAL = config.intervals.tic
+        HISTORY_INTERVAL = config.intervals.history
+        KEY_INTERVAL = config.intervals.keylog
+        USB_INTERVAL = config.intervals.usb
+        CONFIG_REFRESH_INTERVAL = config.intervals.config_refresh
+        
+        // Store current configuration
+        currentConfig = config
+        lastConfigUpdate = Date()
+        
+        // Log configuration update
+        // logMessage("Configuration updated:", level: .info)
+        // logMessage("  Screenshot: \(TIME_INTERVAL)s", level: .info)
+        // logMessage("  Tic: \(TIC_INTERVAL)s", level: .info)
+        // logMessage("  History: \(HISTORY_INTERVAL)s", level: .info)
+        // logMessage("  Keylog: \(KEY_INTERVAL)s", level: .info)
+        // logMessage("  USB: \(USB_INTERVAL)s", level: .info)
+        // logMessage("  Config Refresh: \(CONFIG_REFRESH_INTERVAL)s", level: .info)
+        
+        // Restart configuration timer with new interval
+        restartConfigTimer()
+    }
+    
+    private func restartConfigTimer() {
+        configTimer?.invalidate()
+        configTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(CONFIG_REFRESH_INTERVAL), repeats: true) { [weak self] _ in
+            self?.fetchConfigurationFromAPI()
+        }
+        logMessage("Configuration refresh timer restarted with \(CONFIG_REFRESH_INTERVAL)s interval", level: .debug)
+    }
+    
+    @objc private func manualConfigRefresh() {
+        // logMessage("Manual configuration refresh requested", level: .info)
+        fetchConfigurationFromAPI()
     }
     
     private func saveSettings(username: String, serverIP: String, serverPort: String) {
@@ -2153,7 +2438,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         
         if let plistData = try? PropertyListSerialization.data(fromPropertyList: settings, format: .xml, options: 0) {
             try? plistData.write(to: URL(fileURLWithPath: settingsPath))
-            logMessage("Settings saved to: \(settingsPath)", level: .info)
+            // logMessage("Settings saved to: \(settingsPath)", level: .info)
         }
     }
     
@@ -2229,12 +2514,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             
             // Update the global server address for immediate use
             let fullServerAddress = "\(serverIP):\(serverPort)"
-            logMessage("Server address updated to: \(fullServerAddress)", level: .info)
+            // logMessage("Server address updated to: \(fullServerAddress)", level: .info)
             
             // Save to file
             saveSettings(username: username, serverIP: serverIP, serverPort: serverPort)
             
-            logMessage("Settings updated - Username: \(username), Server: \(fullServerAddress)", level: .info)
+            // logMessage("Settings updated - Username: \(username), Server: \(fullServerAddress)", level: .info)
             
             // Show confirmation
             let confirmAlert = NSAlert()
@@ -2245,11 +2530,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     }
     
     private func checkAndLogPermissions() {
-        logMessage("=== Permission Check ===", level: .info)
+        // logMessage("=== Permission Check ===", level: .info)
         
         // Check accessibility permission
         let accessibilityEnabled = isInputMonitoringEnabled()
-        logMessage("Accessibility permission: \(accessibilityEnabled ? "GRANTED" : "DENIED")", level: .info)
+        // logMessage("Accessibility permission: \(accessibilityEnabled ? "GRANTED" : "DENIED")", level: .info)
         
         // Check if we can access browser history directories
         let username = NSUserName()
@@ -2262,15 +2547,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         for path in testPaths {
             let exists = FileManager.default.fileExists(atPath: path)
             let readable = FileManager.default.isReadableFile(atPath: path)
-            logMessage("Path \(path): exists=\(exists), readable=\(readable)", level: .info)
+            // logMessage("Path \(path): exists=\(exists), readable=\(readable)", level: .info)
         }
         
         // Check if we can write to Documents
         let documentsPath = NSHomeDirectory() + "/Documents"
         let writable = FileManager.default.isWritableFile(atPath: documentsPath)
-        logMessage("Documents directory writable: \(writable)", level: .info)
+        // logMessage("Documents directory writable: \(writable)", level: .info)
         
-        logMessage("=== End Permission Check ===", level: .info)
+        // logMessage("=== End Permission Check ===", level: .info)
     }
     
     func applicationWillTerminate(_ aNotification: Notification) {
@@ -2313,7 +2598,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     private func requestAccessibilityPermission() {
         // First check if we already have permission without prompting
         if AXIsProcessTrusted() {
-            logMessage("Accessibility permission already granted", level: .info)
+            // logMessage("Accessibility permission already granted", level: .info)
             storage.set(true, forKey: "accessibility-was-granted")
             return
         }
@@ -2324,11 +2609,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         // Only prompt once per session to avoid spam, unless permission was revoked
         let promptKey = "accessibility-prompt-shown"
         if storage.bool(forKey: promptKey) && !wasPreviouslyGranted {
-            logMessage("Accessibility prompt already shown this session and permission was never granted, skipping", level: .info)
+            // logMessage("Accessibility prompt already shown this session and permission was never granted, skipping", level: .info)
             return
         }
         
-        logMessage("Requesting accessibility permission...", level: .info)
+        // logMessage("Requesting accessibility permission...", level: .info)
         
         // Show detailed notification based on previous state
         let notification = NSUserNotification()
@@ -2362,20 +2647,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             
             Without this permission, keyboard monitoring will not work.
             """
-            logMessage("First time requesting accessibility permission", level: .info)
+            // logMessage("First time requesting accessibility permission", level: .info)
         }
         
         notification.soundName = NSUserNotificationDefaultSoundName
         NSUserNotificationCenter.default.deliver(notification)
         
         // Also log the instructions
-        logMessage("Accessibility permission instructions sent via notification", level: .info)
+        // logMessage("Accessibility permission instructions sent via notification", level: .info)
         
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true]
         let trusted = AXIsProcessTrustedWithOptions(options as CFDictionary)
         
         if trusted {
-            logMessage("Accessibility permission granted", level: .info)
+            // logMessage("Accessibility permission granted", level: .info)
             storage.set(true, forKey: "accessibility-was-granted")
             // Clear the prompt flag when permission is granted so we can show it again if revoked
             storage.removeObject(forKey: promptKey)
@@ -2394,7 +2679,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         let lastTrustedState = storage.bool(forKey: "last-accessibility-trusted")
         if trusted != lastTrustedState {
             if trusted {
-                logMessage("Accessibility permission status changed: GRANTED", level: .info)
+                // logMessage("Accessibility permission status changed: GRANTED", level: .info)
                 storage.set(true, forKey: "accessibility-was-granted")
             } else {
                 logMessage("Accessibility permission status changed: DENIED", level: .warning)
@@ -2433,7 +2718,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         }
         
         NSUserNotificationCenter.default.deliver(notification)
-        logMessage("Server connection notification: \(connected ? "restored" : "lost")", level: .info)
+        // logMessage("Server connection notification: \(connected ? "restored" : "lost")", level: .info)
     }
     
     func getCurrentDateTimeString() -> String {
@@ -2588,9 +2873,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             return
         }
         
-        logMessage("=== Sending \(eventType) Data ===", level: .info)
-        logMessage("Endpoint: \(urlString)", level: .info)
-        logMessage("Total data items: \(data.count)", level: .info)
+        // logMessage("=== Sending \(eventType) Data ===", level: .info)
+        // logMessage("Endpoint: \(urlString)", level: .info)
+        // logMessage("Total data items: \(data.count)", level: .info)
         
         // Create chunks properly
         var chunks: [[Any]] = []
@@ -2725,7 +3010,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                 task.resume()
         }
                 
-        logMessage("=== End Sending \(eventType) Data ===", level: .info)
+        // logMessage("=== End Sending \(eventType) Data ===", level: .info)
     }
     
     // Helper function to generate random string
@@ -2848,23 +3133,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     
     // Reset accessibility permissions for testing
     @objc func resetAccessibilityPermissions() {
-        logMessage("Resetting accessibility permission flags", level: .info)
+        // logMessage("Resetting accessibility permission flags", level: .info)
         storage.removeObject(forKey: "accessibility-prompt-shown")
         storage.removeObject(forKey: "last-accessibility-trusted")
         storage.removeObject(forKey: "last-skip-log-time")
-        logMessage("Accessibility permission flags reset", level: .info)
+        // logMessage("Accessibility permission flags reset", level: .info)
     }
     
     // Force request accessibility permission
     @objc func forceRequestAccessibilityPermission() {
-        logMessage("Force requesting accessibility permission", level: .info)
+        // logMessage("Force requesting accessibility permission", level: .info)
         storage.removeObject(forKey: "accessibility-prompt-shown")
         requestAccessibilityPermission()
     }
     
     // Force check all permissions (for testing)
     @objc func forceCheckAllPermissions() {
-        logMessage("Force checking all permissions", level: .info)
+        // logMessage("Force checking all permissions", level: .info)
         checkPermissionsOnStartup()
     }
     
@@ -2956,20 +3241,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     
     // Reset screen recording permissions for testing
     @objc func resetScreenRecordingPermissions() {
-        logMessage("Resetting screen recording permission flags", level: .info)
+        // logMessage("Resetting screen recording permission flags", level: .info)
         storage.removeObject(forKey: "screen-recording-prompt-shown")
         storage.removeObject(forKey: "last-screen-recording-check")
         storage.removeObject(forKey: "last-screen-recording-notification")
-        logMessage("Screen recording permission flags reset", level: .info)
+        // logMessage("Screen recording permission flags reset", level: .info)
     }
     
     // Reset screen recording permissions using tccutil (more thorough)
     @objc func resetScreenRecordingPermissionsSystem() {
-        logMessage("Resetting screen recording permissions using tccutil", level: .info)
+        // logMessage("Resetting screen recording permissions using tccutil", level: .info)
         
         // Get the bundle identifier
         let bundleId = Bundle.main.bundleIdentifier ?? "com.unknown.monitorclient"
-        logMessage("Bundle identifier: \(bundleId)", level: .info)
+        // logMessage("Bundle identifier: \(bundleId)", level: .info)
         
         // Run tccutil command to reset screen recording permissions
         let task = Process()
@@ -2981,7 +3266,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             task.waitUntilExit()
             
             if task.terminationStatus == 0 {
-                logMessage("Successfully reset screen recording permissions using tccutil", level: .info)
+                // logMessage("Successfully reset screen recording permissions using tccutil", level: .info)
                 // Also reset our local flags
                 resetScreenRecordingPermissions()
             } else {
@@ -2994,14 +3279,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     
     // Force request screen recording permission
     @objc func forceRequestScreenRecordingPermission() {
-        logMessage("Force requesting screen recording permission", level: .info)
+        // logMessage("Force requesting screen recording permission", level: .info)
         storage.removeObject(forKey: "screen-recording-prompt-shown")
         requestScreenRecordingPermission()
     }
     
     // Open System Preferences to Accessibility settings
     @objc func openAccessibilityPreferences() {
-        logMessage("Opening System Settings to Accessibility settings", level: .info)
+        // logMessage("Opening System Settings to Accessibility settings", level: .info)
         
         // Try multiple approaches to open System Settings
         let approaches = [
@@ -3076,15 +3361,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         // Try each approach
         for (index, approach) in approaches.enumerated() {
             if approach() {
-                logMessage("Successfully opened System Settings using approach \(index + 1)", level: .info)
+                // logMessage("Successfully opened System Settings using approach \(index + 1)", level: .info)
                 return
             }
         }
         
         // If all approaches fail, provide manual instructions
         logMessage("Failed to open System Settings automatically", level: .warning)
-        logMessage("Please manually open System Settings > Privacy & Security > Accessibility", level: .info)
-        logMessage("Then add this app to the Accessibility list", level: .info)
+        // logMessage("Please manually open System Settings > Privacy & Security > Accessibility", level: .info)
+        // logMessage("Then add this app to the Accessibility list", level: .info)
         
         // Show a user notification with manual instructions
         let notification = NSUserNotification()
@@ -3097,7 +3382,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     
     // Open System Preferences to Screen Recording settings
     @objc func openScreenRecordingPreferences() {
-        logMessage("Opening System Settings to Screen Recording settings", level: .info)
+        // logMessage("Opening System Settings to Screen Recording settings", level: .info)
         
         // Try multiple approaches to open System Settings
         let approaches = [
@@ -3172,15 +3457,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         // Try each approach
         for (index, approach) in approaches.enumerated() {
             if approach() {
-                logMessage("Successfully opened System Settings using approach \(index + 1)", level: .info)
+                // logMessage("Successfully opened System Settings using approach \(index + 1)", level: .info)
                 return
             }
         }
         
         // If all approaches fail, provide manual instructions
         logMessage("Failed to open System Settings automatically", level: .warning)
-        logMessage("Please manually open System Settings > Privacy & Security > Screen Recording", level: .info)
-        logMessage("Then add this app to the Screen Recording list", level: .info)
+        // logMessage("Please manually open System Settings > Privacy & Security > Screen Recording", level: .info)
+        // logMessage("Then add this app to the Screen Recording list", level: .info)
         
         // Show a user notification with manual instructions
         let notification = NSUserNotification()
@@ -3204,7 +3489,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                 // Only show notification if we haven't shown it recently
                 let lastNotificationTime = storage.double(forKey: "last-accessibility-notification")
                 if currentTime - lastNotificationTime > 3600 { // Only show notification once per hour
-                    logMessage("Periodic accessibility check: permission not granted, showing notification...", level: .info)
+                    // logMessage("Periodic accessibility check: permission not granted, showing notification...", level: .info)
                     
                     // Show user notification about accessibility permission
                     let notification = NSUserNotification()
@@ -3244,7 +3529,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                     // Only show notification if we haven't shown it recently
                     let lastNotificationTime = storage.double(forKey: "last-screen-recording-notification")
                     if currentTime - lastNotificationTime > 3600 { // Only show notification once per hour
-                        logMessage("Periodic screen recording check: permission not granted, showing notification...", level: .info)
+                        // logMessage("Periodic screen recording check: permission not granted, showing notification...", level: .info)
                         
                         // Show user notification about screen recording permission
                         let notification = NSUserNotification()
@@ -3288,45 +3573,45 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
 
     // Debug method to check accessibility permission status
     @objc func debugAccessibilityStatus() {
-        logMessage("=== Accessibility Permission Debug ===", level: .info)
+        // logMessage("=== Accessibility Permission Debug ===", level: .info)
         
         // Check current permission status
         let isTrusted = AXIsProcessTrusted()
-        logMessage("AXIsProcessTrusted(): \(isTrusted)", level: .info)
+        // logMessage("AXIsProcessTrusted(): \(isTrusted)", level: .info)
         
         // Check app bundle identifier
         if let bundleId = Bundle.main.bundleIdentifier {
-            logMessage("Bundle Identifier: \(bundleId)", level: .info)
+            // logMessage("Bundle Identifier: \(bundleId)", level: .info)
         }
         
         // Check if app is running from Xcode
         let isRunningFromXcode = ProcessInfo.processInfo.environment["XPC_SERVICE_NAME"] != nil || 
                                 ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
-        logMessage("Running from Xcode: \(isRunningFromXcode)", level: .info)
+        // logMessage("Running from Xcode: \(isRunningFromXcode)", level: .info)
         
         // Check app path
         let appPath = Bundle.main.bundlePath
-        logMessage("App Path: \(appPath)", level: .info)
+        // logMessage("App Path: \(appPath)", level: .info)
         
         // Check if app is in Applications folder
         let isInApplications = appPath.contains("/Applications/")
-        logMessage("In Applications folder: \(isInApplications)", level: .info)
+        // logMessage("In Applications folder: \(isInApplications)", level: .info)
         
         // Check stored permission flags
         let promptShown = storage.bool(forKey: "accessibility-prompt-shown")
         let lastTrusted = storage.bool(forKey: "last-accessibility-trusted")
-        logMessage("Stored flags - Prompt shown: \(promptShown), Last trusted: \(lastTrusted)", level: .info)
+        // logMessage("Stored flags - Prompt shown: \(promptShown), Last trusted: \(lastTrusted)", level: .info)
         
         // Check event tap status
         if let tap = eventTap {
             let isEnabled = CGEvent.tapIsEnabled(tap: tap)
             let portValid = CFMachPortIsValid(tap)
-            logMessage("Event tap - Enabled: \(isEnabled), Port valid: \(portValid)", level: .info)
+            // logMessage("Event tap - Enabled: \(isEnabled), Port valid: \(portValid)", level: .info)
         } else {
-            logMessage("Event tap: nil", level: .info)
+            // logMessage("Event tap: nil", level: .info)
         }
         
-        logMessage("=== End Debug ===", level: .info)
+        // logMessage("=== End Debug ===", level: .info)
     }
     
     
@@ -3334,27 +3619,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     
     // Check app entitlements and provide debugging guidance
     @objc func checkAppEntitlements() {
-        logMessage("=== App Entitlements Check ===", level: .info)
+        // logMessage("=== App Entitlements Check ===", level: .info)
         
         // Check if app has accessibility entitlements
         let hasAccessibilityEntitlement = Bundle.main.object(forInfoDictionaryKey: "NSAppleEventsUsageDescription") != nil ||
                                          Bundle.main.object(forInfoDictionaryKey: "NSSystemAdministrationUsageDescription") != nil
         
-        logMessage("Has accessibility entitlements: \(hasAccessibilityEntitlement)", level: .info)
+        // logMessage("Has accessibility entitlements: \(hasAccessibilityEntitlement)", level: .info)
         
         // Check if running in sandbox
         let isSandboxed = Bundle.main.object(forInfoDictionaryKey: "com.apple.security.app-sandbox") != nil
-        logMessage("App is sandboxed: \(isSandboxed)", level: .info)
+        // logMessage("App is sandboxed: \(isSandboxed)", level: .info)
         
         // Check if running from Xcode
         let isRunningFromXcode = ProcessInfo.processInfo.environment["XPC_SERVICE_NAME"] != nil || 
                                 ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
-        logMessage("Running from Xcode: \(isRunningFromXcode)", level: .info)
+        // logMessage("Running from Xcode: \(isRunningFromXcode)", level: .info)
         
         // Provide guidance based on the situation
         if isRunningFromXcode {
             logMessage("⚠️  Running from Xcode - accessibility permissions may not work properly", level: .warning)
-            logMessage("💡 Try building and running the app outside of Xcode", level: .info)
+            // logMessage("💡 Try building and running the app outside of Xcode", level: .info)
         }
         
         if isSandboxed {
@@ -3363,39 +3648,39 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         
         if !hasAccessibilityEntitlement {
             logMessage("⚠️  App may be missing accessibility entitlements", level: .warning)
-            logMessage("💡 Check your app's entitlements file", level: .info)
+            // logMessage("💡 Check your app's entitlements file", level: .info)
         }
         
-        logMessage("=== End Entitlements Check ===", level: .info)
+        // logMessage("=== End Entitlements Check ===", level: .info)
     }
     
     
     // Manual send all logs function
     @objc func sendAllLogs() {
-        logMessage("=== Manual Send All Logs ===", level: .info)
+        // logMessage("=== Manual Send All Logs ===", level: .info)
         
         // Send all types of logs
         DispatchQueue.global(qos: .background).async {
             // 1. Send Tic event (heartbeat)
             do {
                 try self.sendTicEvent()
-                self.logMessage("✅ Tic event sent", level: .info)
+                // self.logMessage("✅ Tic event sent", level: .info)
             } catch {
                 self.logError("❌ Tic event failed: \(error)", context: "ManualSend")
             }
             
             // 2. Send browser histories
             self.sendBrowserHistories()
-            self.logMessage("✅ Browser histories sent", level: .info)
+            // self.logMessage("✅ Browser histories sent", level: .info)
             
             // 3. Send key logs
             self.sendKeyLogs()
-            self.logMessage("✅ Key logs sent", level: .info)
+            // self.logMessage("✅ Key logs sent", level: .info)
             
             // 4. Send USB logs
             do {
                 try self.sendUSBLogs()
-                self.logMessage("✅ USB logs sent", level: .info)
+                // self.logMessage("✅ USB logs sent", level: .info)
             } catch {
                 self.logError("❌ USB logs failed: \(error)", context: "ManualSend")
             }
@@ -3403,12 +3688,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             // 5. Send screenshot
             if self.isScreenRecordingEnabled() {
                 self.TakeScreenShotsAndPost()
-                self.logMessage("✅ Screenshot sent", level: .info)
+                // self.logMessage("✅ Screenshot sent", level: .info)
             } else {
                 self.logMessage("⚠️ Screenshot skipped - permission not granted", level: .warning)
             }
             
-            self.logMessage("=== All Logs Send Complete ===", level: .info)
+            // self.logMessage("=== All Logs Send Complete ===", level: .info)
             
             // Show notification
             DispatchQueue.main.async {
@@ -3454,7 +3739,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         // Start status update timer (optimized interval)
         statusUpdateTimer = Timer.scheduledTimer(timeInterval: 10.0, target: self, selector: #selector(updateStatusMenu), userInfo: nil, repeats: true)
         
-        logMessage("Status bar menu setup complete", level: .info)
+        // logMessage("Status bar menu setup complete", level: .info)
     }
     
     private func setupStatusMenuItems() {
@@ -3542,6 +3827,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettingsDialog), keyEquivalent: ",")
         settingsItem.keyEquivalentModifierMask = [.command]
         menu.addItem(settingsItem)
+        
+        // Configuration section
+        menu.addItem(NSMenuItem.separator())
+        
+        // Configuration refresh
+        let configRefreshItem = NSMenuItem(title: "Refresh Configuration", action: #selector(manualConfigRefresh), keyEquivalent: "r")
+        configRefreshItem.keyEquivalentModifierMask = [.command]
+        menu.addItem(configRefreshItem)
+        
+        // Configuration display
+        let configDisplayItem = NSMenuItem(title: "Configuration: Loading...", action: nil, keyEquivalent: "")
+        configDisplayItem.tag = 300
+        configDisplayItem.isEnabled = false
+        menu.addItem(configDisplayItem)
         
         // Grant permissions (unified button for both accessibility and screen recording)
         let grantPermissionsItem = NSMenuItem(title: "Grant Permissions", action: #selector(grantAllPermissions), keyEquivalent: "")
@@ -3633,6 +3932,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             keyboardItem.title = "Keyboard: \(isEnabled ? "✅ Active" : "❌ Inactive") (\(keyCount) keys)"
         }
         
+        // Update configuration display
+        if let configItem = menu.item(withTag: 300) {
+            if let config = currentConfig, let lastUpdate = lastConfigUpdate {
+                let formatter = DateFormatter()
+                formatter.dateStyle = .short
+                formatter.timeStyle = .short
+                let lastUpdateStr = formatter.string(from: lastUpdate)
+                
+                configItem.title = "Configuration - Updated: \(lastUpdateStr)"
+            } else {
+                configItem.title = "Configuration: Not loaded"
+            }
+        }
+        
         // Update last sent times
         updateLastSentTime(menu: menu, tag: 200, lastSent: lastKeyLogSent, type: "Key Logs")
         updateLastSentTime(menu: menu, tag: 201, lastSent: lastBrowserHistorySent, type: "Browser History")
@@ -3656,13 +3969,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     
     // Quit the app (useful for background apps)
     @objc func quitApp() {
-        logMessage("Quitting MonitorClient...", level: .info)
+        // logMessage("Quitting MonitorClient...", level: .info)
         NSApplication.shared.terminate(nil)
     }
     
     
     private func testFormat(url: URL, data: [String: Any], name: String) {
-        logMessage("Testing format: \(name)", level: .info)
+        // logMessage("Testing format: \(name)", level: .info)
         
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: data)

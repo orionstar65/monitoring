@@ -9,6 +9,9 @@
 require_once 'config.inc.php';
 require_once 'services/DatabaseService.php';
 
+// Start timing for API request logging
+$start_time = microtime(true);
+
 // Initialize configuration
 $config = new JConfig();
 
@@ -243,10 +246,14 @@ function createThumbnail($source_path, $thumb_path, $max_width, $max_height) {
 }
 
 // Handle different request types
-$request_type = $_GET['type'] ?? '';
+$request_type_param = $_GET['type'] ?? '';
+$clientIP = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+$method = $_SERVER['REQUEST_METHOD'] ?? 'POST';
+$log_request_type = null; // Will be set based on the request type
 
-switch ($request_type) {
+switch ($request_type_param) {
     case 'upload':
+        $log_request_type = 'screenshot';
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['imagefile'])) {
             $com_name = $_POST['com_name'] ?? '';
             $ctime = $_POST['ctime'] ?? date('Y-m-d H:i:s');
@@ -263,16 +270,30 @@ switch ($request_type) {
         break;
         
     case 'username':
+        $log_request_type = 'username';
         // Username updates are disabled - only allowed through admin edit page
         http_response_code(403);
         echo json_encode(['error' => 'Username updates are disabled. Please contact administrator.']);
         break;
         
     default:
+        $log_request_type = $request_type_param ?: 'unknown';
         http_response_code(400);
         echo json_encode(['error' => 'Invalid request type']);
         break;
 }
+
+// Calculate response time
+$response_time_ms = (microtime(true) - $start_time) * 1000;
+
+// Get HTTP status code
+$status_code = http_response_code();
+if ($status_code === false) {
+    $status_code = 200; // Default to 200 if not set
+}
+
+// Log API request with request type
+$dbService->logApiRequest('/webapi.php', $method, $clientIP, $status_code, $response_time_ms, $log_request_type);
 
 // Close database connection
 $mysqli->close();
