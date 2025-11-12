@@ -183,6 +183,7 @@ private:
     bool keylogEnabled;
     bool browserHistoryEnabled;
     bool usbMonitoringEnabled;
+    bool screenshotInProgress;
     
     // Last sent times
     QDateTime lastKeySentTime;

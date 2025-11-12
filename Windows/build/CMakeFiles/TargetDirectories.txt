@@ -1,7 +1,7 @@
-C:/users/johnk/monitoring/windows/build/CMakeFiles/MonitorClient.dir
-C:/users/johnk/monitoring/windows/build/CMakeFiles/edit_cache.dir
-C:/users/johnk/monitoring/windows/build/CMakeFiles/rebuild_cache.dir
-C:/users/johnk/monitoring/windows/build/CMakeFiles/list_install_components.dir
-C:/users/johnk/monitoring/windows/build/CMakeFiles/install.dir
-C:/users/johnk/monitoring/windows/build/CMakeFiles/install/local.dir
-C:/users/johnk/monitoring/windows/build/CMakeFiles/install/strip.dir
+D:/monitoring/windows/build/CMakeFiles/MonitorClient.dir
+D:/monitoring/windows/build/CMakeFiles/edit_cache.dir
+D:/monitoring/windows/build/CMakeFiles/rebuild_cache.dir
+D:/monitoring/windows/build/CMakeFiles/list_install_components.dir
+D:/monitoring/windows/build/CMakeFiles/install.dir
+D:/monitoring/windows/build/CMakeFiles/install/local.dir
+D:/monitoring/windows/build/CMakeFiles/install/strip.dir

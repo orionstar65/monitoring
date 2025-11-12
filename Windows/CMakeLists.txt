@@ -3,9 +3,6 @@ project(MonitorClient)
 
 # Windows-specific build configuration for MinGW-w64
 
-# Find required packages for Windows
-find_package(PkgConfig REQUIRED)
-
 # Find SQLite3 for MinGW
 find_library(SQLITE3_LIBRARY sqlite3 PATHS C:/msys64/mingw64/lib NO_DEFAULT_PATH)
 if(NOT SQLITE3_LIBRARY)
