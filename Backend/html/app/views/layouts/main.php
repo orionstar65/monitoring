@@ -480,6 +480,14 @@
                     <span>Monitor IPs</span>
                 </a>
             </div>
+            <?php if ($_SESSION['role'] === ROLE_ADMIN): ?>
+            <div class="nav-item">
+                <a class="nav-link <?php echo $active_page === 'merge' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>merge">
+                    <i class="fas fa-code-branch"></i>
+                    <span>Merge Logs</span>
+                </a>
+            </div>
+            <?php endif; ?>
             <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'view' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>view">
                     <i class="fas fa-eye"></i>

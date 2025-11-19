@@ -973,5 +973,227 @@ class DatabaseService {
         
         return $client;
     }
+    
+    /**
+     * Merge logs from source monitor IP to target monitor IP
+     * Updates all log tables, moves log files, and deletes source entry
+     * 
+     * @param int $source_ip_id Source monitor IP ID
+     * @param int $target_ip_id Target monitor IP ID
+     * @return array Result with success status and details
+     */
+    public function mergeMonitorLogs($source_ip_id, $target_ip_id) {
+        // Validate inputs
+        if ($source_ip_id == $target_ip_id) {
+            return [
+                'success' => false,
+                'error' => 'Source and target cannot be the same'
+            ];
+        }
+        
+        // Get source and target monitor info
+        $source_stmt = $this->mysqli->prepare("SELECT * FROM tbl_monitor_ips WHERE id = ?");
+        $source_stmt->bind_param("i", $source_ip_id);
+        $source_stmt->execute();
+        $source_result = $source_stmt->get_result();
+        $source_monitor = $source_result->fetch_assoc();
+        $source_stmt->close();
+        
+        if (!$source_monitor) {
+            return [
+                'success' => false,
+                'error' => 'Source monitor not found'
+            ];
+        }
+        
+        $target_stmt = $this->mysqli->prepare("SELECT * FROM tbl_monitor_ips WHERE id = ?");
+        $target_stmt->bind_param("i", $target_ip_id);
+        $target_stmt->execute();
+        $target_result = $target_stmt->get_result();
+        $target_monitor = $target_result->fetch_assoc();
+        $target_stmt->close();
+        
+        if (!$target_monitor) {
+            return [
+                'success' => false,
+                'error' => 'Target monitor not found'
+            ];
+        }
+        
+        $source_ip = $source_monitor['ip_address'];
+        $target_ip = $target_monitor['ip_address'];
+        
+        // Start transaction
+        $this->mysqli->begin_transaction();
+        
+        try {
+            $stats = [
+                'browser_history_logs' => 0,
+                'key_logs' => 0,
+                'usb_device_logs' => 0,
+                'screenshot_metadata' => 0,
+                'storage_statistics' => 0
+            ];
+            
+            // Update browser_history_logs
+            $stmt = $this->mysqli->prepare("UPDATE browser_history_logs SET monitor_ip_id = ? WHERE monitor_ip_id = ?");
+            $stmt->bind_param("ii", $target_ip_id, $source_ip_id);
+            $stmt->execute();
+            $stats['browser_history_logs'] = $stmt->affected_rows;
+            $stmt->close();
+            
+            // Update key_logs
+            $stmt = $this->mysqli->prepare("UPDATE key_logs SET monitor_ip_id = ? WHERE monitor_ip_id = ?");
+            $stmt->bind_param("ii", $target_ip_id, $source_ip_id);
+            $stmt->execute();
+            $stats['key_logs'] = $stmt->affected_rows;
+            $stmt->close();
+            
+            // Update usb_device_logs
+            $stmt = $this->mysqli->prepare("UPDATE usb_device_logs SET monitor_ip_id = ? WHERE monitor_ip_id = ?");
+            $stmt->bind_param("ii", $target_ip_id, $source_ip_id);
+            $stmt->execute();
+            $stats['usb_device_logs'] = $stmt->affected_rows;
+            $stmt->close();
+            
+            // Update screenshot_metadata
+            $stmt = $this->mysqli->prepare("UPDATE screenshot_metadata SET monitor_ip_id = ? WHERE monitor_ip_id = ?");
+            $stmt->bind_param("ii", $target_ip_id, $source_ip_id);
+            $stmt->execute();
+            $stats['screenshot_metadata'] = $stmt->affected_rows;
+            $stmt->close();
+            
+            // Update storage_statistics
+            $stmt = $this->mysqli->prepare("UPDATE storage_statistics SET monitor_ip_id = ? WHERE monitor_ip_id = ?");
+            $stmt->bind_param("ii", $target_ip_id, $source_ip_id);
+            $stmt->execute();
+            $stats['storage_statistics'] = $stmt->affected_rows;
+            $stmt->close();
+            
+            // Move files from logs, screens, and thumbnails folders
+            // Use BASEPATH if defined, otherwise construct from __DIR__
+            if (defined('BASEPATH')) {
+                $base_path = BASEPATH;
+            } else {
+                $base_path = __DIR__ . '/../../';
+            }
+            
+            $directories_to_move = ['logs', 'screens', 'thumbnails'];
+            $files_moved = 0;
+            $files_moved_by_type = [
+                'logs' => 0,
+                'screens' => 0,
+                'thumbnails' => 0
+            ];
+            
+            foreach ($directories_to_move as $dir_type) {
+                $source_dir = $base_path . 'data/' . $dir_type . '/ip_' . $source_ip . '/';
+                $target_dir = $base_path . 'data/' . $dir_type . '/ip_' . $target_ip . '/';
+                
+                if (file_exists($source_dir) && is_dir($source_dir)) {
+                    // Create target directory if it doesn't exist
+                    if (!file_exists($target_dir)) {
+                        @mkdir($target_dir, 0755, true);
+                    }
+                    
+                    // Move all files and subdirectories
+                    $iterator = new RecursiveIteratorIterator(
+                        new RecursiveDirectoryIterator($source_dir, RecursiveDirectoryIterator::SKIP_DOTS),
+                        RecursiveIteratorIterator::SELF_FIRST
+                    );
+                    
+                    // Prepare IP address strings for filename replacement
+                    $source_ip_filename = str_replace('.', '_', $source_ip);
+                    $target_ip_filename = str_replace('.', '_', $target_ip);
+                    
+                    foreach ($iterator as $item) {
+                        $source_path = $item->getPathname();
+                        $relative_path = substr($source_path, strlen($source_dir));
+                        
+                        if ($item->isDir()) {
+                            // For directories, just create in target
+                            $target_path = $target_dir . $relative_path;
+                            if (!file_exists($target_path)) {
+                                @mkdir($target_path, 0755, true);
+                            }
+                        } else {
+                            // For files, replace source IP with target IP in filename
+                            $filename = basename($relative_path);
+                            $directory = dirname($relative_path);
+                            
+                            // Replace source IP in filename with target IP
+                            $new_filename = str_replace($source_ip_filename, $target_ip_filename, $filename);
+                            
+                            // Construct target path
+                            if ($directory && $directory !== '.') {
+                                $target_path = $target_dir . $directory . '/' . $new_filename;
+                            } else {
+                                $target_path = $target_dir . $new_filename;
+                            }
+                            
+                            // Create subdirectory if needed
+                            if ($directory && $directory !== '.') {
+                                $target_subdir = $target_dir . $directory;
+                                if (!file_exists($target_subdir)) {
+                                    @mkdir($target_subdir, 0755, true);
+                                }
+                            }
+                            
+                            // Handle conflicts by appending timestamp
+                            if (file_exists($target_path)) {
+                                $path_info = pathinfo($target_path);
+                                $timestamp = date('YmdHis');
+                                $target_path = $path_info['dirname'] . '/' . $path_info['filename'] . '_' . $timestamp . '.' . $path_info['extension'];
+                            }
+                            
+                            if (@rename($source_path, $target_path)) {
+                                $files_moved++;
+                                $files_moved_by_type[$dir_type]++;
+                            } else {
+                                // If rename fails, try copy then delete
+                                if (@copy($source_path, $target_path)) {
+                                    @unlink($source_path);
+                                    $files_moved++;
+                                    $files_moved_by_type[$dir_type]++;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Remove empty source directory
+                    @rmdir($source_dir);
+                }
+            }
+            
+            // Delete source monitor entry
+            $stmt = $this->mysqli->prepare("DELETE FROM tbl_monitor_ips WHERE id = ?");
+            $stmt->bind_param("i", $source_ip_id);
+            $stmt->execute();
+            $stmt->close();
+            
+            // Commit transaction
+            $this->mysqli->commit();
+            
+            return [
+                'success' => true,
+                'message' => 'Logs merged successfully',
+                'stats' => $stats,
+                'files_moved' => $files_moved,
+                'files_moved_by_type' => $files_moved_by_type,
+                'source_ip' => $source_ip,
+                'target_ip' => $target_ip
+            ];
+            
+        } catch (Exception $e) {
+            // Rollback transaction on error
+            $this->mysqli->rollback();
+            error_log("Merge logs error: " . $e->getMessage());
+            
+            return [
+                'success' => false,
+                'error' => 'Merge failed: ' . $e->getMessage()
+            ];
+        }
+    }
 }
 ?> 
