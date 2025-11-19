@@ -31,7 +31,7 @@ function getClientInfo($link = null) {
     $client_ip = $_SERVER['REMOTE_ADDR'];
     
     // Get client info from database based on IP address
-    $stmt = $link->prepare("SELECT id, name, username, type, last_monitor_tic FROM tbl_monitor_ips WHERE ip_address = ?");
+    $stmt = $link->prepare("SELECT id, name, username, type, updated_at FROM tbl_monitor_ips WHERE ip_address = ?");
     $stmt->bind_param("s", $client_ip);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -43,7 +43,7 @@ function getClientInfo($link = null) {
             'name' => $row['name'],
             'username' => $row['username'],
             'type' => $row['type'],
-            'last_browser_tic' => $row['last_monitor_tic'] ?: date('Y-m-d H:i:s')
+            'last_browser_tic' => $row['updated_at'] ?: date('Y-m-d H:i:s')
         ];
     } else {
         // If no record found, create a default one

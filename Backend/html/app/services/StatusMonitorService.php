@@ -4,13 +4,13 @@
  * Checks client status and triggers Slack notifications for inactive clients
  */
 
-// Get absolute path to Backend directory (parent of services directory)
-$backend_dir = dirname(__DIR__);
+// Get absolute path to Backend directory
+$backend_dir = dirname(dirname(dirname(__DIR__)));
 
 require_once $backend_dir . '/config.inc.php';
-require_once $backend_dir . '/services/DatabaseService.php';
+require_once __DIR__ . '/DatabaseService.php';
 require_once $backend_dir . '/services/SlackService.php';
-require_once $backend_dir . '/html/app/config/slack_config.php';
+require_once __DIR__ . '/../config/slack_config.php';
 
 class StatusMonitorService {
     private $dbService;

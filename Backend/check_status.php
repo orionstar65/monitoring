@@ -14,7 +14,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 // Set timezone
-date_default_timezone_set('Asia/Vladivostok');
+// date_default_timezone_set('Asia/Vladivostok');
 
 // Include config file first to check server type
 require_once __DIR__ . '/html/app/config/slack_config.php';
@@ -26,7 +26,7 @@ if (!defined('SLACK_SERVER_TYPE') || empty(SLACK_SERVER_TYPE)) {
 }
 
 // Include required files
-require_once __DIR__ . '/services/StatusMonitorService.php';
+require_once __DIR__ . '/html/app/services/StatusMonitorService.php';
 
 // Command line argument handling
 $action = $argv[1] ?? 'check';

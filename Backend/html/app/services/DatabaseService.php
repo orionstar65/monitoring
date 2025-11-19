@@ -436,18 +436,18 @@ class DatabaseService {
     
     /**
      * Update monitor IP last activity timestamps
+     * Now uses updated_at as the single source of truth for last activity
      */
     public function updateMonitorActivity($ip_address, $activity_type = 'monitor') {
-        $field = ($activity_type == 'browser') ? 'last_browser_tic' : 'last_monitor_tic';
         $current_time = date('Y-m-d H:i:s');
         
         $stmt = $this->mysqli->prepare("
             UPDATE tbl_monitor_ips 
-            SET $field = ?, updated_at = ? 
+            SET updated_at = ? 
             WHERE ip_address = ?
         ");
         
-        $stmt->bind_param("sss", $current_time, $current_time, $ip_address);
+        $stmt->bind_param("ss", $current_time, $ip_address);
         $result = $stmt->execute();
         $stmt->close();
         
@@ -455,8 +455,58 @@ class DatabaseService {
     }
     
     /**
+     * Calculate client status based on updated_at timestamp
+     * This is the single source of truth for status calculation across the entire application
+     * Uses exact UI logic: time_diff <= 300 = 'online', time_diff <= 3600 = 'inactive', time_diff > 3600 = 'offline'
+     * 
+     * @param string|null $updated_at The updated_at timestamp from database
+     * @return array Status information: ['status' => 'online'|'inactive'|'offline', 'status_class' => 'success'|'warning'|'danger', 'status_text' => 'Online'|'Inactive'|'Offline', 'time_diff' => seconds, 'updated_at_timestamp' => unix timestamp]
+     */
+    public function calculateClientStatus($updated_at) {
+        $updated_at_value = $updated_at ?? null;
+        $updated_at_timestamp = ($updated_at_value !== null && $updated_at_value !== '') ? strtotime($updated_at_value) : 0;
+        $time_diff = time() - $updated_at_timestamp;
+        
+        // Use exact UI logic:
+        // time_diff <= 300 (5 minutes) = 'online'
+        // time_diff <= 3600 (1 hour) = 'inactive'
+        // time_diff > 3600 (1 hour) = 'offline'
+        if ($updated_at_timestamp === 0) {
+            // No activity recorded
+            $status = 'offline';
+            $status_class = 'danger';
+            $status_text = 'Offline';
+        } elseif ($time_diff <= 300) {
+            // 5 minutes - online
+            $status = 'online';
+            $status_class = 'success';
+            $status_text = 'Online';
+        } elseif ($time_diff <= 3600) {
+            // 1 hour - inactive
+            $status = 'inactive';
+            $status_class = 'warning';
+            $status_text = 'Inactive';
+        } else {
+            // More than 1 hour - offline
+            $status = 'offline';
+            $status_class = 'danger';
+            $status_text = 'Offline';
+        }
+        
+        return [
+            'status' => $status,
+            'status_class' => $status_class,
+            'status_text' => $status_text,
+            'time_diff' => $time_diff,
+            'updated_at_timestamp' => $updated_at_timestamp,
+            'live_status' => $status, // Alias for backward compatibility
+        ];
+    }
+    
+    /**
      * Calculate dynamic status based on updated_at timestamp
      * Returns: 'active' if within 5 minutes, 'inactive' if more than 5 minutes
+     * @deprecated Use calculateClientStatus() instead for consistency
      */
     public function calculateDynamicStatus($updated_at) {
         if (!$updated_at) {
@@ -473,15 +523,16 @@ class DatabaseService {
     
     /**
      * Get status text and CSS class for dynamic status
+     * @deprecated Use calculateClientStatus() instead for consistency
      */
     public function getStatusDisplay($updated_at) {
-        $status = $this->calculateDynamicStatus($updated_at);
+        $statusInfo = $this->calculateClientStatus($updated_at);
         
         return [
-            'status' => $status,
-            'text' => ucfirst($status),
-            'class' => $status === 'active' ? 'success' : 'secondary',
-            'icon' => $status === 'active' ? 'fas fa-circle' : 'fas fa-circle'
+            'status' => $statusInfo['status'],
+            'text' => $statusInfo['status_text'],
+            'class' => $statusInfo['status_class'],
+            'icon' => 'fas fa-circle'
         ];
     }
     
@@ -535,11 +586,13 @@ class DatabaseService {
                 $types .= "s";
             }
             
+            // Always update updated_at timestamp
+            // Make this timestamp to be the last activity timestamp
+            $update_fields[] = "updated_at = NOW()";
+            $params[] = $ip_address;
+            $types .= "s";
+            
             if (!empty($update_fields)) {
-                $update_fields[] = "updated_at = NOW()";
-                $params[] = $ip_address;
-                $types .= "s";
-                
                 $stmt = $this->mysqli->prepare("
                     UPDATE tbl_monitor_ips 
                     SET " . implode(", ", $update_fields) . "
@@ -791,11 +844,11 @@ class DatabaseService {
     /**
      * Get inactive clients grouped by slack_id (or username if slack_id is empty)
      * Returns array grouped by slack_id/username with detailed status information
+     * Uses exact same offline logic as UI views: offline = time_diff > 3600 seconds (1 hour)
+     * Filters in PHP to ensure 100% consistency with UI status calculations
      */
     public function getInactiveClientsGroupedByUser($threshold_minutes = 5) {
-        $threshold_seconds = $threshold_minutes * 60;
-        $cutoff_time = date('Y-m-d H:i:s', time() - $threshold_seconds);
-        
+        // Get all clients from database (no SQL filtering to ensure exact PHP calculation)
         $stmt = $this->mysqli->prepare("
             SELECT 
                 m.*,
@@ -824,29 +877,34 @@ class DatabaseService {
                 FROM usb_device_logs 
                 GROUP BY monitor_ip_id
             ) u ON m.id = u.monitor_ip_id
-            WHERE m.updated_at < ?
             ORDER BY COALESCE(m.slack_id, m.username), m.name
         ");
         
-        $stmt->bind_param("s", $cutoff_time);
         $stmt->execute();
         $result = $stmt->get_result();
         $clients = $result->fetch_all(MYSQLI_ASSOC);
         $stmt->close();
         
         // Group by slack_id (or username if slack_id is empty) and add status information
+        // Use calculateClientStatus() for consistent status calculation
         $grouped_clients = [];
         foreach ($clients as $client) {
-            // Use slack_id if available, otherwise fall back to username
-            $group_key = !empty($client['slack_id']) ? $client['slack_id'] : ($client['username'] ?? 'Unknown');
-            $client['status'] = $this->calculateDynamicStatus($client['updated_at']);
-            $client['last_update'] = $client['updated_at'];
+            // Calculate status using the generic function
+            $statusInfo = $this->calculateClientStatus($client['updated_at'] ?? null);
             
-            if (!isset($grouped_clients[$group_key])) {
-                $grouped_clients[$group_key] = [];
+            // Only include clients that are actually "offline" according to UI logic
+            if ($statusInfo['status'] === 'offline') {
+                // Use slack_id if available, otherwise fall back to username
+                $group_key = !empty($client['slack_id']) ? $client['slack_id'] : ($client['username'] ?? 'Unknown');
+                $client['status'] = $statusInfo['status'];
+                $client['last_update'] = $client['updated_at'];
+                
+                if (!isset($grouped_clients[$group_key])) {
+                    $grouped_clients[$group_key] = [];
+                }
+                
+                $grouped_clients[$group_key][] = $client;
             }
-            
-            $grouped_clients[$group_key][] = $client;
         }
         
         return $grouped_clients;
@@ -905,7 +963,11 @@ class DatabaseService {
         $stmt->close();
         
         if ($client) {
-            $client['status'] = $this->calculateDynamicStatus($client['updated_at']);
+            $statusInfo = $this->calculateClientStatus($client['updated_at']);
+            $client['status'] = $statusInfo['status'];
+            $client['status_class'] = $statusInfo['status_class'];
+            $client['status_text'] = $statusInfo['status_text'];
+            $client['live_status'] = $statusInfo['live_status'];
             $client['last_update'] = $client['updated_at'];
         }
         

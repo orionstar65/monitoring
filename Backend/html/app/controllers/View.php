@@ -1,13 +1,16 @@
 <?php
 require_once BASEPATH . 'app/controllers/Base.php';
 require_once BASEPATH . 'app/services/LogParserService.php';
+require_once BASEPATH . 'app/services/StatusService.php';
 
 class View extends Base {
     private $logParser;
+    private $statusService;
     
     public function __construct() {
         parent::__construct();
         $this->logParser = new LogParserService();
+        $this->statusService = StatusService::getInstance();
     }
     
     public function index() {
@@ -18,26 +21,12 @@ class View extends Base {
         
         // Add basic status based on database data only
         foreach ($monitors as &$monitor) {
-            // Determine status based on last_monitor_tic
-            $last_tic_value = $monitor['last_monitor_tic'] ?? null;
-            $last_tic = ($last_tic_value !== null && $last_tic_value !== '') ? strtotime($last_tic_value) : 0;
-            $time_diff = time() - $last_tic;
-            
-            if ($time_diff <= 300) { // 5 minutes
-                $monitor['live_status'] = 'online';
-                $monitor['status_class'] = 'success';
-                $monitor['status_text'] = 'Online';
-            } elseif ($time_diff <= 3600) { // 1 hour
-                $monitor['live_status'] = 'inactive';
-                $monitor['status_class'] = 'warning';
-                $monitor['status_text'] = 'Inactive';
-            } else {
-                $monitor['live_status'] = 'offline';
-                $monitor['status_class'] = 'danger';
-                $monitor['status_text'] = 'Offline';
-            }
-            
-            $monitor['latest_activity'] = $last_tic;
+            // Use StatusService's calculateClientStatus() for consistent status calculation
+            $statusInfo = $this->statusService->calculateClientStatus($monitor['updated_at'] ?? null);
+            $monitor['live_status'] = $statusInfo['status'];
+            $monitor['status_class'] = $statusInfo['status_class'];
+            $monitor['status_text'] = $statusInfo['status_text'];
+            $monitor['latest_activity'] = $statusInfo['updated_at_timestamp'];
         }
         
         $this->view('view/index', ['monitors' => $monitors]);
@@ -271,34 +260,11 @@ class View extends Base {
         
         // Add status based on database data only
         foreach ($monitors as &$monitor) {
-            // Use last_monitor_tic for real-time status (updated by client Tic events every 5 minutes)
-            $last_tic_value = $monitor['last_monitor_tic'] ?? null;
-            $last_tic = ($last_tic_value !== null && $last_tic_value !== '') ? strtotime($last_tic_value) : 0;
-            $time_diff = time() - $last_tic;
-            
-            if ($last_tic === 0) {
-                // No activity recorded
-                $monitor['live_status'] = 'offline';
-                $monitor['status_text'] = 'Never';
-                $monitor['latest_activity'] = 0;
-            } elseif ($time_diff <= 600) { // 10 minutes - very recent activity (within 2 Tic cycles)
-                $monitor['live_status'] = 'online';
-                $monitor['status_text'] = 'Online';
-                $monitor['latest_activity'] = $last_tic;
-            } elseif ($time_diff <= 1800) { // 30 minutes - recent activity (within 6 Tic cycles)
-                $monitor['live_status'] = 'online';
-                $monitor['status_text'] = 'Online';
-                $monitor['latest_activity'] = $last_tic;
-            } elseif ($time_diff <= 3600) { // 1 hour - some activity (within 12 Tic cycles)
-                $monitor['live_status'] = 'inactive';
-                $monitor['status_text'] = 'Inactive';
-                $monitor['latest_activity'] = $last_tic;
-            } else {
-                // More than 1 hour - likely offline
-                $monitor['live_status'] = 'offline';
-                $monitor['status_text'] = 'Offline';
-                $monitor['latest_activity'] = $last_tic;
-            }
+            // Use StatusService's calculateClientStatus() for consistent status calculation
+            $statusInfo = $this->statusService->calculateClientStatus($monitor['updated_at'] ?? null);
+            $monitor['live_status'] = $statusInfo['status'];
+            $monitor['status_text'] = $statusInfo['status_text'];
+            $monitor['latest_activity'] = $statusInfo['updated_at_timestamp'];
         }
         
         $this->json($monitors);
@@ -685,26 +651,12 @@ class View extends Base {
         
         // Add basic status based on database data only
         foreach ($monitors as &$monitor) {
-            // Determine status based on last_monitor_tic
-            $last_tic_value = $monitor['last_monitor_tic'] ?? null;
-            $last_tic = ($last_tic_value !== null && $last_tic_value !== '') ? strtotime($last_tic_value) : 0;
-            $time_diff = time() - $last_tic;
-            
-            if ($time_diff <= 300) { // 5 minutes
-                $monitor['live_status'] = 'online';
-                $monitor['status_class'] = 'success';
-                $monitor['status_text'] = 'Online';
-            } elseif ($time_diff <= 3600) { // 1 hour
-                $monitor['live_status'] = 'inactive';
-                $monitor['status_class'] = 'warning';
-                $monitor['status_text'] = 'Inactive';
-            } else {
-                $monitor['live_status'] = 'offline';
-                $monitor['status_class'] = 'danger';
-                $monitor['status_text'] = 'Offline';
-            }
-            
-            $monitor['latest_activity'] = $last_tic;
+            // Use StatusService's calculateClientStatus() for consistent status calculation
+            $statusInfo = $this->statusService->calculateClientStatus($monitor['updated_at'] ?? null);
+            $monitor['live_status'] = $statusInfo['status'];
+            $monitor['status_class'] = $statusInfo['status_class'];
+            $monitor['status_text'] = $statusInfo['status_text'];
+            $monitor['latest_activity'] = $statusInfo['updated_at_timestamp'];
         }
         
         $this->view('view/logs', ['monitors' => $monitors]);

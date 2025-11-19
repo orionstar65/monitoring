@@ -15,7 +15,7 @@ class Dashboard extends Base {
         
         // Get recent monitors with actual data from database
         $recentMonitors = $this->db->fetchAll(
-            "SELECT * FROM tbl_monitor_ips ORDER BY last_monitor_tic DESC LIMIT 10"
+            "SELECT * FROM tbl_monitor_ips ORDER BY updated_at DESC LIMIT 10"
         );
         
         // Add actual data information to monitors using database queries
