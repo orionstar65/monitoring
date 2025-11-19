@@ -757,7 +757,7 @@ function formatDate(dateString) {
 }
 
 function formatDevice(log) {
-    const statusClass = getDeviceStatus(log.username, log.last_monitor_tic);
+    const statusClass = getDeviceStatus(log.username, log.updated_at);
     return `
         <div>
             <div class="fw-bold">${escapeHtml(log.username || 'Unknown')}</div>
@@ -767,13 +767,14 @@ function formatDevice(log) {
     `;
 }
 
-function getDeviceStatus(username, lastTic) {
-    if (!lastTic) return 'status-offline';
+function getDeviceStatus(username, updatedAt) {
+    if (!updatedAt) return 'status-offline';
     
-    const lastActivity = new Date(lastTic);
+    const lastActivity = new Date(updatedAt);
     const now = new Date();
     const diffMinutes = (now - lastActivity) / (1000 * 60);
     
+    // Use same thresholds as PHP calculateClientStatus(): <= 5 min = online, <= 60 min = inactive, > 60 min = offline
     if (diffMinutes <= 5) return 'status-online';
     if (diffMinutes <= 60) return 'status-inactive';
     return 'status-offline';

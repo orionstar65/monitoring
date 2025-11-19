@@ -7,7 +7,7 @@
 
 // Include configuration and database service
 require_once 'config.inc.php';
-require_once 'services/DatabaseService.php';
+require_once 'html/app/services/DatabaseService.php';
 
 // Start timing for API request logging
 $start_time = microtime(true);
@@ -35,6 +35,33 @@ if ($mysqli->connect_error) {
 
 // Initialize database service
 $dbService = new DatabaseService($mysqli);
+
+// Get client IP address
+$clientIP = $_SERVER['REMOTE_ADDR'] ?? '';
+
+// Get monitor IP ID
+$ip_id = $dbService->getMonitorIpId($clientIP);
+if (!$ip_id) {
+    error_log("Could not find monitor IP ID for IP: $clientIP");
+    http_response_code(404);
+    echo json_encode(['error' => 'Monitor not found']);
+    exit;
+}
+
+// Get monitor IP information
+$monitor = $dbService->getMonitorIP($clientIP);
+if (!$monitor) {
+    error_log("Could not find monitor IP information for IP: $clientIP");
+    http_response_code(404);
+    echo json_encode(['error' => 'Monitor not found']);
+    exit;
+}
+
+// Get monitor IP username
+$username = $monitor['username'] ?? '';
+
+// Create or update monitor IP record
+$dbService->createOrUpdateMonitorIP($clientIP, null, $username, null);
 
 /**
  * Upload screenshot with metadata storage

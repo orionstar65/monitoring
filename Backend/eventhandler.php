@@ -11,7 +11,7 @@ error_reporting(E_ALL);
 
 // Include configuration and database service
 require_once 'config.inc.php';
-require_once 'services/DatabaseService.php';
+require_once 'html/app/services/DatabaseService.php';
 
 // Set content type to JSON
 header('Content-Type: application/json');

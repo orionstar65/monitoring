@@ -16,7 +16,7 @@ define('SLACK_MESSAGE_ENABLED', true);  // Enable/disable Slack notifications
 define('SLACK_DEBUG_MODE', false);  // Enable debug logging
 
 // Timezone for timestamps
-define('SLACK_TIMEZONE', 'Asia/Vladivostok');
+// define('SLACK_TIMEZONE', 'Asia/Vladivostok');
 
 // Log file path
 define('SLACK_LOG_FILE', '../logs/slack_notifications.log');

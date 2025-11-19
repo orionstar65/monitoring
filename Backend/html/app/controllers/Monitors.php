@@ -1,7 +1,14 @@
 <?php
 require_once BASEPATH . 'app/controllers/Base.php';
+require_once BASEPATH . 'app/services/StatusService.php';
 
 class Monitors extends Base {
+    private $statusService;
+    
+    public function __construct() {
+        parent::__construct();
+        $this->statusService = StatusService::getInstance();
+    }
     
     public function index() {
         $monitors = $this->db->fetchAll(
@@ -10,10 +17,11 @@ class Monitors extends Base {
         
         // Add dynamic status calculation for each monitor
         foreach ($monitors as &$monitor) {
-            $status_display = $this->calculateDynamicStatus($monitor['updated_at']);
-            $monitor['dynamic_status'] = $status_display['status'];
-            $monitor['status_text'] = $status_display['text'];
-            $monitor['status_class'] = $status_display['class'];
+            // Use StatusService's calculateClientStatus() for consistent status calculation
+            $statusInfo = $this->statusService->calculateClientStatus($monitor['updated_at'] ?? null);
+            $monitor['dynamic_status'] = $statusInfo['status'];
+            $monitor['status_text'] = $statusInfo['status_text'];
+            $monitor['status_class'] = $statusInfo['status_class'];
         }
         
         // Calculate distinct usernames count
@@ -28,34 +36,16 @@ class Monitors extends Base {
     
     /**
      * Calculate dynamic status based on updated_at timestamp
+     * @deprecated Use StatusService::calculateClientStatus() instead
      */
     private function calculateDynamicStatus($updated_at) {
-        if (!$updated_at) {
-            return [
-                'status' => 'inactive',
-                'text' => 'Inactive',
-                'class' => 'secondary'
-            ];
-        }
-        
-        $last_activity = strtotime($updated_at);
-        $current_time = time();
-        $time_diff = $current_time - $last_activity;
-        
-        // 5 minutes = 300 seconds
-        if ($time_diff <= 300) {
-            return [
-                'status' => 'active',
-                'text' => 'Active',
-                'class' => 'success'
-            ];
-        } else {
-            return [
-                'status' => 'inactive',
-                'text' => 'Inactive',
-                'class' => 'secondary'
-            ];
-        }
+        // Use StatusService for consistent status calculation
+        $statusInfo = $this->statusService->calculateClientStatus($updated_at);
+        return [
+            'status' => $statusInfo['status'],
+            'text' => $statusInfo['status_text'],
+            'class' => $statusInfo['status_class']
+        ];
     }
     
     public function create() {

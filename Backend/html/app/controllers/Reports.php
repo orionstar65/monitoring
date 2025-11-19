@@ -1,10 +1,13 @@
 <?php
 require_once BASEPATH . 'app/controllers/Base.php';
+require_once BASEPATH . 'app/services/StatusService.php';
 
 class Reports extends Base {
+    private $statusService;
     
     public function __construct() {
         parent::__construct();
+        $this->statusService = StatusService::getInstance();
     }
     
     /**
@@ -24,16 +27,16 @@ class Reports extends Base {
      */
     public function api_devices() {
         $devices = $this->db->fetchAll(
-            "SELECT id, ip_address, username, name, type, last_monitor_tic, 
-                    CASE 
-                        WHEN last_monitor_tic IS NULL THEN 'offline'
-                        WHEN TIMESTAMPDIFF(MINUTE, last_monitor_tic, NOW()) <= 5 THEN 'online'
-                        WHEN TIMESTAMPDIFF(MINUTE, last_monitor_tic, NOW()) <= 60 THEN 'inactive'
-                        ELSE 'offline'
-                    END as status
+            "SELECT id, ip_address, username, name, type, updated_at
              FROM tbl_monitor_ips 
              ORDER BY username ASC, ip_address ASC"
         );
+        
+        // Calculate status in PHP using StatusService for consistency
+        foreach ($devices as &$device) {
+            $statusInfo = $this->statusService->calculateClientStatus($device['updated_at'] ?? null);
+            $device['status'] = $statusInfo['status'];
+        }
         
         $this->json($devices);
     }
@@ -88,7 +91,7 @@ class Reports extends Base {
      */
     private function getMonitoringData($start_date, $end_date, $device_filter, $params) {
         // Get device information
-        $devices_sql = "SELECT m.id, m.ip_address, m.username, m.name, m.type, m.last_monitor_tic
+        $devices_sql = "SELECT m.id, m.ip_address, m.username, m.name, m.type
                        FROM tbl_monitor_ips m 
                        WHERE 1=1 {$device_filter}
                        ORDER BY m.username ASC, m.ip_address ASC";

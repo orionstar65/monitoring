@@ -8,7 +8,7 @@
 
 require_once 'config/ClientConfig.php';
 require_once 'config.inc.php';
-require_once 'services/DatabaseService.php';
+require_once 'html/app/services/DatabaseService.php';
 
 // Start timing for API request logging
 $start_time = microtime(true);
