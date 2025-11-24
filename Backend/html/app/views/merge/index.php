@@ -258,6 +258,26 @@ ob_start();
         </button>
     </div>
     
+    <!-- Fix Filenames Section -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5><i class="fas fa-wrench me-2"></i>Fix Mismatched Filenames</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Fix files that have wrong IP addresses in their filenames (e.g., files with IP 52, 98, or 215 in IP 59 folder).</p>
+            <div class="mb-3">
+                <label for="fix-monitor-select" class="form-label">Select Monitor to Fix:</label>
+                <select class="form-select" id="fix-monitor-select">
+                    <option value="">-- Select Monitor --</option>
+                </select>
+            </div>
+            <button class="btn btn-warning" id="fix-filenames-btn" disabled>
+                <i class="fas fa-tools me-2"></i>Fix Filenames
+            </button>
+            <div id="fix-results" class="mt-3"></div>
+        </div>
+    </div>
+    
     <!-- Alert Container -->
     <div class="alert-container" id="alert-container"></div>
 </div>
@@ -486,6 +506,92 @@ document.addEventListener('DOMContentLoaded', function() {
             mergeBtn.innerHTML = '<i class="fas fa-code-branch me-2"></i>Merge Logs';
         });
     });
+    
+    // Fix filenames functionality
+    const fixMonitorSelect = document.getElementById('fix-monitor-select');
+    const fixFilenamesBtn = document.getElementById('fix-filenames-btn');
+    const fixResults = document.getElementById('fix-results');
+    
+    // Populate fix monitor select
+    function populateFixSelect() {
+        fixMonitorSelect.innerHTML = '<option value="">-- Select Monitor --</option>';
+        monitors.forEach(monitor => {
+            const option = document.createElement('option');
+            option.value = monitor.id;
+            option.textContent = `${monitor.ip_address}${monitor.username ? ' - ' + monitor.username : ''}`;
+            fixMonitorSelect.appendChild(option);
+        });
+    }
+    
+    fixMonitorSelect.addEventListener('change', function() {
+        fixFilenamesBtn.disabled = !this.value;
+    });
+    
+    fixFilenamesBtn.addEventListener('click', function() {
+        const monitorId = parseInt(fixMonitorSelect.value);
+        if (!monitorId) {
+            showAlert('Please select a monitor', 'warning');
+            return;
+        }
+        
+        if (!confirm('This will rename all files with wrong IP addresses in their filenames. Continue?')) {
+            return;
+        }
+        
+        fixFilenamesBtn.disabled = true;
+        fixFilenamesBtn.innerHTML = '<span class="loading-spinner"></span>Fixing...';
+        fixResults.innerHTML = '';
+        
+        const formData = new FormData();
+        formData.append('monitor_id', monitorId);
+        formData.append('source_ips', '192.168.1.52,192.168.1.98,192.168.1.215');
+        
+        fetch('<?php echo BASE_URL; ?>merge/api_fix_filenames', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                let resultHtml = '<div class="alert alert-success">';
+                resultHtml += '<strong>✓ Filename fix completed!</strong><br>';
+                resultHtml += `Files renamed by type:<br>`;
+                resultHtml += `- Logs: ${data.files_renamed_by_type.logs || 0}<br>`;
+                resultHtml += `- Screens: ${data.files_renamed_by_type.screens || 0}<br>`;
+                resultHtml += `- Thumbnails: ${data.files_renamed_by_type.thumbnails || 0}<br>`;
+                resultHtml += `- Total: ${data.files_renamed || 0}<br>`;
+                resultHtml += `Target IP: ${data.target_ip}`;
+                
+                if (data.errors && data.errors.length > 0) {
+                    resultHtml += `<br><br><strong>Errors (${data.errors.length}):</strong><br>`;
+                    resultHtml += '<small>' + data.errors.slice(0, 10).join('<br>') + '</small>';
+                    if (data.errors.length > 10) {
+                        resultHtml += `<br><small>... and ${data.errors.length - 10} more errors</small>`;
+                    }
+                }
+                resultHtml += '</div>';
+                fixResults.innerHTML = resultHtml;
+            } else {
+                fixResults.innerHTML = `<div class="alert alert-danger">Error: ${data.error || 'Unknown error'}</div>`;
+            }
+            
+            fixFilenamesBtn.disabled = false;
+            fixFilenamesBtn.innerHTML = '<i class="fas fa-tools me-2"></i>Fix Filenames';
+        })
+        .catch(error => {
+            console.error('Error fixing filenames:', error);
+            fixResults.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            fixFilenamesBtn.disabled = false;
+            fixFilenamesBtn.innerHTML = '<i class="fas fa-tools me-2"></i>Fix Filenames';
+        });
+    });
+    
+    // Update populateSelects to also populate fix select
+    const originalPopulateSelects = populateSelects;
+    populateSelects = function() {
+        originalPopulateSelects();
+        populateFixSelect();
+    };
     
     // Initial load
     loadMonitors();

@@ -49,6 +49,48 @@ class Merge extends Base {
     }
     
     /**
+     * API endpoint to fix mismatched filenames
+     */
+    public function api_fix_filenames() {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            $this->json([
+                'success' => false,
+                'error' => 'Only POST method allowed'
+            ]);
+            return;
+        }
+        
+        $monitor_id = intval($_POST['monitor_id'] ?? 0);
+        $source_ips = $_POST['source_ips'] ?? [];
+        
+        if (!$monitor_id) {
+            $this->json([
+                'success' => false,
+                'error' => 'Monitor ID is required'
+            ]);
+            return;
+        }
+        
+        if (!$this->dbService) {
+            $this->json([
+                'success' => false,
+                'error' => 'Database service not available'
+            ]);
+            return;
+        }
+        
+        // If source_ips is a string, convert to array
+        if (is_string($source_ips)) {
+            $source_ips = !empty($source_ips) ? explode(',', $source_ips) : [];
+        }
+        
+        // Perform filename fix
+        $result = $this->dbService->fixMismatchedFilenames($monitor_id, $source_ips);
+        
+        $this->json($result);
+    }
+    
+    /**
      * API endpoint to perform the merge operation
      */
     public function api_merge() {

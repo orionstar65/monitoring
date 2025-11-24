@@ -1195,5 +1195,165 @@ class DatabaseService {
             ];
         }
     }
+    
+    /**
+     * Fix mismatched IP addresses in filenames for a given monitor IP
+     * Renames files that have wrong IP addresses in their filenames
+     * 
+     * @param int $monitor_ip_id Monitor IP ID
+     * @param array $source_ips Array of source IPs that should be replaced (e.g., ['192.168.1.52', '192.168.1.98', '192.168.1.215'])
+     * @return array Result with success status and details
+     */
+    public function fixMismatchedFilenames($monitor_ip_id, $source_ips = []) {
+        // Get monitor info
+        $stmt = $this->mysqli->prepare("SELECT * FROM tbl_monitor_ips WHERE id = ?");
+        $stmt->bind_param("i", $monitor_ip_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $monitor = $result->fetch_assoc();
+        $stmt->close();
+        
+        if (!$monitor) {
+            return [
+                'success' => false,
+                'error' => 'Monitor not found'
+            ];
+        }
+        
+        $target_ip = $monitor['ip_address'];
+        $target_ip_filename = str_replace('.', '_', $target_ip);
+        
+        // Use BASEPATH if defined, otherwise construct from __DIR__
+        // BASEPATH should point to html/ directory
+        if (defined('BASEPATH')) {
+            $base_path = BASEPATH;
+        } else {
+            // DatabaseService is in app/services/, so go up 2 levels to get to html/
+            $base_path = realpath(__DIR__ . '/../../') . '/';
+        }
+        
+        $directories_to_fix = ['logs', 'screens', 'thumbnails'];
+        $files_renamed = 0;
+        $files_renamed_by_type = [
+            'logs' => 0,
+            'screens' => 0,
+            'thumbnails' => 0
+        ];
+        $errors = [];
+        
+        foreach ($directories_to_fix as $dir_type) {
+            $target_dir = $base_path . 'data/' . $dir_type . '/ip_' . $target_ip . '/';
+            
+            if (!file_exists($target_dir) || !is_dir($target_dir)) {
+                continue;
+            }
+            
+            // If source_ips provided, only fix those specific IPs, otherwise fix any IP mismatch
+            $source_ip_filenames = [];
+            if (!empty($source_ips)) {
+                foreach ($source_ips as $source_ip) {
+                    $source_ip_filenames[] = str_replace('.', '_', $source_ip);
+                }
+            }
+            
+            // Get all files recursively
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($target_dir, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::LEAVES_ONLY
+            );
+            
+            foreach ($iterator as $item) {
+                if ($item->isFile()) {
+                    $file_path = $item->getPathname();
+                    $filename = basename($file_path);
+                    $directory = dirname($file_path);
+                    
+                    // Check if filename contains any source IP that needs to be replaced
+                    $needs_rename = false;
+                    $new_filename = $filename;
+                    
+                    if (!empty($source_ip_filenames)) {
+                        // Only fix specific source IPs - replace any occurrence in filename
+                        foreach ($source_ip_filenames as $source_ip_filename) {
+                            // Check if filename contains source IP (at start or anywhere)
+                            if (strpos($filename, $source_ip_filename) !== false) {
+                                // Replace all occurrences of source IP with target IP
+                                $new_filename = str_replace($source_ip_filename, $target_ip_filename, $filename);
+                                if ($new_filename !== $filename) {
+                                    $needs_rename = true;
+                                    break;
+                                }
+                            }
+                        }
+                    } else {
+                        // Fix any IP address pattern in filename (192_168_1_XXX format)
+                        // Extract IP pattern from filename (assuming format: IP_DATE_TIME.ext)
+                        // Match IP at the start of filename
+                        if (preg_match('/^(192_168_1_\d+)_/', $filename, $matches)) {
+                            $found_ip = $matches[1];
+                            if ($found_ip !== $target_ip_filename) {
+                                $new_filename = str_replace($found_ip, $target_ip_filename, $filename);
+                                $needs_rename = true;
+                            }
+                        }
+                    }
+                    
+                    if ($needs_rename && $new_filename !== $filename) {
+                        $new_file_path = $directory . '/' . $new_filename;
+                        
+                        // Skip if target file already exists
+                        if (file_exists($new_file_path)) {
+                            // If target exists and source has wrong IP, delete source (it's a duplicate)
+                            if (filesize($file_path) === filesize($new_file_path)) {
+                                @unlink($file_path);
+                                $files_renamed++;
+                                $files_renamed_by_type[$dir_type]++;
+                            } else {
+                                $errors[] = "File already exists with different size: $new_file_path (skipping rename of $file_path)";
+                            }
+                            continue;
+                        }
+                        
+                        // Try rename first (fastest)
+                        $rename_success = false;
+                        if (@rename($file_path, $new_file_path)) {
+                            $files_renamed++;
+                            $files_renamed_by_type[$dir_type]++;
+                            $rename_success = true;
+                        } else {
+                            // If rename fails, try copy then delete (works across filesystems)
+                            if (@copy($file_path, $new_file_path)) {
+                                if (@unlink($file_path)) {
+                                    $files_renamed++;
+                                    $files_renamed_by_type[$dir_type]++;
+                                    $rename_success = true;
+                                } else {
+                                    // Copy succeeded but delete failed - remove the copy
+                                    @unlink($new_file_path);
+                                    $errors[] = "Failed to delete source after copy: $file_path";
+                                }
+                            } else {
+                                $error_msg = "Failed to rename/copy: $file_path to $new_file_path";
+                                $last_error = error_get_last();
+                                if ($last_error && strpos($last_error['message'], 'Permission denied') !== false) {
+                                    $error_msg .= " (Permission denied)";
+                                }
+                                $errors[] = $error_msg;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        return [
+            'success' => true,
+            'message' => 'Filename fix completed',
+            'files_renamed' => $files_renamed,
+            'files_renamed_by_type' => $files_renamed_by_type,
+            'target_ip' => $target_ip,
+            'errors' => $errors
+        ];
+    }
 }
 ?> 
