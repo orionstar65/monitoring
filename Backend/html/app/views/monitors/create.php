@@ -41,6 +41,23 @@ ob_start();
                 </div>
             </div>
             
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="platform" class="form-label">Platform</label>
+                        <select class="form-select" id="platform" name="platform">
+                            <option value="">Not Set</option>
+                            <option value="Windows">Windows</option>
+                            <option value="Mac">Mac</option>
+                            <option value="Ubuntu">Ubuntu</option>
+                        </select>
+                        <div class="form-text">
+                            Operating system platform. Auto-detected from client if not set.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <div class="d-flex justify-content-between">
                 <a href="<?php echo BASE_URL; ?>monitors" class="btn btn-secondary">Cancel</a>
                 <button type="submit" class="btn btn-primary">Create Monitor</button>

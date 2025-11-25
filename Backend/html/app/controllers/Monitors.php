@@ -57,8 +57,12 @@ class Monitors extends Base {
             $username = $_POST['username'] ?? '';
             $mac_address = $_POST['mac_address'] ?? '';
             $type = $_POST['type'] ?? 'user';
+            $platform = trim($_POST['platform'] ?? '');
             
-            if (empty($ip_address) || empty($name)) {
+            // Validate platform if provided
+            if (!empty($platform) && !in_array($platform, ['Windows', 'Mac', 'Ubuntu'])) {
+                $error = 'Invalid platform selected';
+            } elseif (empty($ip_address) || empty($name)) {
                 $error = 'IP address and name are required';
             } else {
                 // Check if IP already exists
@@ -72,7 +76,7 @@ class Monitors extends Base {
                 } else {
                     // No username uniqueness check needed - multiple monitors can have same username
                     if (empty($error)) {
-                        $monitorId = $this->db->insert('tbl_monitor_ips', [
+                        $insert_data = [
                             'ip_address' => $ip_address,
                             'name' => $name,
                             'username' => $username,
@@ -81,7 +85,14 @@ class Monitors extends Base {
                             'os_status' => 0,
                             'monitor_status' => 0,
                             'created_at' => date('Y-m-d H:i:s')
-                        ]);
+                        ];
+                        
+                        // Add platform if provided
+                        if (!empty($platform)) {
+                            $insert_data['platform'] = $platform;
+                        }
+                        
+                        $monitorId = $this->db->insert('tbl_monitor_ips', $insert_data);
                         
                         if ($monitorId) {
                             $this->redirect('monitors');
@@ -112,18 +123,22 @@ class Monitors extends Base {
             $type = $_POST['type'] ?? 'desktop';
             $username = trim($_POST['username'] ?? '');
             $slack_id = trim($_POST['slack_id'] ?? '');
+            $platform = trim($_POST['platform'] ?? '');
             
             // Validate type
             if (!in_array($type, ['desktop', 'laptop', 'server'])) {
                 $error = 'Invalid device type selected';
+            } elseif (!empty($platform) && !in_array($platform, ['Windows', 'Mac', 'Ubuntu'])) {
+                $error = 'Invalid platform selected';
             } else {
                 // No username uniqueness check needed - multiple monitors can have same username
                 if (empty($error)) {
-                    // Update username, slack_id and type fields (but NOT updated_at - that's only for monitoring events)
+                    // Update username, slack_id, platform and type fields (but NOT updated_at - that's only for monitoring events)
                     $update_data = [
                         'type' => $type,
                         'username' => $username,
-                        'slack_id' => $slack_id
+                        'slack_id' => $slack_id,
+                        'platform' => !empty($platform) ? $platform : null
                     ];
                     
                     $this->db->update('tbl_monitor_ips', $update_data, 'id = :id', ['id' => $id]);
