@@ -143,6 +143,27 @@ ob_start();
                     </div>
                     
                     <div class="mb-3">
+                        <label for="platform" class="form-label">
+                            <i class="fas fa-laptop-code me-1"></i>Platform
+                        </label>
+                        <select class="form-select" id="platform" name="platform">
+                            <option value="">Not Set</option>
+                            <option value="Windows" <?php echo $monitor['platform'] === 'Windows' ? 'selected' : ''; ?>>
+                                <i class="fab fa-windows"></i> Windows
+                            </option>
+                            <option value="Mac" <?php echo $monitor['platform'] === 'Mac' ? 'selected' : ''; ?>>
+                                <i class="fab fa-apple"></i> Mac
+                            </option>
+                            <option value="Ubuntu" <?php echo $monitor['platform'] === 'Ubuntu' ? 'selected' : ''; ?>>
+                                <i class="fab fa-ubuntu"></i> Ubuntu
+                            </option>
+                        </select>
+                        <div class="form-text">
+                            Operating system platform. Auto-detected from client if not set.
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
                         <label for="type" class="form-label">
                             <i class="fas fa-desktop me-1"></i>Device Type
                         </label>

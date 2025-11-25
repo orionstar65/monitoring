@@ -350,6 +350,15 @@ ob_start();
             </select>
         </div>
         <div class="filter-group">
+            <label for="filter-platform">Platform</label>
+            <select id="filter-platform" class="form-select">
+                <option value="">All Platforms</option>
+                <option value="windows">Windows</option>
+                <option value="mac">Mac</option>
+                <option value="ubuntu">Ubuntu</option>
+            </select>
+        </div>
+        <div class="filter-group">
             <label for="filter-status">Status</label>
             <select id="filter-status" class="form-select">
                 <option value="">All Statuses</option>
@@ -379,6 +388,7 @@ ob_start();
                         <th class="sortable" data-sort="username">Username<span class="sort-indicator"></span></th>
                         <th class="sortable" data-sort="slack">Slack ID<span class="sort-indicator"></span></th>
                         <th class="sortable" data-sort="type">Type<span class="sort-indicator"></span></th>
+                        <th class="sortable" data-sort="platform">Platform<span class="sort-indicator"></span></th>
                         <th class="sortable" data-sort="status">Status<span class="sort-indicator"></span></th>
                         <th class="sortable" data-sort="activity">Last Activity<span class="sort-indicator"></span></th>
                         <th>Actions</th>
@@ -410,6 +420,27 @@ ob_start();
             break;
     }
     
+    // Platform mapping
+    $platform = $monitor['platform'] ?? null;
+    $platform_icon = '';
+    $platform_class = 'text-muted';
+    if ($platform) {
+        switch(strtolower($platform)) {
+            case 'windows':
+                $platform_icon = 'fab fa-windows';
+                $platform_class = 'text-primary';
+                break;
+            case 'mac':
+                $platform_icon = 'fab fa-apple';
+                $platform_class = 'text-dark';
+                break;
+            case 'ubuntu':
+                $platform_icon = 'fab fa-ubuntu';
+                $platform_class = 'text-danger';
+                break;
+        }
+    }
+    
     // Last activity - store raw timestamp for client-side conversion
     $last_activity_timestamp = $monitor['updated_at'] ? strtotime($monitor['updated_at']) : null;
     $last_activity_display = $monitor['updated_at'] ? date('M j, Y H:i', strtotime($monitor['updated_at'])) : 'Never';
@@ -419,6 +450,7 @@ ob_start();
                         data-username="<?php echo strtolower(htmlspecialchars($monitor['username'] ?: 'no username')); ?>"
                         data-slack="<?php echo strtolower(htmlspecialchars($monitor['slack_id'] ?: 'no slack id')); ?>"
                         data-type="<?php echo strtolower($type); ?>"
+                        data-platform="<?php echo strtolower($platform ?: 'no platform'); ?>"
                         data-status="<?php echo $monitor['dynamic_status']; ?>"
                         data-activity="<?php echo $last_activity_timestamp ?: '0'; ?>">
                         <td>
@@ -445,6 +477,15 @@ ob_start();
                             <span class="badge <?php echo $type_class; ?>">
                                 <i class="<?php echo $type_icon; ?> me-1"></i><?php echo ucfirst($type); ?>
                             </span>
+                        </td>
+                        <td>
+                            <?php if ($platform): ?>
+                                <span class="<?php echo $platform_class; ?>">
+                                    <i class="<?php echo $platform_icon; ?> me-1"></i><?php echo htmlspecialchars($platform); ?>
+                                </span>
+                            <?php else: ?>
+                                <span class="text-muted">No platform</span>
+                            <?php endif; ?>
                         </td>
                         <td>
                             <span class="badge bg-<?php echo $status_class; ?>">
@@ -507,6 +548,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const filterUsername = document.getElementById('filter-username');
     const filterSlack = document.getElementById('filter-slack');
     const filterType = document.getElementById('filter-type');
+    const filterPlatform = document.getElementById('filter-platform');
     const filterStatus = document.getElementById('filter-status');
     const clearFiltersBtn = document.getElementById('clear-filters');
     const resultsCount = document.getElementById('results-count');
@@ -531,6 +573,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const usernameValue = filterUsername.value.toLowerCase().trim();
         const slackValue = filterSlack.value.toLowerCase().trim();
         const typeValue = filterType.value.toLowerCase();
+        const platformValue = filterPlatform.value.toLowerCase();
         const statusValue = filterStatus.value.toLowerCase();
         
         let visibleCount = 0;
@@ -540,6 +583,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const username = row.getAttribute('data-username') || '';
             const slack = row.getAttribute('data-slack') || '';
             const type = row.getAttribute('data-type') || '';
+            const platform = row.getAttribute('data-platform') || '';
             const status = row.getAttribute('data-status') || '';
             
             let visible = true;
@@ -549,6 +593,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (usernameValue && !username.includes(usernameValue)) visible = false;
             if (slackValue && !slack.includes(slackValue)) visible = false;
             if (typeValue && type !== typeValue) visible = false;
+            if (platformValue && platform !== platformValue) visible = false;
             if (statusValue && status !== statusValue) visible = false;
             
             if (visible) {
@@ -595,6 +640,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     case 'type':
                         aVal = a.getAttribute('data-type') || '';
                         bVal = b.getAttribute('data-type') || '';
+                        break;
+                    case 'platform':
+                        aVal = a.getAttribute('data-platform') || '';
+                        bVal = b.getAttribute('data-platform') || '';
                         break;
                     case 'status':
                         aVal = a.getAttribute('data-status') || '';
@@ -673,6 +722,7 @@ document.addEventListener('DOMContentLoaded', function() {
     filterUsername.addEventListener('input', debounce(applyFilters, 300));
     filterSlack.addEventListener('input', debounce(applyFilters, 300));
     filterType.addEventListener('change', applyFilters);
+    filterPlatform.addEventListener('change', applyFilters);
     filterStatus.addEventListener('change', applyFilters);
     
     clearFiltersBtn.addEventListener('click', function() {
@@ -680,6 +730,7 @@ document.addEventListener('DOMContentLoaded', function() {
         filterUsername.value = '';
         filterSlack.value = '';
         filterType.value = '';
+        filterPlatform.value = '';
         filterStatus.value = '';
         currentSort = { column: null, direction: 'asc' };
         updateSortIndicators();

@@ -558,6 +558,19 @@ class DatabaseService {
      * Properly handles existing records by checking first, then updating
      */
     public function createOrUpdateMonitorIP($ip_address, $mac_address = null, $username = null, $app_version = null) {
+        // Detect platform from user agent (only if not already set)
+        $detected_platform = null;
+        if (isset($_SERVER['HTTP_USER_AGENT'])) {
+            $userAgent = $_SERVER['HTTP_USER_AGENT'];
+            if (stripos($userAgent, 'mac') !== false) {
+                $detected_platform = 'Mac';
+            } elseif (stripos($userAgent, 'windows') !== false) {
+                $detected_platform = 'Windows';
+            } elseif (stripos($userAgent, 'linux') !== false) {
+                $detected_platform = 'Ubuntu';
+            }
+        }
+        
         // First, check if record exists
         $existing = $this->getMonitorIP($ip_address);
         
@@ -586,6 +599,13 @@ class DatabaseService {
                 $types .= "s";
             }
             
+            // Auto-detect and set platform only if it's currently NULL (preserve manual overrides)
+            if ($detected_platform !== null && empty($existing['platform'])) {
+                $update_fields[] = "platform = ?";
+                $params[] = $detected_platform;
+                $types .= "s";
+            }
+            
             // Always update updated_at timestamp
             // Make this timestamp to be the last activity timestamp
             $update_fields[] = "updated_at = NOW()";
@@ -610,11 +630,11 @@ class DatabaseService {
         } else {
             // Create new record
             $stmt = $this->mysqli->prepare("
-                INSERT INTO tbl_monitor_ips (ip_address, mac_address, username, app_version) 
-                VALUES (?, ?, ?, ?)
+                INSERT INTO tbl_monitor_ips (ip_address, mac_address, username, app_version, platform) 
+                VALUES (?, ?, ?, ?, ?)
             ");
             
-            $stmt->bind_param("ssss", $ip_address, $mac_address, $username, $app_version);
+            $stmt->bind_param("sssss", $ip_address, $mac_address, $username, $app_version, $detected_platform);
             $result = $stmt->execute();
             $stmt->close();
             
@@ -1069,6 +1089,22 @@ class DatabaseService {
             $stmt->execute();
             $stats['storage_statistics'] = $stmt->affected_rows;
             $stmt->close();
+            
+            // Copy slack_id from source to target if source has one
+            if (!empty($source_monitor['slack_id'])) {
+                $stmt = $this->mysqli->prepare("UPDATE tbl_monitor_ips SET slack_id = ? WHERE id = ?");
+                $stmt->bind_param("si", $source_monitor['slack_id'], $target_ip_id);
+                $stmt->execute();
+                $stmt->close();
+            }
+            
+            // Copy platform from source to target if source has one
+            if (!empty($source_monitor['platform'])) {
+                $stmt = $this->mysqli->prepare("UPDATE tbl_monitor_ips SET platform = ? WHERE id = ?");
+                $stmt->bind_param("si", $source_monitor['platform'], $target_ip_id);
+                $stmt->execute();
+                $stmt->close();
+            }
             
             // Move files from logs, screens, and thumbnails folders
             // Use BASEPATH if defined, otherwise construct from __DIR__
