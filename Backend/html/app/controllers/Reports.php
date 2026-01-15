@@ -54,6 +54,27 @@ class Reports extends Base {
         $start_dt = new DateTime($start_date);
         $end_dt = new DateTime($end_date);
         
+        // Validate custom date range
+        if ($report_type === 'custom') {
+            if ($start_dt > $end_dt) {
+                $this->json([
+                    'success' => false,
+                    'message' => 'Start date must be before or equal to end date.'
+                ]);
+                return;
+            }
+            
+            // Optional: Validate maximum range (e.g., 365 days)
+            $diff = $start_dt->diff($end_dt);
+            if ($diff->days > 365) {
+                $this->json([
+                    'success' => false,
+                    'message' => 'Date range cannot exceed 365 days.'
+                ]);
+                return;
+            }
+        }
+        
         if ($report_type === 'weekly') {
             // For weekly reports, extend end date to end of week
             $end_dt->modify('+6 days');
@@ -75,7 +96,7 @@ class Reports extends Base {
         $monitoring_data = $this->getMonitoringData($start_date, $end_date, $device_filter, $params);
         
         // Calculate usage statistics
-        $usage_stats = $this->calculateUsageStats($monitoring_data, $report_type);
+        $usage_stats = $this->calculateUsageStats($monitoring_data, $report_type, $start_date, $end_date);
         
         $this->json([
             'success' => true,
@@ -158,7 +179,7 @@ class Reports extends Base {
     /**
      * Calculate usage statistics for monitoring data
      */
-    private function calculateUsageStats($monitoring_data, $report_type) {
+    private function calculateUsageStats($monitoring_data, $report_type, $start_date = null, $end_date = null) {
         $stats = [];
         
         foreach ($monitoring_data as $device_id => $data) {
@@ -168,7 +189,7 @@ class Reports extends Base {
             $browser_times = $data['browser_times'];
             
             // Calculate period duration in hours
-            $period_hours = $this->getPeriodHours($report_type);
+            $period_hours = $this->getPeriodHours($report_type, $start_date, $end_date);
             
             // Calculate captured hours (time when screenshots were taken)
             $captured_hours = $this->calculateCapturedHours($screenshot_times);
@@ -201,7 +222,7 @@ class Reports extends Base {
     /**
      * Get period duration in hours based on report type
      */
-    private function getPeriodHours($report_type) {
+    private function getPeriodHours($report_type, $start_date = null, $end_date = null) {
         switch ($report_type) {
             case 'daily':
                 return 24;
@@ -209,6 +230,18 @@ class Reports extends Base {
                 return 168; // 7 * 24
             case 'monthly':
                 return 730; // ~30 * 24
+            case 'custom':
+                // Calculate actual hours between start and end dates
+                if ($start_date && $end_date) {
+                    $start_dt = new DateTime($start_date);
+                    $end_dt = new DateTime($end_date);
+                    // Add 1 day to include both start and end dates
+                    $end_dt->modify('+1 day');
+                    $diff = $start_dt->diff($end_dt);
+                    // Calculate total hours: days * 24 + hours
+                    return ($diff->days * 24) + $diff->h;
+                }
+                return 24; // Default fallback
             default:
                 return 24;
         }

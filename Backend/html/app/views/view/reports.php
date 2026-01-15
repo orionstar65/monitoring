@@ -412,6 +412,9 @@ ob_start();
             <div class="report-type-tab" data-type="monthly">
                 <i class="fas fa-calendar-alt"></i> Monthly Reports
             </div>
+            <div class="report-type-tab" data-type="custom">
+                <i class="fas fa-calendar-check"></i> Custom
+            </div>
         </div>
         
         <!-- Filter Controls -->
@@ -439,6 +442,17 @@ ob_start();
             <div class="filter-group" id="monthlyDateSelector" style="display: none;">
                 <label for="monthlyDate">Select Month</label>
                 <input type="month" id="monthlyDate">
+            </div>
+            
+            <!-- Custom Date Range Selector -->
+            <div class="filter-group" id="customDateSelector" style="display: none;">
+                <label for="customStartDate">Start Date</label>
+                <input type="date" id="customStartDate">
+            </div>
+            
+            <div class="filter-group" id="customEndDateSelector" style="display: none;">
+                <label for="customEndDate">End Date</label>
+                <input type="date" id="customEndDate">
             </div>
             
             <div class="filter-group">
@@ -508,17 +522,41 @@ document.addEventListener('DOMContentLoaded', function() {
     loadDevices();
     setupReportTypeTabs();
     initializeDateSelectors();
+    setupCustomDateValidation();
 });
+
+function setupCustomDateValidation() {
+    const customStartDate = document.getElementById('customStartDate');
+    const customEndDate = document.getElementById('customEndDate');
+    
+    if (customStartDate && customEndDate) {
+        customStartDate.addEventListener('change', function() {
+            if (this.value && customEndDate.value && this.value > customEndDate.value) {
+                customEndDate.value = this.value;
+            }
+            customEndDate.min = this.value;
+        });
+        
+        customEndDate.addEventListener('change', function() {
+            if (this.value && customStartDate.value && this.value < customStartDate.value) {
+                this.value = customStartDate.value;
+            }
+        });
+    }
+}
 
 function setupDateFilters() {
     const today = new Date();
     const dailyDateInput = document.getElementById('dailyDate');
     const weeklyDateInput = document.getElementById('weeklyDate');
     const monthlyDateInput = document.getElementById('monthlyDate');
+    const customStartDateInput = document.getElementById('customStartDate');
+    const customEndDateInput = document.getElementById('customEndDate');
     
     // Set default values
-    dailyDateInput.value = today.toISOString().split('T')[0];
-    dailyDateInput.max = today.toISOString().split('T')[0];
+    const todayStr = today.toISOString().split('T')[0];
+    dailyDateInput.value = todayStr;
+    dailyDateInput.max = todayStr;
     
     // Set default week (current week)
     const currentWeek = getWeekString(today);
@@ -527,6 +565,14 @@ function setupDateFilters() {
     // Set default month (current month)
     const currentMonth = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0');
     monthlyDateInput.value = currentMonth;
+    
+    // Set default custom date range (last 7 days)
+    const lastWeek = new Date(today);
+    lastWeek.setDate(today.getDate() - 7);
+    customStartDateInput.value = lastWeek.toISOString().split('T')[0];
+    customStartDateInput.max = todayStr;
+    customEndDateInput.value = todayStr;
+    customEndDateInput.max = todayStr;
 }
 
 function setupReportTypeTabs() {
@@ -556,11 +602,15 @@ function updateDateSelectorsForReportType() {
     const dailySelector = document.getElementById('dailyDateSelector');
     const weeklySelector = document.getElementById('weeklyDateSelector');
     const monthlySelector = document.getElementById('monthlyDateSelector');
+    const customStartSelector = document.getElementById('customDateSelector');
+    const customEndSelector = document.getElementById('customEndDateSelector');
     
     // Hide all selectors first
     dailySelector.style.display = 'none';
     weeklySelector.style.display = 'none';
     monthlySelector.style.display = 'none';
+    customStartSelector.style.display = 'none';
+    customEndSelector.style.display = 'none';
     
     // Show the appropriate selector
     switch (currentReportType) {
@@ -573,18 +623,25 @@ function updateDateSelectorsForReportType() {
         case 'monthly':
             monthlySelector.style.display = 'block';
             break;
+        case 'custom':
+            customStartSelector.style.display = 'block';
+            customEndSelector.style.display = 'block';
+            break;
     }
 }
 
 function updateDateInputsForReportType() {
     const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
     const dailyDateInput = document.getElementById('dailyDate');
     const weeklyDateInput = document.getElementById('weeklyDate');
     const monthlyDateInput = document.getElementById('monthlyDate');
+    const customStartDateInput = document.getElementById('customStartDate');
+    const customEndDateInput = document.getElementById('customEndDate');
     
     switch (currentReportType) {
         case 'daily':
-            dailyDateInput.value = today.toISOString().split('T')[0];
+            dailyDateInput.value = todayStr;
             break;
         case 'weekly':
             const currentWeek = getWeekString(today);
@@ -593,6 +650,17 @@ function updateDateInputsForReportType() {
         case 'monthly':
             const currentMonth = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0');
             monthlyDateInput.value = currentMonth;
+            break;
+        case 'custom':
+            // Set default to last 7 days if not already set
+            if (!customStartDateInput.value) {
+                const lastWeek = new Date(today);
+                lastWeek.setDate(today.getDate() - 7);
+                customStartDateInput.value = lastWeek.toISOString().split('T')[0];
+            }
+            if (!customEndDateInput.value) {
+                customEndDateInput.value = todayStr;
+            }
             break;
     }
 }
@@ -635,6 +703,10 @@ function getDateRangeFromSelector() {
             const monthRange = getMonthDateRange(monthValue);
             startDate = monthRange.start;
             endDate = monthRange.end;
+            break;
+        case 'custom':
+            startDate = document.getElementById('customStartDate').value;
+            endDate = document.getElementById('customEndDate').value;
             break;
         default:
             startDate = endDate = new Date().toISOString().split('T')[0];
@@ -711,6 +783,24 @@ function generateReport() {
     if (!startDate || !endDate) {
         showError(`Please select a ${currentReportType} period.`);
         return;
+    }
+    
+    // Validate custom date range
+    if (currentReportType === 'custom') {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        
+        if (start > end) {
+            showError('Start date must be before or equal to end date.');
+            return;
+        }
+        
+        // Optional: Add maximum range validation (e.g., 1 year)
+        const daysDiff = (end - start) / (1000 * 60 * 60 * 24);
+        if (daysDiff > 365) {
+            showError('Date range cannot exceed 365 days.');
+            return;
+        }
     }
     
     showLoading(true);
