@@ -112,10 +112,24 @@ class Reports extends Base {
      */
     private function getMonitoringData($start_date, $end_date, $device_filter, $params) {
         // Get device information
-        $devices_sql = "SELECT m.id, m.ip_address, m.username, m.name, m.type
-                       FROM tbl_monitor_ips m 
-                       WHERE 1=1 {$device_filter}
-                       ORDER BY m.username ASC, m.ip_address ASC";
+        // Check if platform column exists, otherwise use type as OS
+        $columns = $this->db->query("SHOW COLUMNS FROM tbl_monitor_ips LIKE 'platform'")->fetchAll();
+        $has_platform = !empty($columns);
+        
+        if ($has_platform) {
+            $devices_sql = "SELECT m.id, m.ip_address, m.username, m.name, m.type, 
+                                   COALESCE(NULLIF(m.platform, ''), m.type, 'Unknown') as os
+                           FROM tbl_monitor_ips m 
+                           WHERE 1=1 {$device_filter}
+                           ORDER BY m.username ASC, m.ip_address ASC";
+        } else {
+            // If platform column doesn't exist, use type as OS
+            $devices_sql = "SELECT m.id, m.ip_address, m.username, m.name, m.type, 
+                                   COALESCE(m.type, 'Unknown') as os
+                           FROM tbl_monitor_ips m 
+                           WHERE 1=1 {$device_filter}
+                           ORDER BY m.username ASC, m.ip_address ASC";
+        }
         
         $devices = $this->db->query($devices_sql, $device_filter ? $params : [])->fetchAll();
         
@@ -206,6 +220,7 @@ class Reports extends Base {
                 'username' => $device['username'],
                 'name' => $device['name'],
                 'type' => $device['type'],
+                'os' => $device['os'] ?? ($device['type'] ?? 'Unknown'),
                 'period_hours' => $period_hours,
                 'captured_hours' => round($captured_hours, 2),
                 'not_captured_while_online' => round($not_captured_while_online, 2),
@@ -310,36 +325,163 @@ class Reports extends Base {
     
     /**
      * Calculate activity gaps (online but not monitored)
+     * Proper logic: Calculate time when device was online (has activity) but not monitored (no screenshots)
+     * 
+     * Approach:
+     * 1. Identify online periods (continuous activity spans)
+     * 2. For each online period, check screenshot coverage
+     * 3. Calculate gaps where activity existed but screenshots were missing
      */
     private function calculateActivityGaps($screenshot_times, $key_times, $browser_times, $report_type) {
-        // Combine all activity timestamps
-        $all_activity = array_merge(
-            array_map(function($t) { return strtotime($t); }, $screenshot_times),
+        // Convert all times to timestamps
+        $screenshot_timestamps = array_map(function($t) { return strtotime($t); }, $screenshot_times);
+        sort($screenshot_timestamps);
+        
+        // Combine all activity timestamps (key logs and browser activity indicate device was online)
+        $activity_timestamps = array_merge(
             array_map(function($t) { return strtotime($t); }, $key_times),
             array_map(function($t) { return strtotime($t); }, $browser_times)
         );
         
-        if (empty($all_activity)) {
+        // If no activity, device was offline - not "not monitored"
+        if (empty($activity_timestamps)) {
             return 0;
         }
         
         // Remove duplicates and sort
-        $all_activity = array_unique($all_activity);
-        sort($all_activity);
+        $activity_timestamps = array_unique($activity_timestamps);
+        sort($activity_timestamps);
         
-        // Calculate gaps between activities
-        $total_gap_minutes = 0;
-        
-        for ($i = 0; $i < count($all_activity) - 1; $i++) {
-            $gap_minutes = ($all_activity[$i + 1] - $all_activity[$i]) / 60;
+        // If no screenshots but there's activity, estimate not monitored time
+        if (empty($screenshot_timestamps)) {
+            // Group activities into sessions (activities within 30 minutes are considered same session)
+            $sessions = [];
+            $current_session = [];
+            $session_gap_minutes = 30;
             
-            // Consider gaps > 10 minutes as "not captured while online"
-            if ($gap_minutes > 10) {
-                $total_gap_minutes += min($gap_minutes - 10, 60); // Cap gap at 1 hour max
+            foreach ($activity_timestamps as $activity_time) {
+                if (empty($current_session)) {
+                    $current_session[] = $activity_time;
+                } else {
+                    $last_activity = end($current_session);
+                    $gap_minutes = ($activity_time - $last_activity) / 60;
+                    
+                    if ($gap_minutes <= $session_gap_minutes) {
+                        $current_session[] = $activity_time;
+                    } else {
+                        $sessions[] = $current_session;
+                        $current_session = [$activity_time];
+                    }
+                }
+            }
+            if (!empty($current_session)) {
+                $sessions[] = $current_session;
+            }
+            
+            // Estimate not monitored time based on session duration
+            $total_not_monitored = 0;
+            foreach ($sessions as $session) {
+                if (count($session) > 1) {
+                    $session_duration = (end($session) - reset($session)) / 3600; // hours
+                    $total_not_monitored += min($session_duration, 0.5); // Cap at 30 min per session
+                } else {
+                    $total_not_monitored += 0.05; // 3 minutes for single activity
+                }
+            }
+            
+            return round(min($total_not_monitored, 24), 2);
+        }
+        
+        // Calculate not monitored time using time-based approach
+        $monitoring_interval_seconds = 5 * 60; // 5 minutes in seconds
+        $not_monitored_seconds = 0;
+        
+        // Group activities into continuous online periods
+        $online_periods = [];
+        $current_period_start = null;
+        $current_period_end = null;
+        $activity_gap_threshold = 30 * 60; // 30 minutes - gap larger than this means new period
+        
+        foreach ($activity_timestamps as $activity_time) {
+            if ($current_period_start === null) {
+                $current_period_start = $activity_time;
+                $current_period_end = $activity_time;
+            } else {
+                $gap = $activity_time - $current_period_end;
+                if ($gap <= $activity_gap_threshold) {
+                    // Continue current period
+                    $current_period_end = $activity_time;
+                } else {
+                    // Start new period
+                    $online_periods[] = ['start' => $current_period_start, 'end' => $current_period_end];
+                    $current_period_start = $activity_time;
+                    $current_period_end = $activity_time;
+                }
+            }
+        }
+        // Add last period
+        if ($current_period_start !== null) {
+            $online_periods[] = ['start' => $current_period_start, 'end' => $current_period_end];
+        }
+        
+        // For each online period, check screenshot coverage
+        foreach ($online_periods as $period) {
+            $period_start = $period['start'];
+            $period_end = $period['end'];
+            $period_duration = $period_end - $period_start;
+            
+            // Find screenshots within this period (with buffer)
+            $period_screenshots = array_filter($screenshot_timestamps, function($screenshot_time) use ($period_start, $period_end, $monitoring_interval_seconds) {
+                return $screenshot_time >= ($period_start - $monitoring_interval_seconds) && 
+                       $screenshot_time <= ($period_end + $monitoring_interval_seconds);
+            });
+            
+            if (empty($period_screenshots)) {
+                // No screenshots for this entire online period - count as not monitored
+                $not_monitored_seconds += min($period_duration, 30 * 60); // Cap at 30 minutes per period
+            } else {
+                // Check gaps within the period
+                sort($period_screenshots);
+                
+                // Check gap before first screenshot
+                $first_screenshot = min($period_screenshots);
+                if ($first_screenshot > $period_start + $monitoring_interval_seconds) {
+                    $gap = $first_screenshot - $period_start - $monitoring_interval_seconds;
+                    $not_monitored_seconds += min($gap, 30 * 60);
+                }
+                
+                // Check gaps between screenshots
+                for ($i = 0; $i < count($period_screenshots) - 1; $i++) {
+                    $gap = $period_screenshots[$i + 1] - $period_screenshots[$i];
+                    if ($gap > $monitoring_interval_seconds) {
+                        // Check if there was activity in this gap
+                        $gap_start = $period_screenshots[$i];
+                        $gap_end = $period_screenshots[$i + 1];
+                        $activity_in_gap = array_filter($activity_timestamps, function($t) use ($gap_start, $gap_end) {
+                            return $t > $gap_start && $t < $gap_end;
+                        });
+                        
+                        if (count($activity_in_gap) > 0) {
+                            $excess_gap = $gap - $monitoring_interval_seconds;
+                            $not_monitored_seconds += min($excess_gap, 30 * 60); // Cap at 30 minutes per gap
+                        }
+                    }
+                }
+                
+                // Check gap after last screenshot
+                $last_screenshot = max($period_screenshots);
+                if ($last_screenshot < $period_end - $monitoring_interval_seconds) {
+                    $gap = $period_end - $last_screenshot - $monitoring_interval_seconds;
+                    $not_monitored_seconds += min($gap, 30 * 60);
+                }
             }
         }
         
-        return $total_gap_minutes / 60; // Convert to hours
+        // Convert to hours
+        $not_monitored_hours = $not_monitored_seconds / 3600;
+        
+        // Ensure reasonable value (not more than total period)
+        return round(min($not_monitored_hours, 24), 2);
     }
     
     /**

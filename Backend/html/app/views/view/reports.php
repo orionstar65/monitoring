@@ -286,6 +286,16 @@ ob_start();
     color: #495057;
 }
 
+.hours-cell.warning {
+    color: #dc3545;
+    font-weight: 700;
+}
+
+.hours-cell.warning::after {
+    content: " ⚠";
+    color: #dc3545;
+}
+
 .percentage-bar {
     width: 100%;
     height: 8px;
@@ -494,13 +504,11 @@ ob_start();
             <table class="reports-table" id="reportsTable">
                 <thead>
                     <tr>
+                        <th>Username</th>
                         <th>Device</th>
-                        <th>Period</th>
-                        <th>Total Hours</th>
-                        <th>Captured Hours</th>
-                        <th>Not Captured (Online)</th>
-                        <th>Offline Hours</th>
-                        <th>Activity Summary</th>
+                        <th>OS</th>
+                        <th>Online Hours</th>
+                        <th>Not Monitored Hours</th>
                     </tr>
                 </thead>
                 <tbody id="reportsTableBody">
@@ -875,21 +883,38 @@ function displaySummaryCards(reportData) {
                 <p class="value">0</p>
             </div>
             <div class="summary-card">
-                <h4>Total Monitoring Hours</h4>
+                <h4>Windows Devices</h4>
                 <p class="value">0</p>
             </div>
             <div class="summary-card">
-                <h4>Average Usage</h4>
-                <p class="value">0%</p>
+                <h4>Mac OS Devices</h4>
+                <p class="value">0</p>
+            </div>
+            <div class="summary-card">
+                <h4>Linux Devices</h4>
+                <p class="value">0</p>
             </div>
         `;
         return;
     }
     
     const totalDevices = reportData.length;
-    const totalMonitoringHours = reportData.reduce((sum, device) => sum + device.captured_hours, 0);
-    const totalPeriodHours = reportData.reduce((sum, device) => sum + device.period_hours, 0);
-    const averageUsage = totalPeriodHours > 0 ? ((totalMonitoringHours / totalPeriodHours) * 100).toFixed(1) : 0;
+    
+    // Count devices by OS type
+    let windowsDevices = 0;
+    let macDevices = 0;
+    let linuxDevices = 0;
+    
+    reportData.forEach(device => {
+        const os = (device.os || '').toLowerCase();
+        if (os.includes('windows')) {
+            windowsDevices++;
+        } else if (os.includes('mac') || os.includes('macos') || os.includes('mac os')) {
+            macDevices++;
+        } else if (os.includes('linux') || os.includes('ubuntu') || os.includes('debian') || os.includes('fedora') || os.includes('centos')) {
+            linuxDevices++;
+        }
+    });
     
     resultsSummary.innerHTML = `
         <div class="summary-card">
@@ -897,16 +922,16 @@ function displaySummaryCards(reportData) {
             <p class="value">${totalDevices}</p>
         </div>
         <div class="summary-card">
-            <h4>Total Monitoring Hours</h4>
-            <p class="value">${totalMonitoringHours.toFixed(1)}</p>
+            <h4>Windows Devices</h4>
+            <p class="value">${windowsDevices}</p>
         </div>
         <div class="summary-card">
-            <h4>Average Usage</h4>
-            <p class="value">${averageUsage}%</p>
+            <h4>Mac OS Devices</h4>
+            <p class="value">${macDevices}</p>
         </div>
         <div class="summary-card">
-            <h4>Report Period</h4>
-            <p class="value">${currentReportType}</p>
+            <h4>Linux Devices</h4>
+            <p class="value">${linuxDevices}</p>
         </div>
     `;
 }
@@ -917,7 +942,7 @@ function displayReportTable(reportData, reportInfo) {
     if (reportData.length === 0) {
         reportsTableBody.innerHTML = `
             <tr>
-                <td colspan="7" class="empty-state">
+                <td colspan="5" class="empty-state">
                     <i class="fas fa-chart-line"></i>
                     <h3>No Data Found</h3>
                     <p>No monitoring data found for the selected period and filters.</p>
@@ -932,36 +957,27 @@ function displayReportTable(reportData, reportInfo) {
     reportData.forEach(device => {
         const row = document.createElement('tr');
         
-        const usagePercentage = device.period_hours > 0 ? 
-            ((device.captured_hours / device.period_hours) * 100).toFixed(1) : 0;
+        // Get device name or use IP address as fallback
+        const deviceName = device.name || device.ip_address || 'Unknown Device';
         
-        const activitySummary = `
-            <div>
-                <small>
-                    Screenshots: ${device.screenshot_count}<br>
-                    Key Activity: ${device.key_activity_count}<br>
-                    Browser Activity: ${device.browser_activity_count}
-                </small>
-                <div class="percentage-bar">
-                    <div class="percentage-fill ${getUsageClass(usagePercentage)}" 
-                         style="width: ${Math.min(usagePercentage, 100)}%"></div>
-                </div>
-            </div>
-        `;
+        // Calculate online hours = captured hours + not monitored hours
+        const onlineHours = (device.captured_hours || 0) + (device.not_captured_while_online || 0);
+        const notMonitoredHours = device.not_captured_while_online || 0;
+        
+        // Check if device is a laptop and not monitored hours exceed 30 minutes (0.5 hours)
+        const deviceType = (device.type || '').toLowerCase();
+        const isLaptop = deviceType.includes('laptop');
+        const exceedsThreshold = notMonitoredHours > 0.5; // 30 minutes = 0.5 hours
+        
+        // Add warning class if it's a laptop and exceeds threshold
+        const notMonitoredClass = (isLaptop && exceedsThreshold) ? 'hours-cell warning' : 'hours-cell';
         
         row.innerHTML = `
-            <td>
-                <div class="device-info">
-                    <div class="device-ip">${device.ip_address}</div>
-                    <div class="device-user">${device.username || 'Unknown User'}</div>
-                </div>
-            </td>
-            <td>${formatDateRange(reportInfo.start_date, reportInfo.end_date)}</td>
-            <td class="hours-cell">${device.period_hours}h</td>
-            <td class="hours-cell">${device.captured_hours}h</td>
-            <td class="hours-cell">${device.not_captured_while_online}h</td>
-            <td class="hours-cell">${device.offline_hours}h</td>
-            <td>${activitySummary}</td>
+            <td>${device.username || 'Unknown User'}</td>
+            <td>${deviceName}</td>
+            <td>${device.os || 'Unknown'}</td>
+            <td class="hours-cell">${formatHoursMinutes(onlineHours)}</td>
+            <td class="${notMonitoredClass}">${formatNotMonitoredTime(notMonitoredHours)}</td>
         `;
         
         reportsTableBody.appendChild(row);
@@ -972,6 +988,32 @@ function getUsageClass(percentage) {
     if (percentage >= 70) return '';
     if (percentage >= 40) return 'medium';
     return 'low';
+}
+
+function formatHoursMinutes(hours) {
+    // Convert decimal hours to hours and minutes format: "Xh YYmin"
+    const totalHours = Math.floor(hours);
+    const decimalMinutes = (hours - totalHours) * 60;
+    const minutes = Math.round(decimalMinutes);
+    
+    if (totalHours === 0) {
+        return `${minutes}min`;
+    } else if (minutes === 0) {
+        return `${totalHours}h`;
+    } else {
+        return `${totalHours}h ${minutes}min`;
+    }
+}
+
+function formatNotMonitoredTime(hours) {
+    if (hours < 1.0) {
+        // Convert to minutes and display as "X.Xmin"
+        const minutes = hours * 60;
+        return `${minutes.toFixed(1)}min`;
+    } else {
+        // Display as hours and minutes "Xh YYmin"
+        return formatHoursMinutes(hours);
+    }
 }
 
 function formatDateRange(startDate, endDate) {
@@ -1000,41 +1042,29 @@ function exportReport() {
 
 function generateCSVContent(data) {
     const headers = [
-        'Device IP',
-        'Username', 
-        'Device Name',
-        'Device Type',
-        'Period',
-        'Total Hours',
-        'Captured Hours',
-        'Not Captured While Online',
-        'Offline Hours',
-        'Screenshot Count',
-        'Key Activity Count',
-        'Browser Activity Count',
-        'Usage Percentage (%)'
+        'Username',
+        'Device',
+        'OS',
+        'Online Hours',
+        'Not Monitored Hours'
     ];
     
     const csvRows = [headers.join(',')];
     
     data.data.forEach(device => {
-        const usagePercentage = device.period_hours > 0 ? 
-            ((device.captured_hours / device.period_hours) * 100).toFixed(1) : 0;
+        // Get device name or use IP address as fallback
+        const deviceName = device.name || device.ip_address || 'Unknown Device';
+        
+        // Calculate online hours = captured hours + not monitored hours
+        const onlineHours = (device.captured_hours || 0) + (device.not_captured_while_online || 0);
+        const notMonitoredHours = device.not_captured_while_online || 0;
         
         const row = [
-            escapeCSVField(device.ip_address),
             escapeCSVField(device.username || 'Unknown'),
-            escapeCSVField(device.name || ''),
-            escapeCSVField(device.type || ''),
-            escapeCSVField(`${data.start_date} to ${data.end_date}`),
-            device.period_hours,
-            device.captured_hours.toFixed(2),
-            device.not_captured_while_online.toFixed(2),
-            device.offline_hours.toFixed(2),
-            device.screenshot_count,
-            device.key_activity_count,
-            device.browser_activity_count,
-            usagePercentage
+            escapeCSVField(deviceName),
+            escapeCSVField(device.os || 'Unknown'),
+            onlineHours.toFixed(2),
+            notMonitoredHours.toFixed(2)
         ];
         
         csvRows.push(row.join(','));
