@@ -26,14 +26,9 @@ class Reports extends Base {
      * API endpoint to get all devices for filtering
      */
     public function api_devices() {
+        // OPTIMIZED: Remove SQL CASE statement - status calculation done in PHP for better performance
         $devices = $this->db->fetchAll(
-            "SELECT id, ip_address, mac_address, username, name, type, last_monitor_tic, 
-                    CASE 
-                        WHEN last_monitor_tic IS NULL THEN 'offline'
-                        WHEN TIMESTAMPDIFF(MINUTE, last_monitor_tic, NOW()) <= 5 THEN 'online'
-                        WHEN TIMESTAMPDIFF(MINUTE, last_monitor_tic, NOW()) <= 60 THEN 'inactive'
-                        ELSE 'offline'
-                    END as status
+            "SELECT id, ip_address, mac_address, username, name, type, updated_at
              FROM tbl_monitor_ips 
              ORDER BY username ASC, ip_address ASC"
         );
@@ -132,9 +127,9 @@ class Reports extends Base {
             // If platform column doesn't exist, use type as OS
             $devices_sql = "SELECT m.id, m.ip_address, m.username, m.name, m.type, 
                                    COALESCE(m.type, 'Unknown') as os
-                           FROM tbl_monitor_ips m 
-                           WHERE 1=1 {$device_filter}
-                           ORDER BY m.username ASC, m.ip_address ASC";
+                       FROM tbl_monitor_ips m 
+                       WHERE 1=1 {$device_filter}
+                       ORDER BY m.username ASC, m.ip_address ASC";
         }
         
         $devices = $this->db->query($devices_sql, $device_filter ? $params : [])->fetchAll();

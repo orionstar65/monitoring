@@ -127,28 +127,31 @@ class View extends Base {
                 ]);
         } else {
             // ENTIRE DEVICE VIEW: Load latest screenshots for all monitors from database
+            // OPTIMIZED: Use derived table instead of correlated subquery for much better performance
             $where_conditions = [];
             $params = [];
             
             // Filter monitors if specific ones are selected
             if (!empty($selected_monitors)) {
                 $placeholders = str_repeat('?,', count($selected_monitors) - 1) . '?';
-                $where_conditions[] = "s.monitor_ip_id IN ({$placeholders})";
+                $where_conditions[] = "latest.monitor_ip_id IN ({$placeholders})";
                 $params = array_merge($params, $selected_monitors);
             }
             
             $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
             
+            // Optimized query: Use derived table to get latest screenshot per monitor, then JOIN once
+            // This is MUCH faster than the correlated subquery approach
             $latest_screenshots = $this->db->fetchAll(
                 "SELECT s.*, m.ip_address, m.username, m.name as monitor_name
-                 FROM screenshot_metadata s
-                 JOIN tbl_monitor_ips m ON s.monitor_ip_id = m.id
-                 {$where_clause}
-                 AND s.id IN (
-                     SELECT MAX(id) 
-                     FROM screenshot_metadata 
+                 FROM (
+                     SELECT monitor_ip_id, MAX(id) as max_id
+                     FROM screenshot_metadata
                      GROUP BY monitor_ip_id
-                 )
+                 ) latest
+                 INNER JOIN screenshot_metadata s ON s.id = latest.max_id
+                 INNER JOIN tbl_monitor_ips m ON s.monitor_ip_id = m.id
+                 {$where_clause}
                  ORDER BY s.capture_datetime DESC",
                 $params
             );
@@ -254,8 +257,11 @@ class View extends Base {
     
     public function api_live_status() {
         // Get monitors from database only (fast)
+        // OPTIMIZED: Only select fields needed for status calculation and response
         $monitors = $this->db->fetchAll(
-            "SELECT * FROM tbl_monitor_ips ORDER BY name ASC"
+            "SELECT id, ip_address, mac_address, username, name, type, updated_at, created_at 
+             FROM tbl_monitor_ips 
+             ORDER BY name ASC"
         );
         
         // Add status based on database data only

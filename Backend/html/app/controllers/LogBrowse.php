@@ -26,14 +26,9 @@ class LogBrowse extends Base {
      * API endpoint to get all devices for filtering
      */
     public function api_devices() {
+        // OPTIMIZED: Remove SQL CASE statement - status calculation done in PHP for better performance
         $devices = $this->db->fetchAll(
-            "SELECT id, ip_address, mac_address, username, name, type, last_monitor_tic, 
-                    CASE 
-                        WHEN last_monitor_tic IS NULL THEN 'offline'
-                        WHEN TIMESTAMPDIFF(MINUTE, last_monitor_tic, NOW()) <= 5 THEN 'online'
-                        WHEN TIMESTAMPDIFF(MINUTE, last_monitor_tic, NOW()) <= 60 THEN 'inactive'
-                        ELSE 'offline'
-                    END as status
+            "SELECT id, ip_address, mac_address, username, name, type, updated_at
              FROM tbl_monitor_ips 
              ORDER BY username ASC, ip_address ASC"
         );
