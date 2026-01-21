@@ -84,12 +84,16 @@ class DatabaseService {
     }
     
     /**
-     * Get monitor IP ID by IP address or MAC address
+     * Get monitor ID by IP address or MAC address
      * Handles duplicate entries by returning the most recent one
      * Priority: MAC address from parameter > MAC address from ARP lookup > IP address
+     * 
+     * @param string|null $ip_address Client IP address (for fallback lookup)
+     * @param string|null $mac_address Client MAC address (preferred identifier)
+     * @return int|null Monitor ID (primary key) or null if not found
      */
-    public function getMonitorIpId($ip_address = null, $mac_address = null) {
-        $ip_id = null;
+    public function getMonitorId($ip_address = null, $mac_address = null) {
+        $monitor_id = null;
         
         // Priority 1: Try MAC address from parameter first (if provided)
         if ($mac_address) {
@@ -103,13 +107,13 @@ class DatabaseService {
             $stmt->execute();
             $result = $stmt->get_result();
             if ($row = $result->fetch_assoc()) {
-                $ip_id = $row['id'];
+                $monitor_id = $row['id'];
             }
             $stmt->close();
         }
         
         // Priority 2: If no MAC address parameter provided and IP is available, try ARP lookup
-        if (!$ip_id && $ip_address && !$mac_address) {
+        if (!$monitor_id && $ip_address && !$mac_address) {
             $mac_address = $this->getMacAddressFromArp($ip_address);
             if ($mac_address) {
                 $stmt = $this->mysqli->prepare("
@@ -122,14 +126,14 @@ class DatabaseService {
                 $stmt->execute();
                 $result = $stmt->get_result();
                 if ($row = $result->fetch_assoc()) {
-                    $ip_id = $row['id'];
+                    $monitor_id = $row['id'];
                 }
                 $stmt->close();
             }
         }
         
         // Priority 3: Fall back to IP address if MAC address lookup didn't work
-        if (!$ip_id && $ip_address) {
+        if (!$monitor_id && $ip_address) {
             $stmt = $this->mysqli->prepare("
                 SELECT id FROM tbl_monitor_ips 
                 WHERE ip_address = ? 
@@ -140,12 +144,20 @@ class DatabaseService {
             $stmt->execute();
             $result = $stmt->get_result();
             if ($row = $result->fetch_assoc()) {
-                $ip_id = $row['id'];
+                $monitor_id = $row['id'];
             }
             $stmt->close();
         }
         
-        return $ip_id;
+        return $monitor_id;
+    }
+    
+    /**
+     * Legacy function name - use getMonitorId() instead
+     * @deprecated Use getMonitorId() instead
+     */
+    public function getMonitorIpId($ip_address = null, $mac_address = null) {
+        return $this->getMonitorId($ip_address, $mac_address);
     }
     
     /**
@@ -153,9 +165,9 @@ class DatabaseService {
      * Handles data from all platforms: Windows, macOS, Ubuntu
      */
     public function addBrowserHistoryLogs($browserHistories, $ip_address = null, $mac_address = null) {
-        $ip_id = $this->getMonitorIpId($ip_address, $mac_address);
-        if (!$ip_id) {
-            error_log("Could not find monitor IP ID for IP: $ip_address, MAC: $mac_address");
+        $monitor_id = $this->getMonitorId($ip_address, $mac_address);
+        if (!$monitor_id) {
+            error_log("Could not find monitor ID for IP: $ip_address, MAC: " . ($mac_address ?? 'null'));
             return false;
         }
         
@@ -181,11 +193,11 @@ class DatabaseService {
                 $lastVisit = $this->normalizeDateTime($browserHistory['last_visit'] ?? null);
                 $visitDate = $this->normalizeDateTime($browserHistory['date'] ?? null);
                 
-                $stmt->bind_param("isssss", $ip_id, $browser, $url, $title, $lastVisit, $visitDate);
+                $stmt->bind_param("isssss", $monitor_id, $browser, $url, $title, $lastVisit, $visitDate);
                 if ($stmt->execute()) {
                     $inserted_count++;
                     // Update storage statistics
-                    $this->updateStorageStatistics($ip_id, 'browser_history', $visitDate, strlen($url) + strlen($title));
+                    $this->updateStorageStatistics($monitor_id, 'browser_history', $visitDate, strlen($url) + strlen($title));
                 } else {
                     error_log("Failed to insert browser history: " . $stmt->error . " - Browser: $browser, URL: " . substr($url, 0, 100));
                 }
@@ -252,9 +264,9 @@ class DatabaseService {
      * Handles data from all platforms: Windows, macOS, Ubuntu
      */
     public function addKeyLogs($keyLogs, $ip_address = null, $mac_address = null) {
-        $ip_id = $this->getMonitorIpId($ip_address, $mac_address);
-        if (!$ip_id) {
-            error_log("Could not find monitor IP ID for IP: $ip_address, MAC: $mac_address");
+        $monitor_id = $this->getMonitorId($ip_address, $mac_address);
+        if (!$monitor_id) {
+            error_log("Could not find monitor ID for IP: $ip_address, MAC: " . ($mac_address ?? 'null'));
             return false;
         }
         
@@ -274,11 +286,11 @@ class DatabaseService {
                 continue;
             }
             
-            $stmt->bind_param("isss", $ip_id, $keyDate, $application, $keyPressed);
+            $stmt->bind_param("isss", $monitor_id, $keyDate, $application, $keyPressed);
             if ($stmt->execute()) {
                 $inserted_count++;
                 // Update storage statistics
-                $this->updateStorageStatistics($ip_id, 'key_logs', $keyDate, strlen($application) + strlen($keyPressed));
+                $this->updateStorageStatistics($monitor_id, 'key_logs', $keyDate, strlen($application) + strlen($keyPressed));
             }
         }
         
@@ -291,9 +303,9 @@ class DatabaseService {
      * Handles data from all platforms: Windows, macOS, Ubuntu
      */
     public function addUSBDeviceLogs($usbLogs, $ip_address = null, $mac_address = null) {
-        $ip_id = $this->getMonitorIpId($ip_address, $mac_address);
-        if (!$ip_id) {
-            error_log("Could not find monitor IP ID for IP: $ip_address, MAC: $mac_address");
+        $monitor_id = $this->getMonitorId($ip_address, $mac_address);
+        if (!$monitor_id) {
+            error_log("Could not find monitor ID for IP: $ip_address, MAC: " . ($mac_address ?? 'null'));
             return false;
         }
         
@@ -315,11 +327,11 @@ class DatabaseService {
                 continue;
             }
             
-            $stmt->bind_param("isssss", $ip_id, $deviceDate, $deviceName, $devicePath, $deviceType, $action);
+            $stmt->bind_param("isssss", $monitor_id, $deviceDate, $deviceName, $devicePath, $deviceType, $action);
             if ($stmt->execute()) {
                 $inserted_count++;
                 // Update storage statistics
-                $this->updateStorageStatistics($ip_id, 'usb_logs', $deviceDate, strlen($deviceName) + strlen($devicePath) + strlen($deviceType));
+                $this->updateStorageStatistics($monitor_id, 'usb_logs', $deviceDate, strlen($deviceName) + strlen($devicePath) + strlen($deviceType));
             }
         }
         
@@ -329,20 +341,31 @@ class DatabaseService {
     
     /**
      * Add screenshot metadata to database
+     * 
+     * @param int $monitor_id Monitor ID (primary key)
+     * @param string $filename Screenshot filename
+     * @param string $file_path Full file path
+     * @param string|null $thumbnail_path Thumbnail file path
+     * @param string $capture_datetime Capture datetime
+     * @param int $file_size File size in bytes
+     * @param int $image_width Image width
+     * @param int $image_height Image height
+     * @param string $file_extension File extension
+     * @return bool Success status
      */
-    public function addScreenshotMetadata($ip_id, $filename, $file_path, $thumbnail_path, $capture_datetime, $file_size, $image_width, $image_height, $file_extension = 'jpg') {
+    public function addScreenshotMetadata($monitor_id, $filename, $file_path, $thumbnail_path, $capture_datetime, $file_size, $image_width, $image_height, $file_extension = 'jpg') {
         $stmt = $this->mysqli->prepare("
             INSERT INTO screenshot_metadata (monitor_ip_id, filename, file_path, thumbnail_path, capture_datetime, file_size, image_width, image_height, file_extension) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         
-        $stmt->bind_param("issssiiis", $ip_id, $filename, $file_path, $thumbnail_path, $capture_datetime, $file_size, $image_width, $image_height, $file_extension);
+        $stmt->bind_param("issssiiis", $monitor_id, $filename, $file_path, $thumbnail_path, $capture_datetime, $file_size, $image_width, $image_height, $file_extension);
         $result = $stmt->execute();
         $stmt->close();
         
         if ($result) {
             // Update storage statistics
-            $this->updateStorageStatistics($ip_id, 'screenshots', $capture_datetime, $file_size);
+            $this->updateStorageStatistics($monitor_id, 'screenshots', $capture_datetime, $file_size);
         }
         
         return $result;
@@ -557,12 +580,17 @@ class DatabaseService {
     }
     
     /**
-     * Update monitor IP last activity timestamps
+     * Update monitor activity timestamps
      * Uses monitor ID (looked up via MAC address or IP address) instead of IP address directly
+     * 
+     * @param string $ip_address Client IP address (for client compatibility)
+     * @param string $activity_type Activity type: 'monitor' or 'browser'
+     * @param string|null $mac_address Client MAC address (preferred identifier)
+     * @return bool Success status
      */
     public function updateMonitorActivity($ip_address, $activity_type = 'monitor', $mac_address = null) {
         // Get monitor ID using MAC address (if provided) or IP address
-        $monitor_id = $this->getMonitorIpId($ip_address, $mac_address);
+        $monitor_id = $this->getMonitorId($ip_address, $mac_address);
         
         if (!$monitor_id) {
             error_log("Could not find monitor ID for IP: $ip_address, MAC: " . ($mac_address ?? 'null'));
@@ -668,10 +696,14 @@ class DatabaseService {
     }
     
     /**
-     * Get monitor IP information by IP address or MAC address
+     * Get monitor information by IP address or MAC address
      * Priority: MAC address (if provided) > IP address
+     * 
+     * @param string|null $ip_address Client IP address (for fallback lookup)
+     * @param string|null $mac_address Client MAC address (preferred identifier)
+     * @return array|null Monitor record or null if not found
      */
-    public function getMonitorIP($ip_address = null, $mac_address = null) {
+    public function getMonitor($ip_address = null, $mac_address = null) {
         $data = null;
         
         // Priority 1: Try MAC address first (if provided)
@@ -708,11 +740,25 @@ class DatabaseService {
     }
     
     /**
-     * Create or update monitor IP record
+     * Legacy function name - use getMonitor() instead
+     * @deprecated Use getMonitor() instead
+     */
+    public function getMonitorIP($ip_address = null, $mac_address = null) {
+        return $this->getMonitor($ip_address, $mac_address);
+    }
+    
+    /**
+     * Create or update monitor record
      * Properly handles existing records by checking first, then updating
      * Priority: Checks by MAC address first (if provided), then by IP address
+     * 
+     * @param string $ip_address Client IP address (for client compatibility)
+     * @param string|null $mac_address Client MAC address (preferred identifier)
+     * @param string|null $username Username (optional)
+     * @param string|null $app_version Application version (optional)
+     * @return bool Success status
      */
-    public function createOrUpdateMonitorIP($ip_address, $mac_address = null, $username = null, $app_version = null) {
+    public function createOrUpdateMonitor($ip_address, $mac_address = null, $username = null, $app_version = null) {
         // Normalize empty strings to NULL to prevent wiping/storing invalid MAC values
         // (Clients may send "" when MacAddress is missing.)
         if ($mac_address === '') {
@@ -720,7 +766,7 @@ class DatabaseService {
         }
 
         // First, check if record exists - prioritize MAC address lookup
-        $existing = $this->getMonitorIP($ip_address, $mac_address);
+        $existing = $this->getMonitor($ip_address, $mac_address);
         
         if ($existing) {
             // Update existing record - only update fields that are not null
@@ -778,6 +824,9 @@ class DatabaseService {
             return true; // No fields to update, but record exists
         } else {
             // Create new record
+            // Platform is optional and can be set later via admin UI
+            $detected_platform = null;
+            
             $stmt = $this->mysqli->prepare("
                 INSERT INTO tbl_monitor_ips (ip_address, mac_address, username, app_version, platform) 
                 VALUES (?, ?, ?, ?, ?)
@@ -797,16 +846,24 @@ class DatabaseService {
             // MySQL duplicate key error code is 1062.
             if ($errno === 1062) {
                 // Re-fetch existing row and apply update logic (e.g., IP change, app_version update)
-                $existing = $this->getMonitorIP($ip_address, $mac_address);
+                $existing = $this->getMonitor($ip_address, $mac_address);
                 if ($existing) {
                     // Re-run update path so we still end up with correct IP/app_version
-                    return $this->createOrUpdateMonitorIP($ip_address, $mac_address, $username, $app_version);
+                    return $this->createOrUpdateMonitor($ip_address, $mac_address, $username, $app_version);
                 }
             }
 
-            error_log("Failed to insert monitor IP record: " . $error . " (errno: $errno, ip: $ip_address, mac: " . ($mac_address ?? 'null') . ")");
+            error_log("Failed to insert monitor record: " . $error . " (errno: $errno, ip: $ip_address, mac: " . ($mac_address ?? 'null') . ")");
             return false;
         }
+    }
+    
+    /**
+     * Legacy function name - use createOrUpdateMonitor() instead
+     * @deprecated Use createOrUpdateMonitor() instead
+     */
+    public function createOrUpdateMonitorIP($ip_address, $mac_address = null, $username = null, $app_version = null) {
+        return $this->createOrUpdateMonitor($ip_address, $mac_address, $username, $app_version);
     }
     
     /**

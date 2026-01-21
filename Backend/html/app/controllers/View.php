@@ -142,8 +142,9 @@ class View extends Base {
             
             // Optimized query: Use derived table to get latest screenshot per monitor, then JOIN once
             // This is MUCH faster than the correlated subquery approach
+            // Include MAC address in JOIN for path resolution
             $latest_screenshots = $this->db->fetchAll(
-                "SELECT s.*, m.ip_address, m.username, m.name as monitor_name
+                "SELECT s.*, m.id as monitor_id, m.ip_address, m.mac_address, m.username, m.name as monitor_name
                  FROM (
                      SELECT monitor_ip_id, MAX(id) as max_id
                      FROM screenshot_metadata
@@ -165,6 +166,15 @@ class View extends Base {
             
             // Format data for frontend
             foreach ($paginated_screenshots as $index => &$screenshot) {
+                // Build monitor info from query results (already includes MAC address)
+                $monitor_info = [
+                    'id' => $screenshot['monitor_id'],
+                    'ip_address' => $screenshot['ip_address'],
+                    'mac_address' => $screenshot['mac_address'] ?? null,
+                    'username' => $screenshot['username'],
+                    'name' => $screenshot['monitor_name']
+                ];
+                
                 $screenshot['monitor'] = [
                     'id' => $screenshot['monitor_ip_id'],
                     'ip_address' => $screenshot['ip_address'],
@@ -335,68 +345,9 @@ class View extends Base {
         readfile($absolute_path);
     }
     
-    private function getThumbnail($ip_address, $screenshot_path) {
-        // Fix: Use the actual directory format (dots preserved)
-        $ip_identifier = 'ip_' . $ip_address;
-        
-        // Convert screenshot path to thumbnail path
-        $thumbnail_path = str_replace(SCREENS_DIR, THUMBNAILS_DIR, $screenshot_path);
-        
-        // Check if thumbnail exists, if not return the original screenshot path
-        if (file_exists($thumbnail_path)) {
-            return $thumbnail_path;
-        } else {
-            // If thumbnail doesn't exist, return the original screenshot path
-            return $screenshot_path;
-        }
-    }
-    
-    /**
-     * Optimized method to get the latest screenshot for an IP
-     * Database-based method for fast screenshot retrieval
-     */
-    private function getLatestScreenshotOptimized($ip_identifier) {
-        $screens_dir = SCREENS_DIR . $ip_identifier;
-        
-        if (!is_dir($screens_dir)) {
-            return null;
-        }
-        
-        $latest_file = null;
-        $latest_time = 0;
-        
-        // Use scandir instead of RecursiveIteratorIterator for better performance
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($screens_dir, RecursiveDirectoryIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::LEAVES_ONLY
-        );
-        
-        foreach ($iterator as $file) {
-            if ($file->isFile() && in_array($file->getExtension(), ['jpg', 'jpeg', 'png'])) {
-                $file_time = $file->getMTime();
-                if ($file_time > $latest_time) {
-                    $latest_time = $file_time;
-                    $latest_file = $file->getPathname();
-                }
-            }
-        }
-        
-        if (!$latest_file) {
-            return null;
-        }
-        
-        // Get thumbnail path
-        $thumbnail_path = str_replace(SCREENS_DIR, THUMBNAILS_DIR, $latest_file);
-        
-        return [
-            'full_path' => $latest_file,
-            'thumbnail_path' => file_exists($thumbnail_path) ? $thumbnail_path : $latest_file,
-            'modified_time' => date('Y-m-d H:i:s', $latest_time)
-        ];
-    }
-    
     /**
      * Convert absolute file path to relative URL path
+     * All paths use id_{monitor_id} format - no conversion needed
      */
     private function getRelativePath($path) {
         // Handle null or empty paths
@@ -686,222 +637,108 @@ class View extends Base {
             return;
         }
         
-        $ip_identifier = 'ip_' . $monitor['ip_address'];
-        $logs = $this->dataSync->getLogs($ip_identifier);
-        
         // Get pagination parameters
         $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
         $per_page = isset($_GET['per_page']) ? max(1, intval($_GET['per_page'])) : 20;
         $log_type = isset($_GET['log_type']) ? $_GET['log_type'] : 'browser_history';
+        $offset = ($page - 1) * $per_page;
         
         // Get date filter parameters
         $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : null;
         $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : null;
         
-        $result = [
-            'monitor' => $monitor,
-            'log_type' => $log_type,
-            'pagination' => [
-                'current_page' => $page,
-                'per_page' => $per_page,
-                'total_entries' => 0,
-                'total_pages' => 0,
-                'has_next' => false,
-                'has_prev' => false
-            ],
-            'logs' => []
-        ];
+        // Build WHERE conditions
+        $where_conditions = ["monitor_ip_id = :monitor_id"];
+        $params = ['monitor_id' => $monitor['id']];
         
-        // Process logs based on type
+        if ($start_date) {
+            $where_conditions[] = "created_at >= :start_date";
+            $params['start_date'] = $start_date . ' 00:00:00';
+        }
+        
+        if ($end_date) {
+            $where_conditions[] = "created_at <= :end_date";
+            $params['end_date'] = $end_date . ' 23:59:59';
+        }
+        
+        $where_clause = implode(' AND ', $where_conditions);
+        
+        // Get logs from database based on type
+        $logs = [];
+        $total_entries = 0;
+        
         switch ($log_type) {
             case 'browser_history':
-                $result = $this->processBrowserLogs($logs, $result, $start_date, $end_date);
+                $total_entries = $this->db->fetch(
+                    "SELECT COUNT(*) as total FROM browser_history_logs WHERE {$where_clause}",
+                    $params
+                )['total'];
+                
+                $logs = $this->db->fetchAll(
+                    "SELECT * FROM browser_history_logs 
+                     WHERE {$where_clause} 
+                     ORDER BY visit_date DESC 
+                     LIMIT :limit OFFSET :offset",
+                    array_merge($params, ['limit' => $per_page, 'offset' => $offset])
+                );
                 break;
+                
             case 'key_logs':
-                $result = $this->processKeyLogs($logs, $result, $start_date, $end_date);
+                // Adjust date field for key_logs
+                $key_where = str_replace('created_at', 'key_date', $where_clause);
+                $total_entries = $this->db->fetch(
+                    "SELECT COUNT(*) as total FROM key_logs WHERE {$key_where}",
+                    $params
+                )['total'];
+                
+                $logs = $this->db->fetchAll(
+                    "SELECT * FROM key_logs 
+                     WHERE {$key_where} 
+                     ORDER BY key_date DESC 
+                     LIMIT :limit OFFSET :offset",
+                    array_merge($params, ['limit' => $per_page, 'offset' => $offset])
+                );
                 break;
+                
             case 'usb_logs':
-                $result = $this->processUsbLogs($logs, $result, $start_date, $end_date);
+                // Adjust date field for usb_logs
+                $usb_where = str_replace('created_at', 'device_date', $where_clause);
+                $total_entries = $this->db->fetch(
+                    "SELECT COUNT(*) as total FROM usb_device_logs WHERE {$usb_where}",
+                    $params
+                )['total'];
+                
+                $logs = $this->db->fetchAll(
+                    "SELECT * FROM usb_device_logs 
+                     WHERE {$usb_where} 
+                     ORDER BY device_date DESC 
+                     LIMIT :limit OFFSET :offset",
+                    array_merge($params, ['limit' => $per_page, 'offset' => $offset])
+                );
                 break;
+                
             default:
                 $this->json(['error' => 'Invalid log type']);
                 return;
         }
         
-        $this->json($result);
-    }
-    
-    /**
-     * Process browser logs with pagination and filtering
-     */
-    private function processBrowserLogs($logs, $result, $start_date, $end_date) {
-        if (empty($logs['browser_history'])) {
-            return $result;
-        }
-        
-        $all_entries = [];
-        
-        // Process each browser history file
-        foreach ($logs['browser_history'] as $log_file) {
-            $file_path = BASEPATH . $log_file['path'];
-            if (!file_exists($file_path)) {
-                continue;
-            }
-            
-            $content = file_get_contents($file_path);
-            if ($content === false) {
-                continue;
-            }
-            
-            $parsed_data = $this->logParser->parseBrowserHistory($content);
-            
-            // Apply date filtering
-            foreach ($parsed_data as $entry) {
-                if ($this->shouldIncludeEntry($entry, $start_date, $end_date, 'date')) {
-                    $entry['file_source'] = basename($log_file['path']);
-                    $entry['file_modified'] = $log_file['modified_time'];
-                    $all_entries[] = $entry;
-                }
-            }
-        }
-        
-        // Sort by date (newest first)
-        usort($all_entries, function($a, $b) {
-            return strtotime($b['date']) - strtotime($a['date']);
-        });
-        
-        return $this->applyPagination($all_entries, $result);
-    }
-    
-    /**
-     * Process key logs with pagination and filtering
-     */
-    private function processKeyLogs($logs, $result, $start_date, $end_date) {
-        if (empty($logs['key_logs'])) {
-            return $result;
-        }
-        
-        $all_entries = [];
-        
-        // Process each key log file
-        foreach ($logs['key_logs'] as $log_file) {
-            $file_path = BASEPATH . $log_file['path'];
-            if (!file_exists($file_path)) {
-                continue;
-            }
-            
-            $content = file_get_contents($file_path);
-            if ($content === false) {
-                continue;
-            }
-            
-            $parsed_data = $this->logParser->parseKeyLogs($content);
-            
-            // Apply date filtering
-            foreach ($parsed_data as $entry) {
-                if ($this->shouldIncludeEntry($entry, $start_date, $end_date, 'date')) {
-                    $entry['file_source'] = basename($log_file['path']);
-                    $entry['file_modified'] = $log_file['modified_time'];
-                    $all_entries[] = $entry;
-                }
-            }
-        }
-        
-        // Sort by date (newest first)
-        usort($all_entries, function($a, $b) {
-            return strtotime($b['date']) - strtotime($a['date']);
-        });
-        
-        return $this->applyPagination($all_entries, $result);
-    }
-    
-    /**
-     * Process USB logs with pagination and filtering
-     */
-    private function processUsbLogs($logs, $result, $start_date, $end_date) {
-        if (empty($logs['usb_logs'])) {
-            return $result;
-        }
-        
-        $all_entries = [];
-        
-        // Process each USB log file
-        foreach ($logs['usb_logs'] as $log_file) {
-            $file_path = BASEPATH . $log_file['path'];
-            if (!file_exists($file_path)) {
-                continue;
-            }
-            
-            $content = file_get_contents($file_path);
-            if ($content === false) {
-                continue;
-            }
-            
-            $parsed_data = $this->logParser->parseUsbLogs($content);
-            
-            // Apply date filtering
-            foreach ($parsed_data as $entry) {
-                if ($this->shouldIncludeEntry($entry, $start_date, $end_date, 'date')) {
-                    $entry['file_source'] = basename($log_file['path']);
-                    $entry['file_modified'] = $log_file['modified_time'];
-                    $all_entries[] = $entry;
-                }
-            }
-        }
-        
-        // Sort by date (newest first)
-        usort($all_entries, function($a, $b) {
-            return strtotime($b['date']) - strtotime($a['date']);
-        });
-        
-        return $this->applyPagination($all_entries, $result);
-    }
-    
-    /**
-     * Check if entry should be included based on date filters
-     */
-    private function shouldIncludeEntry($entry, $start_date, $end_date, $date_field) {
-        if (!$start_date && !$end_date) {
-            return true;
-        }
-        
-        $entry_date = strtotime($entry[$date_field]);
-        if ($entry_date === false) {
-            return true; // Include if date parsing fails
-        }
-        
-        if ($start_date && $entry_date < strtotime($start_date)) {
-            return false;
-        }
-        
-        if ($end_date && $entry_date > strtotime($end_date . ' 23:59:59')) {
-            return false;
-        }
-        
-        return true;
-    }
-    
-    /**
-     * Apply pagination to entries
-     */
-    private function applyPagination($all_entries, $result) {
-        $page = $result['pagination']['current_page'];
-        $per_page = $result['pagination']['per_page'];
-        
-        $total_entries = count($all_entries);
         $total_pages = ceil($total_entries / $per_page);
-        $offset = ($page - 1) * $per_page;
         
-        $paginated_entries = array_slice($all_entries, $offset, $per_page);
-        
-        $result['logs'] = $paginated_entries;
-        $result['pagination']['total_entries'] = $total_entries;
-        $result['pagination']['total_pages'] = $total_pages;
-        $result['pagination']['has_next'] = $page < $total_pages;
-        $result['pagination']['has_prev'] = $page > 1;
-        
-        return $result;
+        $this->json([
+            'monitor' => $monitor,
+            'log_type' => $log_type,
+            'pagination' => [
+                'current_page' => $page,
+                'per_page' => $per_page,
+                'total_entries' => $total_entries,
+                'total_pages' => $total_pages,
+                'has_next' => $page < $total_pages,
+                'has_prev' => $page > 1
+            ],
+            'logs' => $logs
+        ]);
     }
+    
     
     /**
      * API endpoint to get log statistics for a monitor
@@ -917,61 +754,72 @@ class View extends Base {
             return;
         }
         
-        $ip_identifier = 'ip_' . $monitor['ip_address'];
-        $logs = $this->dataSync->getLogs($ip_identifier);
-        
+        // Get stats from database using monitor_id
         $stats = [
             'browser_history' => [
-                'file_count' => count($logs['browser_history'] ?? []),
                 'total_entries' => 0,
                 'latest_entry' => null
             ],
             'key_logs' => [
-                'file_count' => count($logs['key_logs'] ?? []),
                 'total_entries' => 0,
                 'latest_entry' => null
             ],
             'usb_logs' => [
-                'file_count' => count($logs['usb_logs'] ?? []),
                 'total_entries' => 0,
                 'latest_entry' => null
             ]
         ];
         
-        // Calculate stats for each log type
-        foreach (['browser_history', 'key_logs', 'usb_logs'] as $log_type) {
-            if (!empty($logs[$log_type])) {
-                $total_entries = 0;
-                $latest_time = 0;
-                $latest_entry = null;
-                
-                foreach ($logs[$log_type] as $log_file) {
-                    $file_path = BASEPATH . $log_file['path'];
-                    if (!file_exists($file_path)) {
-                        continue;
-                    }
-                    
-                    $content = file_get_contents($file_path);
-                    if ($content === false) {
-                        continue;
-                    }
-                    
-                    $parsed_data = $this->logParser->parseLogData($content, $log_type);
-                    $total_entries += count($parsed_data['data']);
-                    
-                    // Find latest entry
-                    foreach ($parsed_data['data'] as $entry) {
-                        $entry_time = strtotime($entry['date']);
-                        if ($entry_time > $latest_time) {
-                            $latest_time = $entry_time;
-                            $latest_entry = $entry;
-                        }
-                    }
-                }
-                
-                $stats[$log_type]['total_entries'] = $total_entries;
-                $stats[$log_type]['latest_entry'] = $latest_entry;
-            }
+        // Calculate stats for each log type from database
+        $browser_stats = $this->db->fetch(
+            "SELECT COUNT(*) as total, MAX(visit_date) as latest_date 
+             FROM browser_history_logs 
+             WHERE monitor_ip_id = :monitor_id",
+            ['monitor_id' => $monitor['id']]
+        );
+        $stats['browser_history']['total_entries'] = $browser_stats['total'] ?? 0;
+        if ($browser_stats['latest_date']) {
+            $latest_browser = $this->db->fetch(
+                "SELECT * FROM browser_history_logs 
+                 WHERE monitor_ip_id = :monitor_id AND visit_date = :latest_date 
+                 ORDER BY id DESC LIMIT 1",
+                ['monitor_id' => $monitor['id'], 'latest_date' => $browser_stats['latest_date']]
+            );
+            $stats['browser_history']['latest_entry'] = $latest_browser;
+        }
+        
+        $key_stats = $this->db->fetch(
+            "SELECT COUNT(*) as total, MAX(key_date) as latest_date 
+             FROM key_logs 
+             WHERE monitor_ip_id = :monitor_id",
+            ['monitor_id' => $monitor['id']]
+        );
+        $stats['key_logs']['total_entries'] = $key_stats['total'] ?? 0;
+        if ($key_stats['latest_date']) {
+            $latest_key = $this->db->fetch(
+                "SELECT * FROM key_logs 
+                 WHERE monitor_ip_id = :monitor_id AND key_date = :latest_date 
+                 ORDER BY id DESC LIMIT 1",
+                ['monitor_id' => $monitor['id'], 'latest_date' => $key_stats['latest_date']]
+            );
+            $stats['key_logs']['latest_entry'] = $latest_key;
+        }
+        
+        $usb_stats = $this->db->fetch(
+            "SELECT COUNT(*) as total, MAX(device_date) as latest_date 
+             FROM usb_device_logs 
+             WHERE monitor_ip_id = :monitor_id",
+            ['monitor_id' => $monitor['id']]
+        );
+        $stats['usb_logs']['total_entries'] = $usb_stats['total'] ?? 0;
+        if ($usb_stats['latest_date']) {
+            $latest_usb = $this->db->fetch(
+                "SELECT * FROM usb_device_logs 
+                 WHERE monitor_ip_id = :monitor_id AND device_date = :latest_date 
+                 ORDER BY id DESC LIMIT 1",
+                ['monitor_id' => $monitor['id'], 'latest_date' => $usb_stats['latest_date']]
+            );
+            $stats['usb_logs']['latest_entry'] = $latest_usb;
         }
         
         $this->json([

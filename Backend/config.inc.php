@@ -25,26 +25,28 @@ foreach ($directories as $dir) {
 }
 
 // Function to get per-device directory paths
-function getIPBasedPaths($ip_id, $ip_address = null, $mac_address = null) {
+// Uses ONLY id_{monitor_id} format - no fallbacks
+function getMonitorPaths($monitor_id) {
     global $screens_dir_path, $thumbnails_dir_path, $logs_dir_path;
     
-    // Prefer stable identifiers to avoid per-IP folder fragmentation:
-    // MAC address (sanitized) > monitor id > IP address
-    $identifier = null;
-    if ($mac_address && strlen($mac_address) > 11) {
-        $identifier = "mac_" . str_replace([':', '-', '.'], '_', $mac_address);
-    } elseif ($ip_id) {
-        $identifier = "id_{$ip_id}";
-    } elseif ($ip_address) {
-        $identifier = "ip_{$ip_address}";
-    } else {
-        $identifier = "unknown_client";
+    if (!$monitor_id) {
+        error_log("getMonitorPaths: monitor_id is required");
+        return null;
     }
+    
+    // SINGLE FORMAT ONLY: id_{monitor_id}
+    $identifier = "id_{$monitor_id}";
     
     return [
         'screens' => $screens_dir_path . $identifier . '/',
         'thumbnails' => $thumbnails_dir_path . $identifier . '/',
         'logs' => $logs_dir_path . $identifier . '/'
     ];
+}
+
+// Legacy function name for backward compatibility (deprecated)
+function getIPBasedPaths($ip_id, $ip_address = null, $mac_address = null) {
+    // Redirect to new function - only monitor_id is used
+    return getMonitorPaths($ip_id);
 }
 ?> 

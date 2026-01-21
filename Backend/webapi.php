@@ -54,18 +54,22 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
         $macAddress = null;
     }
     
-    // Get monitor IP ID (will use MAC address if provided, or ARP lookup as fallback)
-    $ip_id = $dbService->getMonitorIpId($clientIP, $macAddress);
-    if (!$ip_id) {
-        error_log("Could not find monitor IP ID for IP: $clientIP, MAC: " . ($macAddress ?? 'null'));
+    // Get monitor ID (will use MAC address if provided, or ARP lookup as fallback)
+    $monitor_id = $dbService->getMonitorId($clientIP, $macAddress);
+    if (!$monitor_id) {
+        error_log("Could not find monitor ID for IP: $clientIP, MAC: " . ($macAddress ?? 'null'));
         return false;
     }
     
-    // Get device-based paths for file storage (prefer MAC/monitor id; fallback to IP)
-    $ip_paths = getIPBasedPaths($ip_id, $clientIP, $macAddress);
+    // Get device-based paths for file storage (uses ONLY id_{monitor_id} format)
+    $monitor_paths = getMonitorPaths($monitor_id);
+    if (!$monitor_paths) {
+        error_log("Failed to get monitor paths for monitor_id: $monitor_id");
+        return false;
+    }
     
     // Create directories if they don't exist
-    foreach ($ip_paths as $path) {
+    foreach ($monitor_paths as $path) {
         if (!file_exists($path)) {
             @mkdir($path, 0755, true);
         }
@@ -73,8 +77,8 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
     
     // Create date-based subdirectory (no time-based subdirectories)
     $date_dir = date('Y-m-d', strtotime($ctime));
-    $screens_date_path = $ip_paths['screens'] . $date_dir . '/';
-    $thumbnails_date_path = $ip_paths['thumbnails'] . $date_dir . '/';
+    $screens_date_path = $monitor_paths['screens'] . $date_dir . '/';
+    $thumbnails_date_path = $monitor_paths['thumbnails'] . $date_dir . '/';
     
     if (!file_exists($screens_date_path)) {
         @mkdir($screens_date_path, 0755, true);
@@ -83,10 +87,9 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
         @mkdir($thumbnails_date_path, 0755, true);
     }
     
-    // Generate filename with IP address and datetime
+    // Generate filename with monitor_id and datetime (NO IP address)
     $datetime = date('Y-m-d_H.i.s', strtotime($ctime));
-    $ip_clean = str_replace('.', '_', $clientIP); // Replace dots with underscores for filename safety
-    $img_name = $ip_clean . '_' . $datetime . '.jpg';
+    $img_name = $monitor_id . '_' . $datetime . '.jpg';
     $file_location = $screens_date_path . $img_name;
     
     // Handle file upload
@@ -111,13 +114,13 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
             $file_ext = 'jpg'; // Default fallback
         }
         
-        // Update filename with correct extension
-        $img_name = $ip_clean . '_' . $datetime . '.' . $file_ext;
+        // Update filename with correct extension (using monitor_id, not IP)
+        $img_name = $monitor_id . '_' . $datetime . '.' . $file_ext;
         $file_location = $screens_date_path . $img_name;
         
         // Rename the file if extension changed
         if ($file_ext !== 'jpg') {
-            $old_location = $screens_date_path . $ip_clean . '_' . $datetime . '.jpg';
+            $old_location = $screens_date_path . $monitor_id . '_' . $datetime . '.jpg';
             if (file_exists($old_location)) {
                 rename($old_location, $file_location);
             }
@@ -130,7 +133,7 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
         // Store metadata in database
         $capture_datetime = date('Y-m-d H:i:s', strtotime($ctime));
         $result = $dbService->addScreenshotMetadata(
-            $ip_id, 
+            $monitor_id, 
             $img_name, 
             $file_location, 
             $thumb_file_location, 
@@ -177,7 +180,7 @@ function updateUsername($username) {
     $clientIP = $_SERVER['REMOTE_ADDR'] ?? '';
     
     // Update username in database
-    $result = $dbService->createOrUpdateMonitorIP($clientIP, null, $username, null);
+    $result = $dbService->createOrUpdateMonitor($clientIP, null, $username, null);
     
     if ($result) {
         echo json_encode([

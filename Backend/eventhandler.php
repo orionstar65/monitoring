@@ -54,8 +54,8 @@ $username = $data['Username'] ?? '';
 // Get client IP address
 $clientIP = $_SERVER['REMOTE_ADDR'] ?? '';
 
-// Create or update monitor IP record
-$dbService->createOrUpdateMonitorIP($clientIP, $macAddress, $username, $version);
+// Create or update monitor record
+$dbService->createOrUpdateMonitor($clientIP, $macAddress, $username, $version);
 
 // Handle different event types
 $response = ['status' => 'success', 'message' => 'Event processed successfully'];
