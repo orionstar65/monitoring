@@ -1586,6 +1586,13 @@ function formatTimeAgo(seconds) {
 }
 
 function updateMonitorList(monitors) {
+    // Sort monitors by name (username) alphabetically
+    monitors = [...monitors].sort(function(a, b) {
+        const nameA = (a.name || a.username || '').toLowerCase();
+        const nameB = (b.name || b.username || '').toLowerCase();
+        return nameA.localeCompare(nameB);
+    });
+    
     let html = '';
     
     monitors.forEach(function(monitor) {
