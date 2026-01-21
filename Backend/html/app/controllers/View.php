@@ -509,8 +509,8 @@ class View extends Base {
             return;
         }
         
-        // Use optimized method to get only the needed screenshots
-        $result = $this->getScreenshotNavigation($monitor['ip_address'], $file_hash, $action);
+        // Use optimized method to get only the needed screenshots (keyed by monitor_id)
+        $result = $this->getScreenshotNavigation($monitor_id, $file_hash, $action);
         
         if (!$result) {
             $this->json(['error' => 'Screenshot navigation failed']);
@@ -530,13 +530,17 @@ class View extends Base {
     /**
      * Database-based screenshot navigation (much faster than file system scanning)
      */
-    private function getScreenshotNavigation($ip_address, $current_file_hash, $action) {
-        // Get monitor info
+    private function getScreenshotNavigation($monitor_id, $current_file_hash, $action) {
+        if (!$monitor_id) {
+            return false;
+        }
+
+        // Get monitor info (by id, not by ip)
         $monitor = $this->db->fetch(
-            "SELECT * FROM tbl_monitor_ips WHERE ip_address = :ip",
-            ['ip' => $ip_address]
+            "SELECT * FROM tbl_monitor_ips WHERE id = :id",
+            ['id' => $monitor_id]
         );
-        
+
         if (!$monitor) {
             return false;
         }
@@ -544,7 +548,7 @@ class View extends Base {
         // Get total count of screenshots for this monitor
         $total_count = $this->db->fetch(
             "SELECT COUNT(*) as total FROM screenshot_metadata WHERE monitor_ip_id = :monitor_id",
-            ['monitor_id' => $monitor['id']]
+            ['monitor_id' => $monitor_id]
         )['total'];
         
         if ($total_count == 0) {
@@ -554,7 +558,7 @@ class View extends Base {
         // Find current screenshot by file hash
         $current_screenshot = $this->db->fetch(
             "SELECT * FROM screenshot_metadata WHERE monitor_ip_id = :monitor_id AND MD5(file_path) = :file_hash",
-            ['monitor_id' => $monitor['id'], 'file_hash' => $current_file_hash]
+            ['monitor_id' => $monitor_id, 'file_hash' => $current_file_hash]
         );
         
         if (!$current_screenshot) {
@@ -573,7 +577,7 @@ class View extends Base {
                  AND capture_datetime < :current_datetime 
                  ORDER BY capture_datetime DESC 
                  LIMIT 1",
-                ['monitor_id' => $monitor['id'], 'current_datetime' => $current_screenshot['capture_datetime']]
+                ['monitor_id' => $monitor_id, 'current_datetime' => $current_screenshot['capture_datetime']]
             );
         } else {
             // Get previous screenshot (newer chronologically, but previous in sequence)
@@ -583,7 +587,7 @@ class View extends Base {
                  AND capture_datetime > :current_datetime 
                  ORDER BY capture_datetime ASC 
                  LIMIT 1",
-                ['monitor_id' => $monitor['id'], 'current_datetime' => $current_screenshot['capture_datetime']]
+                ['monitor_id' => $monitor_id, 'current_datetime' => $current_screenshot['capture_datetime']]
             );
         }
         
@@ -596,7 +600,7 @@ class View extends Base {
             "SELECT COUNT(*) as position FROM screenshot_metadata 
              WHERE monitor_ip_id = :monitor_id 
              AND capture_datetime >= :target_datetime",
-            ['monitor_id' => $monitor['id'], 'target_datetime' => $target_screenshot['capture_datetime']]
+            ['monitor_id' => $monitor_id, 'target_datetime' => $target_screenshot['capture_datetime']]
         );
         $current_position = $position_result['position'];
         
@@ -605,14 +609,14 @@ class View extends Base {
             "SELECT COUNT(*) as count FROM screenshot_metadata 
              WHERE monitor_ip_id = :monitor_id 
              AND capture_datetime > :target_datetime",
-            ['monitor_id' => $monitor['id'], 'target_datetime' => $target_screenshot['capture_datetime']]
+            ['monitor_id' => $monitor_id, 'target_datetime' => $target_screenshot['capture_datetime']]
         )['count'] > 0;
         
         $has_prev = $this->db->fetch(
             "SELECT COUNT(*) as count FROM screenshot_metadata 
              WHERE monitor_ip_id = :monitor_id 
              AND capture_datetime < :target_datetime",
-            ['monitor_id' => $monitor['id'], 'target_datetime' => $target_screenshot['capture_datetime']]
+            ['monitor_id' => $monitor_id, 'target_datetime' => $target_screenshot['capture_datetime']]
         )['count'] > 0;
         
         // Build screenshot data

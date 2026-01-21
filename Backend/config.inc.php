@@ -24,18 +24,19 @@ foreach ($directories as $dir) {
     }
 }
 
-// Function to get IP-based directory paths
+// Function to get per-device directory paths
 function getIPBasedPaths($ip_id, $ip_address = null, $mac_address = null) {
     global $screens_dir_path, $thumbnails_dir_path, $logs_dir_path;
     
-    // Use IP address as primary identifier, fallback to IP ID, then MAC address
+    // Prefer stable identifiers to avoid per-IP folder fragmentation:
+    // MAC address (sanitized) > monitor id > IP address
     $identifier = null;
-    if ($ip_address) {
-        $identifier = "ip_{$ip_address}";
-    } elseif ($ip_id) {
-        $identifier = "ip_{$ip_id}";
-    } elseif ($mac_address && strlen($mac_address) > 11) {
+    if ($mac_address && strlen($mac_address) > 11) {
         $identifier = "mac_" . str_replace([':', '-', '.'], '_', $mac_address);
+    } elseif ($ip_id) {
+        $identifier = "id_{$ip_id}";
+    } elseif ($ip_address) {
+        $identifier = "ip_{$ip_address}";
     } else {
         $identifier = "unknown_client";
     }

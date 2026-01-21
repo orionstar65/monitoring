@@ -65,39 +65,58 @@ class Monitors extends Base {
             } elseif (empty($ip_address) || empty($name)) {
                 $error = 'IP address and name are required';
             } else {
-                // Check if IP already exists
-                $existing = $this->db->fetch(
-                    "SELECT id FROM tbl_monitor_ips WHERE ip_address = :ip_address",
-                    ['ip_address' => $ip_address]
-                );
+                // Check if IP or MAC address already exists (prioritize MAC address check)
+                $existing = null;
+                if (!empty($mac_address)) {
+                    $existing = $this->db->fetch(
+                        "SELECT id FROM tbl_monitor_ips WHERE mac_address = :mac_address",
+                        ['mac_address' => $mac_address]
+                    );
+                    if ($existing) {
+                        $error = 'MAC address already exists';
+                    }
+                }
                 
-                if ($existing) {
-                    $error = 'IP address already exists';
-                } else {
+                // Also check IP address if MAC check didn't find anything
+                if (!$existing) {
+                    $existing = $this->db->fetch(
+                        "SELECT id FROM tbl_monitor_ips WHERE ip_address = :ip_address",
+                        ['ip_address' => $ip_address]
+                    );
+                    if ($existing) {
+                        $error = 'IP address already exists';
+                    }
+                }
+                
+                if (!$existing) {
                     // No username uniqueness check needed - multiple monitors can have same username
                     if (empty($error)) {
-                        $insert_data = [
-                            'ip_address' => $ip_address,
-                            'name' => $name,
-                            'username' => $username,
-                            'mac_address' => $mac_address,
-                            'type' => $type,
-                            'os_status' => 0,
-                            'monitor_status' => 0,
-                            'created_at' => date('Y-m-d H:i:s')
-                        ];
-                        
-                        // Add platform if provided
-                        if (!empty($platform)) {
-                            $insert_data['platform'] = $platform;
-                        }
-                        
-                        $monitorId = $this->db->insert('tbl_monitor_ips', $insert_data);
-                        
-                        if ($monitorId) {
-                            $this->redirect('monitors');
-                        } else {
-                            $error = 'Failed to create monitor';
+                        try {
+                            $monitorId = $this->db->insert('tbl_monitor_ips', [
+                                'ip_address' => $ip_address,
+                                'name' => $name,
+                                'username' => $username,
+                                'mac_address' => ($mac_address !== '' ? $mac_address : null),
+                                'type' => $type,
+                                'os_status' => 0,
+                                'monitor_status' => 0,
+                                'created_at' => date('Y-m-d H:i:s')
+                            ]);
+                            
+                            if ($monitorId) {
+                                $this->redirect('monitors');
+                            } else {
+                                $error = 'Failed to create monitor';
+                            }
+                        } catch (PDOException $e) {
+                            // Handle race condition: another request inserted same IP/MAC between check and insert.
+                            // MySQL duplicate key uses SQLSTATE 23000
+                            if ($e->getCode() === '23000') {
+                                $error = 'IP address or MAC address already exists';
+                            } else {
+                                $error = 'Failed to create monitor';
+                                error_log("Monitor create failed: " . $e->getMessage());
+                            }
                         }
                     }
                 }

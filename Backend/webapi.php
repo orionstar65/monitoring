@@ -72,15 +72,21 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
     // Get client IP address
     $clientIP = $_SERVER['REMOTE_ADDR'] ?? '';
     
-    // Get monitor IP ID
-    $ip_id = $dbService->getMonitorIpId($clientIP);
+    // Check for MAC address in POST parameters (optional, some platforms send it)
+    $macAddress = $_POST['mac_address'] ?? null;
+    if ($macAddress === '') {
+        $macAddress = null;
+    }
+    
+    // Get monitor IP ID (will use MAC address if provided, or ARP lookup as fallback)
+    $ip_id = $dbService->getMonitorIpId($clientIP, $macAddress);
     if (!$ip_id) {
-        error_log("Could not find monitor IP ID for IP: $clientIP");
+        error_log("Could not find monitor IP ID for IP: $clientIP, MAC: " . ($macAddress ?? 'null'));
         return false;
     }
     
-    // Get IP-based paths for file storage
-    $ip_paths = getIPBasedPaths($ip_id, $clientIP);
+    // Get device-based paths for file storage (prefer MAC/monitor id; fallback to IP)
+    $ip_paths = getIPBasedPaths($ip_id, $clientIP, $macAddress);
     
     // Create directories if they don't exist
     foreach ($ip_paths as $path) {
@@ -160,8 +166,8 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
         );
         
         if ($result) {
-            // Update monitor activity
-            $dbService->updateMonitorActivity($clientIP, 'monitor');
+            // Update monitor activity (pass MAC address if available)
+            $dbService->updateMonitorActivity($clientIP, 'monitor', $macAddress);
             
             // Return success response
             echo json_encode([
