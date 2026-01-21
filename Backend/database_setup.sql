@@ -39,7 +39,8 @@ CREATE TABLE `tbl_monitor_ips` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_ip_address` (`ip_address`)
+  UNIQUE KEY `uk_ip_address` (`ip_address`),
+  UNIQUE KEY `uk_mac_address` (`mac_address`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Users table - system users for web interface
