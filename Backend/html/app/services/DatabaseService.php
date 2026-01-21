@@ -1036,13 +1036,20 @@ class DatabaseService {
      * @param int $status_code HTTP status code
      * @param float $response_time_ms Response time in milliseconds
      * @param string|null $request_type Request type (e.g., 'Tic', 'BrowserHistory', 'KeyLog', 'USBLog', 'screenshot', 'config', etc.)
+     * @param string|null $mac_address Client MAC address (optional, will be stored in MAC/IP format)
      * @return bool Success status
      */
-    public function logApiRequest($endpoint, $method, $ip_address, $status_code, $response_time_ms, $request_type = null) {
+    public function logApiRequest($endpoint, $method, $ip_address, $status_code, $response_time_ms, $request_type = null, $mac_address = null) {
         // Ensure daily table exists
         $table_name = $this->ensureDailyLogTable();
         if (!$table_name) {
             return false;
+        }
+        
+        // Format ip_address field as "MAC/IP" if MAC is available, otherwise just "IP"
+        $client_identifier = $ip_address;
+        if ($mac_address && $mac_address !== '') {
+            $client_identifier = $mac_address . '/' . $ip_address;
         }
         
         // Check if request_type column exists (for backward compatibility with existing tables)
@@ -1059,14 +1066,14 @@ class DatabaseService {
                 INSERT INTO `$table_name` (endpoint, method, request_type, ip_address, status_code, response_time_ms) 
                 VALUES (?, ?, ?, ?, ?, ?)
             ");
-            $stmt->bind_param("ssssid", $endpoint, $method, $request_type, $ip_address, $status_code, $response_time_ms);
+            $stmt->bind_param("ssssid", $endpoint, $method, $request_type, $client_identifier, $status_code, $response_time_ms);
         } else {
             // Fallback for tables created before request_type was added
             $stmt = $this->mysqli->prepare("
                 INSERT INTO `$table_name` (endpoint, method, ip_address, status_code, response_time_ms) 
                 VALUES (?, ?, ?, ?, ?)
             ");
-            $stmt->bind_param("sssid", $endpoint, $method, $ip_address, $status_code, $response_time_ms);
+            $stmt->bind_param("sssid", $endpoint, $method, $client_identifier, $status_code, $response_time_ms);
         }
         
         if (!$stmt) {

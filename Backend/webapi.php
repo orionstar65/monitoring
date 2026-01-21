@@ -263,6 +263,12 @@ $clientIP = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'POST';
 $log_request_type = null; // Will be set based on the request type
 
+// Get MAC address from POST if available (for logging in MAC/IP format)
+$macAddress = $_POST['mac_address'] ?? null;
+if ($macAddress === '') {
+    $macAddress = null;
+}
+
 switch ($request_type_param) {
     case 'upload':
         $log_request_type = 'screenshot';
@@ -304,8 +310,8 @@ if ($status_code === false) {
     $status_code = 200; // Default to 200 if not set
 }
 
-// Log API request with request type
-$dbService->logApiRequest('/webapi.php', $method, $clientIP, $status_code, $response_time_ms, $log_request_type);
+// Log API request with request type (include MAC address in format: MAC/IP)
+$dbService->logApiRequest('/webapi.php', $method, $clientIP, $status_code, $response_time_ms, $log_request_type, $macAddress);
 
 // Close database connection
 $mysqli->close();
