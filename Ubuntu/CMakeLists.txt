@@ -26,6 +26,11 @@ set(UBUNTU_SOURCES
     ScreenCastPortal.cpp
 )
 
+# Setgid helper: reads /dev/input/event* and writes JSON to stdout.
+# Installed as root:input with mode 2755. No Qt dependency.
+add_executable(monitorclient-keyreader keyreader.cpp)
+target_compile_options(monitorclient-keyreader PRIVATE -Wall -Wextra -std=c++17 -O2)
+
 # Create Ubuntu executable with MOC support
 add_executable(MonitorClient ${UBUNTU_SOURCES})
 

@@ -2,21 +2,8 @@
 #define KEYBOARDMONITOR_H
 
 #include <QObject>
-#include <QThread>
-#include <QMap>
+#include <QProcess>
 #include <QString>
-#include <QDateTime>
-#include <qchar.h>
-
-struct KeyboardDevice {
-    QString devicePath;
-    QString deviceName;
-    int fd;
-    bool shiftPressed;
-    bool ctrlPressed;
-    bool altPressed;
-    bool capsLockOn;
-};
 
 class KeyboardMonitor : public QObject
 {
@@ -28,26 +15,21 @@ public:
 
     bool startMonitoring();
     void stopMonitoring();
-    void handleUsbEvent();
 
 signals:
     void keyPressed(QString timestamp, const QString &windowTitle, const QString &keyText);
 
 private slots:
-    void readEvents();
+    void onReadyRead();
+    void onProcessFinished(int exitCode, QProcess::ExitStatus status);
 
 private:
-    void findKeyboardDevices();
-    bool isKeyboardDevice(const QString &path);
-    void closeAllDevices();
-    QString getKeyText(int keyCode, KeyboardDevice &device);
-    void handleKeyEvent(int keyCode, bool pressed, KeyboardDevice &device);
+    QString helperPath() const;
     QString getActiveWindowTitle();
     QString findDesktopFile(const QString &appClass);
 
-    QMap<QString, KeyboardDevice> keyboardDevices;
-    QThread *monitorThread;
-    bool running;
+    QProcess *m_helper = nullptr;
+    QByteArray m_buf;
 };
 
-#endif // KEYBOARDMONITOR_H 
+#endif // KEYBOARDMONITOR_H

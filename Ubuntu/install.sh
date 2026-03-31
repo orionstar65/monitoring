@@ -122,22 +122,14 @@ EOF
 sudo cp MonitorClient.desktop /usr/share/applications/
 sudo cp MonitorClient.desktop /etc/xdg/autostart/
 
-# Add user to input group for keyboard monitoring
-print_status "Setting up keyboard monitoring permissions..."
-usermod -a -G input $SUDO_USER 2>/dev/null || echo "Warning: Could not add user to input group"
+# Install the setgid keyreader helper for keyboard monitoring
+print_status "Setting up keyboard monitoring helper..."
+sudo cp build/monitorclient-keyreader /opt/monitorclient/
+sudo getent group input >/dev/null 2>&1 || sudo groupadd --system input
+sudo chown root:input /opt/monitorclient/monitorclient-keyreader
+sudo chmod 2755 /opt/monitorclient/monitorclient-keyreader
 
-# Set up udev rules for keyboard access
-cat > 99-monitorclient-input.rules << 'EOF'
-# MonitorClient input device access
-KERNEL=="event*", SUBSYSTEM=="input", MODE="0666"
-KERNEL=="input*", SUBSYSTEM=="input", MODE="0666"
-EOF
-
-sudo cp 99-monitorclient-input.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-
-print_success "Desktop integration created!"
+print_success "Keyboard helper installed (setgid input — no user group change needed)!"
 
 # Create systemd service
 print_status "Creating systemd service..."
@@ -238,7 +230,10 @@ Run /opt/monitorclient/uninstall.sh to remove the application.
 Logs:
 Check /opt/monitorclient/logs/ for application logs.
 
-Note: Keyboard monitoring requires root privileges or input device group membership.
+Keyboard monitoring:
+A small setgid helper (monitorclient-keyreader) reads keyboard events.
+Only this helper runs with the "input" group; your user account does
+not need any extra permissions.
 EOF
 
 print_success "Documentation created!"
@@ -301,5 +296,5 @@ echo ""
 echo "Configuration: Edit /opt/monitorclient/config/settings.ini"
 echo "Logs: Check /opt/monitorclient/logs/"
 echo ""
-print_warning "Note: Keyboard monitoring may require root privileges or input device group membership."
+print_success "Keyboard monitoring uses a setgid helper — no group changes to your user needed."
 echo "" 

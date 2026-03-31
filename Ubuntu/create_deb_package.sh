@@ -78,6 +78,7 @@ mkdir -p "${PACKAGE_DIR}/etc/logrotate.d"
 print_status "Copying files to package..."
 cp build/MonitorClient "${PACKAGE_DIR}/opt/monitorclient/"
 cp settings.ini "${PACKAGE_DIR}/opt/monitorclient/config/"
+cp build/monitorclient-keyreader "${PACKAGE_DIR}/opt/monitorclient/"
 chmod +x "${PACKAGE_DIR}/opt/monitorclient/MonitorClient"
 
 # Create desktop file
@@ -172,10 +173,12 @@ sudo rm -f /usr/share/applications/MonitorClient.desktop
 sudo rm -f /etc/xdg/autostart/MonitorClient.desktop
 sudo rm -f /etc/systemd/user/monitorclient.service
 sudo rm -f /etc/logrotate.d/monitorclient
+sudo rm -f /etc/udev/rules.d/70-monitorclient-input.rules
 sudo rm -rf /opt/monitorclient
 
-# Reload systemd
+# Reload systemd & udev
 sudo systemctl daemon-reload
+sudo udevadm control --reload-rules 2>/dev/null || true
 
 print_success "MonitorClient uninstalled successfully!"
 EOF
@@ -195,6 +198,7 @@ Files installed:
 - Desktop shortcut: /usr/share/applications/MonitorClient.desktop
 - Autostart: /etc/xdg/autostart/MonitorClient.desktop
 - Systemd service: /etc/systemd/user/monitorclient.service
+- Keyboard helper: /opt/monitorclient/monitorclient-keyreader (setgid input)
 
 Usage:
 1. Manual start: /opt/monitorclient/MonitorClient
@@ -211,7 +215,10 @@ Run /opt/monitorclient/uninstall.sh to remove the application.
 Logs:
 Check /opt/monitorclient/logs/ for application logs.
 
-Note: Keyboard monitoring requires root privileges or input device group membership.
+Keyboard monitoring:
+A small setgid helper (monitorclient-keyreader) reads keyboard events.
+Only this helper runs with the "input" group; your user account does
+not need any extra permissions.
 EOF
 
 # Create control file
@@ -257,6 +264,12 @@ systemctl daemon-reload
 # Update desktop database
 update-desktop-database /usr/share/applications
 
+# Setgid "input" on the keyreader helper so it can read /dev/input/event* devices.
+getent group input >/dev/null 2>&1 || groupadd --system input
+chown root:input /opt/monitorclient/monitorclient-keyreader
+chmod 2755 /opt/monitorclient/monitorclient-keyreader
+
+echo ""
 echo "MonitorClient installed successfully!"
 echo "To start: systemctl --user enable monitorclient.service"
 echo "To configure: edit /opt/monitorclient/config/settings.ini"
@@ -290,7 +303,6 @@ rm -f /usr/share/applications/MonitorClient.desktop 2>/dev/null || true
 rm -f /etc/xdg/autostart/MonitorClient.desktop 2>/dev/null || true
 rm -f /etc/systemd/user/monitorclient.service 2>/dev/null || true
 rm -f /etc/logrotate.d/monitorclient 2>/dev/null || true
-
 # Update desktop database
 update-desktop-database /usr/share/applications
 EOF
