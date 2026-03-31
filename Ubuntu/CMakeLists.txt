@@ -13,6 +13,7 @@ find_package(Qt5 COMPONENTS Core Widgets Network Sql DBus REQUIRED)
 # Find required system libraries
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(UDEV REQUIRED libudev)
+pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
 
 # Ubuntu-specific source files
 set(UBUNTU_SOURCES
@@ -22,6 +23,7 @@ set(UBUNTU_SOURCES
     ConfigDialog.cpp
     utils/desktopinfo.cpp
     functions.cpp
+    ScreenCastPortal.cpp
 )
 
 # Create Ubuntu executable with MOC support
@@ -42,6 +44,7 @@ target_include_directories(MonitorClient PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${UDEV_INCLUDE_DIRS}
+    ${PIPEWIRE_INCLUDE_DIRS}
 )
 
 # Find Threads package
@@ -55,6 +58,7 @@ target_link_libraries(MonitorClient
     Qt5::Sql
     Qt5::DBus
     ${UDEV_LIBRARIES}
+    ${PIPEWIRE_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
     sqlite3
     X11

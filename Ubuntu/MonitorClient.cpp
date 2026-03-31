@@ -129,10 +129,30 @@ MonitorClient::MonitorClient()
     
     // Initialize connection error tracking
     connectionErrorNotified = false;
+
+    // Initialize Wayland screen capture if running under Wayland
+    screenCastPortal = nullptr;
+    if (!qgetenv("WAYLAND_DISPLAY").isEmpty()) {
+        qDebug() << "Wayland detected, initializing portal screen capture";
+        screenCastPortal = new ScreenCastPortal(this);
+        connect(screenCastPortal, &ScreenCastPortal::streamReady, this, [this]() {
+            qDebug() << "PipeWire screen capture stream is ready";
+        });
+        connect(screenCastPortal, &ScreenCastPortal::streamFailed, this, [this](const QString &err) {
+            qWarning() << "PipeWire screen capture failed:" << err
+                       << "- will fall back to GNOME D-Bus method";
+        });
+        screenCastPortal->start();
+    } else {
+        qDebug() << "X11 detected, using GNOME D-Bus screenshot method";
+    }
 }
 
 MonitorClient::~MonitorClient()
 {
+    if (screenCastPortal) {
+        screenCastPortal->stop();
+    }
     if (keyboardMonitor) {
         keyboardMonitor->stopMonitoring();
         delete keyboardMonitor;
@@ -320,23 +340,38 @@ void MonitorClient::grabEntireDesktop(QString path, QPixmap& res, bool& ok)
 
 void MonitorClient::grabScreen(QString filePath, bool& ok)
 {
-    QPixmap p;
-    grabEntireDesktop(filePath + ".png", p, ok);
-    if (ok) {
-        // Optimize image quality and size for smaller file
-        QImage image = p.toImage();
-        
-        // Resize if image is too large (optional - for very high resolution displays)
-        if (image.width() > 1920 || image.height() > 1080) {
-            image = image.scaled(1920, 1080, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    ok = false;
+
+    // Try PipeWire portal capture first (Wayland with one-time approval)
+    if (screenCastPortal && screenCastPortal->isStreaming()) {
+        QImage frame = screenCastPortal->captureFrame();
+        if (!frame.isNull()) {
+            if (frame.width() > 1920 || frame.height() > 1080)
+                frame = frame.scaled(1920, 1080, Qt::KeepAspectRatio,
+                                     Qt::SmoothTransformation);
+            ok = frame.save(filePath + ".jpg", "JPEG", 70);
+            if (ok) {
+                QFileInfo fi(filePath + ".jpg");
+                qDebug() << "Screenshot (PipeWire):" << fi.size() / 1024 << "KB";
+            }
+            return;
         }
-        
-        // Save with optimized JPEG compression
-        ok = image.save(filePath + ".jpg", "JPEG", 70); // 70% quality for good balance
-        
-        // Log file size for monitoring
-        QFileInfo fileInfo(filePath + ".jpg");
-        qDebug() << "Screenshot saved:" << filePath + ".jpg" << "Size:" << fileInfo.size() / 1024 << "KB";
+    }
+
+    // Fallback: GNOME Shell D-Bus screenshot
+    QPixmap p;
+    bool desktopOk = true;
+    grabEntireDesktop(filePath + ".png", p, desktopOk);
+    if (desktopOk) {
+        QImage image = p.toImage();
+        if (image.width() > 1920 || image.height() > 1080)
+            image = image.scaled(1920, 1080, Qt::KeepAspectRatio,
+                                 Qt::SmoothTransformation);
+        ok = image.save(filePath + ".jpg", "JPEG", 70);
+        if (ok) {
+            QFileInfo fi(filePath + ".jpg");
+            qDebug() << "Screenshot (GNOME D-Bus):" << fi.size() / 1024 << "KB";
+        }
     }
 }
 

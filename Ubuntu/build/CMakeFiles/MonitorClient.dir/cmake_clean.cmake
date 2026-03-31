@@ -1,4 +1,5 @@
 file(REMOVE_RECURSE
+  "CMakeFiles/MonitorClient.dir/link.d"
   "CMakeFiles/MonitorClient_autogen.dir/AutogenUsed.txt"
   "CMakeFiles/MonitorClient_autogen.dir/ParseCache.txt"
   "MonitorClient_autogen"
@@ -10,6 +11,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/MonitorClient.dir/MonitorClient.cpp.o.d"
   "CMakeFiles/MonitorClient.dir/MonitorClient_autogen/mocs_compilation.cpp.o"
   "CMakeFiles/MonitorClient.dir/MonitorClient_autogen/mocs_compilation.cpp.o.d"
+  "CMakeFiles/MonitorClient.dir/ScreenCastPortal.cpp.o"
+  "CMakeFiles/MonitorClient.dir/ScreenCastPortal.cpp.o.d"
   "CMakeFiles/MonitorClient.dir/functions.cpp.o"
   "CMakeFiles/MonitorClient.dir/functions.cpp.o.d"
   "CMakeFiles/MonitorClient.dir/main.cpp.o"

@@ -2,3 +2,4 @@
 #include "EWIEGA46WW/moc_ConfigDialog.cpp"
 #include "EWIEGA46WW/moc_KeyboardMonitor.cpp"
 #include "EWIEGA46WW/moc_MonitorClient.cpp"
+#include "EWIEGA46WW/moc_ScreenCastPortal.cpp"

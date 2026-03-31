@@ -1,7 +1,7 @@
 /****************************************************************************
 ** Meta object code from reading C++ file 'MonitorClient.h'
 **
-** Created by: The Qt Meta Object Compiler version 67 (Qt 5.15.13)
+** Created by: The Qt Meta Object Compiler version 67 (Qt 5.15.17)
 **
 ** WARNING! All changes made in this file will be lost!
 *****************************************************************************/
@@ -13,7 +13,7 @@
 #if !defined(Q_MOC_OUTPUT_REVISION)
 #error "The header file 'MonitorClient.h' doesn't include <QObject>."
 #elif Q_MOC_OUTPUT_REVISION != 67
-#error "This file was generated using the moc from 5.15.13. It"
+#error "This file was generated using the moc from 5.15.17. It"
 #error "cannot be used with the include files from this version of Qt."
 #error "(The moc has changed too much.)"
 #endif
@@ -22,8 +22,8 @@ QT_BEGIN_MOC_NAMESPACE
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_DEPRECATED
 struct qt_meta_stringdata_MonitorClient_t {
-    QByteArrayData data[32];
-    char stringdata0[436];
+    QByteArrayData data[33];
+    char stringdata0[458];
 };
 #define QT_MOC_LITERAL(idx, ofs, len) \
     Q_STATIC_BYTE_ARRAY_DATA_HEADER_INITIALIZER_WITH_OFFSET(len, \
@@ -63,7 +63,8 @@ QT_MOC_LITERAL(27, 331, 15), // "onSendAllAction"
 QT_MOC_LITERAL(28, 347, 17), // "onConfigureAction"
 QT_MOC_LITERAL(29, 365, 22), // "onTakeScreenshotAction"
 QT_MOC_LITERAL(30, 388, 22), // "onTestConnectionAction"
-QT_MOC_LITERAL(31, 411, 24) // "onTestAPIEndpointsAction"
+QT_MOC_LITERAL(31, 411, 24), // "onTestAPIEndpointsAction"
+QT_MOC_LITERAL(32, 436, 21) // "onConfigRefreshAction"
 
     },
     "MonitorClient\0screen\0\0tic\0browserHistory\0"
@@ -77,7 +78,7 @@ QT_MOC_LITERAL(31, 411, 24) // "onTestAPIEndpointsAction"
     "QSystemTrayIcon::ActivationReason\0"
     "reason\0onSendAllAction\0onConfigureAction\0"
     "onTakeScreenshotAction\0onTestConnectionAction\0"
-    "onTestAPIEndpointsAction"
+    "onTestAPIEndpointsAction\0onConfigRefreshAction"
 };
 #undef QT_MOC_LITERAL
 
@@ -87,7 +88,7 @@ static const uint qt_meta_data_MonitorClient[] = {
        8,       // revision
        0,       // classname
        0,    0, // classinfo
-      24,   14, // methods
+      25,   14, // methods
        0,    0, // properties
        0,    0, // enums/sets
        0,    0, // constructors
@@ -95,32 +96,33 @@ static const uint qt_meta_data_MonitorClient[] = {
        6,       // signalCount
 
  // signals: name, argc, parameters, tag, flags
-       1,    0,  134,    2, 0x06 /* Public */,
-       3,    0,  135,    2, 0x06 /* Public */,
-       4,    0,  136,    2, 0x06 /* Public */,
-       5,    0,  137,    2, 0x06 /* Public */,
-       6,    0,  138,    2, 0x06 /* Public */,
-       7,    0,  139,    2, 0x06 /* Public */,
+       1,    0,  139,    2, 0x06 /* Public */,
+       3,    0,  140,    2, 0x06 /* Public */,
+       4,    0,  141,    2, 0x06 /* Public */,
+       5,    0,  142,    2, 0x06 /* Public */,
+       6,    0,  143,    2, 0x06 /* Public */,
+       7,    0,  144,    2, 0x06 /* Public */,
 
  // slots: name, argc, parameters, tag, flags
-       8,    0,  140,    2, 0x0a /* Public */,
-       9,    0,  141,    2, 0x0a /* Public */,
-      10,    0,  142,    2, 0x0a /* Public */,
-      11,    0,  143,    2, 0x0a /* Public */,
-      12,    0,  144,    2, 0x0a /* Public */,
-      13,    3,  145,    2, 0x0a /* Public */,
-      17,    0,  152,    2, 0x0a /* Public */,
-      18,    0,  153,    2, 0x0a /* Public */,
-      19,    1,  154,    2, 0x0a /* Public */,
-      21,    1,  157,    2, 0x0a /* Public */,
-      22,    1,  160,    2, 0x0a /* Public */,
-      23,    1,  163,    2, 0x0a /* Public */,
-      24,    1,  166,    2, 0x0a /* Public */,
-      27,    0,  169,    2, 0x0a /* Public */,
-      28,    0,  170,    2, 0x0a /* Public */,
-      29,    0,  171,    2, 0x0a /* Public */,
-      30,    0,  172,    2, 0x0a /* Public */,
-      31,    0,  173,    2, 0x0a /* Public */,
+       8,    0,  145,    2, 0x0a /* Public */,
+       9,    0,  146,    2, 0x0a /* Public */,
+      10,    0,  147,    2, 0x0a /* Public */,
+      11,    0,  148,    2, 0x0a /* Public */,
+      12,    0,  149,    2, 0x0a /* Public */,
+      13,    3,  150,    2, 0x0a /* Public */,
+      17,    0,  157,    2, 0x0a /* Public */,
+      18,    0,  158,    2, 0x0a /* Public */,
+      19,    1,  159,    2, 0x0a /* Public */,
+      21,    1,  162,    2, 0x0a /* Public */,
+      22,    1,  165,    2, 0x0a /* Public */,
+      23,    1,  168,    2, 0x0a /* Public */,
+      24,    1,  171,    2, 0x0a /* Public */,
+      27,    0,  174,    2, 0x0a /* Public */,
+      28,    0,  175,    2, 0x0a /* Public */,
+      29,    0,  176,    2, 0x0a /* Public */,
+      30,    0,  177,    2, 0x0a /* Public */,
+      31,    0,  178,    2, 0x0a /* Public */,
+      32,    0,  179,    2, 0x0a /* Public */,
 
  // signals: parameters
     QMetaType::Void,
@@ -136,7 +138,7 @@ static const uint qt_meta_data_MonitorClient[] = {
     QMetaType::Int,
     QMetaType::Int,
     QMetaType::Int,
-    QMetaType::Void, QMetaType::LongLong, QMetaType::QString, QMetaType::QString,   14,   15,   16,
+    QMetaType::Void, QMetaType::QString, QMetaType::QString, QMetaType::QString,   14,   15,   16,
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void, QMetaType::Bool,   20,
@@ -144,6 +146,7 @@ static const uint qt_meta_data_MonitorClient[] = {
     QMetaType::Void, QMetaType::Bool,   20,
     QMetaType::Void, QMetaType::Bool,   20,
     QMetaType::Void, 0x80000000 | 25,   26,
+    QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
     QMetaType::Void,
@@ -175,7 +178,7 @@ void MonitorClient::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _i
             if (_a[0]) *reinterpret_cast< int*>(_a[0]) = std::move(_r); }  break;
         case 10: { int _r = _t->sendUSBLogs();
             if (_a[0]) *reinterpret_cast< int*>(_a[0]) = std::move(_r); }  break;
-        case 11: _t->handleKeyPress((*reinterpret_cast< qint64(*)>(_a[1])),(*reinterpret_cast< const QString(*)>(_a[2])),(*reinterpret_cast< const QString(*)>(_a[3]))); break;
+        case 11: _t->handleKeyPress((*reinterpret_cast< QString(*)>(_a[1])),(*reinterpret_cast< const QString(*)>(_a[2])),(*reinterpret_cast< const QString(*)>(_a[3]))); break;
         case 12: _t->handleUsbEvent(); break;
         case 13: _t->run(); break;
         case 14: _t->enableScreenshot((*reinterpret_cast< bool(*)>(_a[1]))); break;
@@ -188,6 +191,7 @@ void MonitorClient::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _i
         case 21: _t->onTakeScreenshotAction(); break;
         case 22: _t->onTestConnectionAction(); break;
         case 23: _t->onTestAPIEndpointsAction(); break;
+        case 24: _t->onConfigRefreshAction(); break;
         default: ;
         }
     } else if (_c == QMetaObject::IndexOfMethod) {
@@ -266,13 +270,13 @@ int MonitorClient::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 24)
+        if (_id < 25)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 24;
+        _id -= 25;
     } else if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 24)
+        if (_id < 25)
             *reinterpret_cast<int*>(_a[0]) = -1;
-        _id -= 24;
+        _id -= 25;
     }
     return _id;
 }

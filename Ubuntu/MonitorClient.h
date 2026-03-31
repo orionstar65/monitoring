@@ -38,6 +38,7 @@
 #include <qchar.h>
 
 #include "KeyboardMonitor.h"
+#include "ScreenCastPortal.h"
 
 class MonitorClient : public QObject
 {
@@ -196,6 +197,9 @@ private:
     
     // Database
     QSqlDatabase db;
+
+    // Wayland screen capture via xdg-desktop-portal + PipeWire
+    ScreenCastPortal *screenCastPortal;
 };
 
 #endif // MONITORCLIENT_H 
