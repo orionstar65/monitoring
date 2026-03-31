@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Ubuntu MonitorClient Debian Package Builder
-# Version: 1.0
+# Version: 1.31
 
 set -e
 
@@ -30,7 +30,7 @@ print_error() {
 
 # Configuration
 PACKAGE_NAME="monitorclient"
-PACKAGE_VERSION="1.0"
+PACKAGE_VERSION="1.31"
 PACKAGE_ARCH="amd64"
 PACKAGE_MAINTAINER="MonitorClient Team"
 PACKAGE_DESCRIPTION="System monitoring client for Ubuntu"
@@ -184,8 +184,8 @@ chmod +x "${PACKAGE_DIR}/opt/monitorclient/uninstall.sh"
 
 # Create README
 cat > "${PACKAGE_DIR}/opt/monitorclient/README.txt" << 'EOF'
-Ubuntu MonitorClient v1.0
-========================
+Ubuntu MonitorClient v1.31
+=========================
 
 Installation completed successfully!
 

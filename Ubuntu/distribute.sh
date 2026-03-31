@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Ubuntu MonitorClient Distribution Script
-# Version: 1.0
+# Version: 1.31
 
 set -e
 
@@ -30,7 +30,7 @@ print_error() {
 
 # Configuration
 PACKAGE_NAME="monitorclient"
-PACKAGE_VERSION="1.0"
+PACKAGE_VERSION="1.31"
 PACKAGE_ARCH="amd64"
 DIST_DIR="dist"
 
@@ -64,7 +64,7 @@ cp create_deb_package.sh "$DIST_DIR/"
 
 # Create README for distribution
 cat > "$DIST_DIR/README.md" << 'EOF'
-# Ubuntu MonitorClient v1.0
+# Ubuntu MonitorClient v1.31
 
 A comprehensive system monitoring client for Ubuntu that provides screenshot monitoring, USB device monitoring, system information gathering, and network communication to a backend server.
 
@@ -90,7 +90,7 @@ chmod +x install.sh
 ```bash
 chmod +x create_deb_package.sh
 ./create_deb_package.sh
-sudo dpkg -i monitorclient_1.0_amd64.deb
+sudo dpkg -i monitorclient_1.31_amd64.deb
 sudo apt-get install -f  # Install dependencies if needed
 ```
 

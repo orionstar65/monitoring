@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Ubuntu MonitorClient Installation Script
-# Version: 1.0
+# Version: 1.31
 
 set -e
 
@@ -211,8 +211,8 @@ sudo chmod +x /opt/monitorclient/uninstall.sh
 
 # Create README
 cat > /opt/monitorclient/README.txt << 'EOF'
-Ubuntu MonitorClient v1.0
-========================
+Ubuntu MonitorClient v1.31
+=========================
 
 Installation completed successfully!
 

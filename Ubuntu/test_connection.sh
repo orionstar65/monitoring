@@ -42,7 +42,7 @@ echo ""
 echo "=== Testing eventhandler with JSON Data ==="
 curl -v --connect-timeout 10 \
   -H "Content-Type: application/json" \
-  -d '{"Event":"Tic","Version":"1.0","MacAddress":"test","Username":"testuser"}' \
+  -d '{"Event":"Tic","Version":"1.31","MacAddress":"test","Username":"testuser"}' \
   "http://$SERVER_IP:$SERVER_PORT/eventhandler.php" 2>&1
 
 echo ""
