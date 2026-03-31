@@ -10,8 +10,9 @@
 ConfigDialog::ConfigDialog(QWidget *parent)
     : QDialog(parent)
 {
-    setWindowTitle("MonitorClient Configuration");
-    setFixedSize(400, 300);
+    setWindowTitle(QStringLiteral("MonitorClient — Configuration"));
+    setMinimumSize(440, 320);
+    resize(460, 340);
     setModal(true);
 
     // Create layout

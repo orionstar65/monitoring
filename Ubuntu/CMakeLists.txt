@@ -8,7 +8,7 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--disable-new-dtags")
 set(CMAKE_BUILD_RPATH_USE_ORIGIN ON)
 
 # Find Qt5 components
-find_package(Qt5 COMPONENTS Core Widgets Network Sql DBus REQUIRED)
+find_package(Qt5 COMPONENTS Core Widgets Network Sql DBus Concurrent REQUIRED)
 
 # Find required system libraries
 find_package(PkgConfig REQUIRED)
@@ -57,6 +57,7 @@ target_link_libraries(MonitorClient
     Qt5::Network
     Qt5::Sql
     Qt5::DBus
+    Qt5::Concurrent
     ${UDEV_LIBRARIES}
     ${PIPEWIRE_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
