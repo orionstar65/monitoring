@@ -225,6 +225,15 @@ if ! mysql -u root -p"${DB_ROOT_PASS}" -e "USE monitoring_db;" >/dev/null 2>&1; 
     echo "Created monitoring_db"
 else
     echo "monitoring_db already exists"
+    mysql -u root -p"${DB_ROOT_PASS}" monitoring_db -e "
+        SET @db = 'monitoring_db';
+        SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='tbl_monitor_ips' AND COLUMN_NAME='platform')=0,
+            'ALTER TABLE tbl_monitor_ips ADD COLUMN platform VARCHAR(50) DEFAULT NULL AFTER app_version', 'SELECT 1');
+        PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+        SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=@db AND TABLE_NAME='tbl_monitor_ips' AND COLUMN_NAME='slack_id')=0,
+            'ALTER TABLE tbl_monitor_ips ADD COLUMN slack_id VARCHAR(100) DEFAULT NULL AFTER platform', 'SELECT 1');
+        PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+    " 2>/dev/null || true
 fi
 
 echo "=== 5. Configure Apache on port ${BACKEND_PORT} ==="

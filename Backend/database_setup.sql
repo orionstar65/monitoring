@@ -36,6 +36,8 @@ CREATE TABLE `tbl_monitor_ips` (
   `last_monitor_tic` datetime DEFAULT NULL,
   `last_browser_tic` datetime DEFAULT NULL,
   `app_version` varchar(50) DEFAULT NULL,
+  `platform` varchar(50) DEFAULT NULL,
+  `slack_id` varchar(100) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
