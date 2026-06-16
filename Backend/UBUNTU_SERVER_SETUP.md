@@ -14,7 +14,7 @@ On a fresh server, the setup script installs these automatically (skips if alrea
 
 ```bash
 sudo apt update
-sudo apt install -y apache2 mysql-server php php-mysql php-gd php-mbstring php-curl php-xml php-zip libapache2-mod-php ffmpeg git wget ufw
+sudo apt install -y apache2 mysql-server php php-mysql php-gd php-mbstring php-curl php-xml php-zip libapache2-mod-php ffmpeg git wget ufw openssh-server
 sudo a2enmod rewrite
 ```
 
@@ -131,12 +131,13 @@ The setup script enables these services to start automatically on system boot:
 
 - `apache2` — serves the backend on port 8924
 - `mysql` — database
+- `ssh` (`openssh-server`) — remote SSH access on port 22
 - `ufw` — firewall rules
 
 Verify:
 
 ```bash
-systemctl is-enabled apache2 mysql
+systemctl is-enabled apache2 mysql ssh
 ```
 
 ## 8. Verify

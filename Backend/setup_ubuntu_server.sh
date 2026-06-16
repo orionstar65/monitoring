@@ -62,7 +62,7 @@ configure_dns() {
 install_system_packages() {
     local -a required_packages=(
         apache2 mysql-server php php-mysql php-gd php-mbstring php-curl
-        php-xml php-zip libapache2-mod-php ffmpeg git wget ufw
+        php-xml php-zip libapache2-mod-php ffmpeg git wget ufw openssh-server
     )
     local -a missing_packages=()
     local pkg
@@ -90,10 +90,10 @@ enable_startup_services() {
     a2enmod rewrite 2>/dev/null || true
     a2enmod "${PHP_MOD}" 2>/dev/null || a2enmod php 2>/dev/null || true
 
-    systemctl enable apache2 mysql 2>/dev/null || true
+    systemctl enable apache2 mysql ssh 2>/dev/null || true
     systemctl enable ufw 2>/dev/null || true
 
-    for svc in apache2 mysql; do
+    for svc in apache2 mysql ssh; do
         systemctl start "$svc" 2>/dev/null || true
         if systemctl is-enabled "$svc" >/dev/null 2>&1; then
             echo "  ${svc}: enabled on boot"
