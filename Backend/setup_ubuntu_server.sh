@@ -84,6 +84,25 @@ install_system_packages() {
     apt-get install -y "${missing_packages[@]}"
 }
 
+enable_startup_services() {
+    echo "Enabling backend services to start on boot..."
+    a2ensite mybackend.conf 2>/dev/null || true
+    a2enmod rewrite 2>/dev/null || true
+    a2enmod "${PHP_MOD}" 2>/dev/null || a2enmod php 2>/dev/null || true
+
+    systemctl enable apache2 mysql 2>/dev/null || true
+    systemctl enable ufw 2>/dev/null || true
+
+    for svc in apache2 mysql; do
+        systemctl start "$svc" 2>/dev/null || true
+        if systemctl is-enabled "$svc" >/dev/null 2>&1; then
+            echo "  ${svc}: enabled on boot"
+        else
+            echo "  WARNING: ${svc} is not enabled on boot"
+        fi
+    done
+}
+
 if [[ "${EUID:-}" -ne 0 ]]; then
     echo "Run as root: sudo bash $0"
     exit 1
@@ -152,7 +171,7 @@ a2enmod rewrite
 PHP_MOD="$(php -r 'echo "php".PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
 a2enmod "$PHP_MOD" 2>/dev/null || a2enmod php 2>/dev/null || true
 
-systemctl enable --now mysql apache2
+systemctl start mysql apache2 2>/dev/null || true
 
 echo "=== 3. Install application files ==="
 if [[ ! -f "$BACKEND_DIR/webapi.php" ]]; then
@@ -281,9 +300,13 @@ ufw allow from 192.168.2.0/24 to any port "${BACKEND_PORT}" proto tcp comment 'A
 apache2ctl configtest
 systemctl restart apache2
 
-echo "=== 8. Verify ==="
+echo "=== 8. Enable services on startup ==="
+enable_startup_services
+
+echo "=== 9. Verify ==="
 ss -tlnp | grep "${BACKEND_PORT}" || true
 ufw status | grep "${BACKEND_PORT}" || true
+systemctl is-enabled apache2 mysql 2>/dev/null || true
 wget -qO- "http://127.0.0.1:${BACKEND_PORT}/webapi_config.php" 2>&1 | head -c 120 || true
 
 echo ""

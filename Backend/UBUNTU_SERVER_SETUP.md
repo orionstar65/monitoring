@@ -125,7 +125,21 @@ sudo ufw allow from 192.168.2.0/24 to any port 8924 proto tcp
 
 Apache is also restricted to `192.168.1.*` and `192.168.2.*` (plus localhost) in the virtual host above.
 
-## 7. Verify
+## 7. Autostart on boot
+
+The setup script enables these services to start automatically on system boot:
+
+- `apache2` — serves the backend on port 8924
+- `mysql` — database
+- `ufw` — firewall rules
+
+Verify:
+
+```bash
+systemctl is-enabled apache2 mysql
+```
+
+## 8. Verify
 
 ```bash
 ss -tlnp | grep 8924
@@ -140,7 +154,7 @@ Expected URLs:
 | Client API | `http://YOUR_SERVER_IP:8924/webapi.php` |
 | Config API | `http://YOUR_SERVER_IP:8924/webapi_config.php` |
 
-## 8. Client configuration
+## 9. Client configuration
 
 Point monitor clients to:
 
