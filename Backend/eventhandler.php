@@ -128,8 +128,9 @@ if ($status_code === false) {
 }
 
 // Log API request with event type (include MAC address in format: MAC/IP)
-$request_type = $appEvent ?? 'Unknown';
-$dbService->logApiRequest('/eventhandler.php', 'POST', $clientIP, $status_code, $response_time_ms, $request_type, $macAddress);
+// Disabled: daily API log table was for debugging only
+// $request_type = $appEvent ?? 'Unknown';
+// $dbService->logApiRequest('/eventhandler.php', 'POST', $clientIP, $status_code, $response_time_ms, $request_type, $macAddress);
 
 // Close database connection
 $mysqli->close();
