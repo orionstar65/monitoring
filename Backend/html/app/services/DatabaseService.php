@@ -1040,6 +1040,10 @@ class DatabaseService {
      * @return bool Success status
      */
     public function logApiRequest($endpoint, $method, $ip_address, $status_code, $response_time_ms, $request_type = null, $mac_address = null) {
+        // Disabled: daily API log table was for debugging only
+        return true;
+
+        /*
         // Ensure daily table exists
         $table_name = $this->ensureDailyLogTable();
         if (!$table_name) {
@@ -1089,7 +1093,7 @@ class DatabaseService {
         
         $stmt->close();
         return $result;
-
+        */
     }
 
     /**

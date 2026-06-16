@@ -311,7 +311,8 @@ if ($status_code === false) {
 }
 
 // Log API request with request type (include MAC address in format: MAC/IP)
-$dbService->logApiRequest('/webapi.php', $method, $clientIP, $status_code, $response_time_ms, $log_request_type, $macAddress);
+// Disabled: daily API log table was for debugging only
+// $dbService->logApiRequest('/webapi.php', $method, $clientIP, $status_code, $response_time_ms, $log_request_type, $macAddress);
 
 // Close database connection
 $mysqli->close();

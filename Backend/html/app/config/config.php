@@ -8,7 +8,7 @@ define('DB_NAME', 'monitoring_db');
 // Application configuration
 define('APP_NAME', 'ACC-Monitor');
 define('APP_VERSION', '1.0.0');
-define('BASE_URL', 'http://192.168.1.40:8924/html/');
+define('BASE_URL', 'http://192.168.2.241:8924/html/');
 // define('BASE_URL', 'http://{server_ip}:{port}/html/');
 
 // Debug mode
