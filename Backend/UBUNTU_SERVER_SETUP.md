@@ -10,11 +10,15 @@ Quick guide to deploy the monitoring backend on Ubuntu with Apache on port **892
 
 ## 1. Install packages
 
+On a fresh server, the setup script installs these automatically (skips if already present):
+
 ```bash
 sudo apt update
-sudo apt install -y apache2 mysql-server php php-mysql libapache2-mod-php ffmpeg
+sudo apt install -y apache2 mysql-server php php-mysql php-gd php-mbstring php-curl php-xml php-zip libapache2-mod-php ffmpeg git wget ufw
 sudo a2enmod rewrite
 ```
+
+The script also fixes DNS (uses `8.8.8.8` / `1.1.1.1`) if name resolution is broken before running `apt`.
 
 ## 2. Apache virtual host
 

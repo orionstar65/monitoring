@@ -16,7 +16,72 @@ Options:
 
 Environment variables:
   BACKEND_PORT, SERVER_IP, GIT_URL, DB_ROOT_PASS, INSTALL_DIR, BACKEND_DIR
+  DNS_PRIMARY, DNS_SECONDARY
 EOF
+}
+
+configure_dns() {
+    local dns_primary="${DNS_PRIMARY:-8.8.8.8}"
+    local dns_secondary="${DNS_SECONDARY:-1.1.1.1}"
+    local iface
+
+    if getent hosts archive.ubuntu.com >/dev/null 2>&1; then
+        echo "DNS OK"
+        return 0
+    fi
+
+    echo "DNS not working, configuring ${dns_primary} ${dns_secondary}..."
+    iface="$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')"
+
+    if [[ -f /etc/systemd/resolved.conf ]]; then
+        if grep -q '^DNS=' /etc/systemd/resolved.conf; then
+            sed -i "s/^DNS=.*/DNS=${dns_primary} ${dns_secondary}/" /etc/systemd/resolved.conf
+        elif grep -q '^#DNS=' /etc/systemd/resolved.conf; then
+            sed -i "s/^#DNS=.*/DNS=${dns_primary} ${dns_secondary}/" /etc/systemd/resolved.conf
+        else
+            echo "DNS=${dns_primary} ${dns_secondary}" >> /etc/systemd/resolved.conf
+        fi
+        systemctl restart systemd-resolved 2>/dev/null || true
+    fi
+
+    if [[ -n "$iface" ]] && command -v resolvectl >/dev/null 2>&1; then
+        resolvectl dns "$iface" "$dns_primary" "$dns_secondary" 2>/dev/null || true
+    fi
+
+    if ! getent hosts archive.ubuntu.com >/dev/null 2>&1; then
+        printf 'nameserver %s\nnameserver %s\n' "$dns_primary" "$dns_secondary" > /etc/resolv.conf
+    fi
+
+    if getent hosts archive.ubuntu.com >/dev/null 2>&1; then
+        echo "DNS fixed"
+    else
+        echo "WARNING: DNS may still be broken; apt/git may be slow or fail"
+    fi
+}
+
+install_system_packages() {
+    local -a required_packages=(
+        apache2 mysql-server php php-mysql php-gd php-mbstring php-curl
+        php-xml php-zip libapache2-mod-php ffmpeg git wget ufw
+    )
+    local -a missing_packages=()
+    local pkg
+
+    for pkg in "${required_packages[@]}"; do
+        if ! dpkg -s "$pkg" >/dev/null 2>&1; then
+            missing_packages+=("$pkg")
+        fi
+    done
+
+    if [[ ${#missing_packages[@]} -eq 0 ]]; then
+        echo "All required packages already installed, skipping apt."
+        return 0
+    fi
+
+    echo "Installing missing packages: ${missing_packages[*]}"
+    configure_dns
+    apt-get update
+    apt-get install -y "${missing_packages[@]}"
 }
 
 if [[ "${EUID:-}" -ne 0 ]]; then
@@ -76,24 +141,12 @@ echo "Server IP   : $SERVER_IP"
 echo "Backend port: $BACKEND_PORT"
 echo ""
 
-echo "=== 1. Install system packages ==="
+echo "=== 1. Configure DNS ==="
+configure_dns
+
+echo "=== 2. Install system packages ==="
 export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y \
-    apache2 \
-    mysql-server \
-    php \
-    php-mysql \
-    php-gd \
-    php-mbstring \
-    php-curl \
-    php-xml \
-    php-zip \
-    libapache2-mod-php \
-    ffmpeg \
-    git \
-    wget \
-    ufw
+install_system_packages
 
 a2enmod rewrite
 PHP_MOD="$(php -r 'echo "php".PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
@@ -101,7 +154,7 @@ a2enmod "$PHP_MOD" 2>/dev/null || a2enmod php 2>/dev/null || true
 
 systemctl enable --now mysql apache2
 
-echo "=== 2. Install application files ==="
+echo "=== 3. Install application files ==="
 if [[ ! -f "$BACKEND_DIR/webapi.php" ]]; then
     echo "Backend not found at $BACKEND_DIR"
     if [[ -d "$INSTALL_DIR/.git" ]]; then
@@ -154,7 +207,7 @@ set_app_permissions() {
 
 set_app_permissions
 
-echo "=== 3. Configure MySQL ==="
+echo "=== 4. Configure MySQL ==="
 if mysql -e "SELECT 1" >/dev/null 2>&1; then
     mysql <<SQL
 ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DB_ROOT_PASS}';
@@ -174,7 +227,7 @@ else
     echo "monitoring_db already exists"
 fi
 
-echo "=== 4. Configure Apache on port ${BACKEND_PORT} ==="
+echo "=== 5. Configure Apache on port ${BACKEND_PORT} ==="
 cat > /etc/apache2/sites-available/mybackend.conf <<APACHE
 <VirtualHost *:${BACKEND_PORT}>
     ServerAdmin webmaster@localhost
@@ -202,7 +255,7 @@ fi
 a2ensite mybackend.conf 2>/dev/null || true
 pkill -f "php -S 0.0.0.0:${BACKEND_PORT}" 2>/dev/null || true
 
-echo "=== 5. Configure app URL ==="
+echo "=== 6. Configure app URL ==="
 CONFIG_FILE="$BACKEND_DIR/html/app/config/config.php"
 if [[ -f "$CONFIG_FILE" ]]; then
     sed -i "s|define('BASE_URL', 'http://[^']*');|define('BASE_URL', 'http://${SERVER_IP}:${BACKEND_PORT}/html/');|" "$CONFIG_FILE"
@@ -210,7 +263,7 @@ fi
 
 set_app_permissions
 
-echo "=== 6. Configure firewall for local network ==="
+echo "=== 7. Configure firewall for local network ==="
 ufw --force enable 2>/dev/null || true
 ufw allow OpenSSH 2>/dev/null || ufw allow 22/tcp 2>/dev/null || true
 ufw allow from 192.168.1.0/24 to any port "${BACKEND_PORT}" proto tcp comment 'ACC-Monitor backend' 2>/dev/null || true
@@ -219,7 +272,7 @@ ufw allow from 192.168.2.0/24 to any port "${BACKEND_PORT}" proto tcp comment 'A
 apache2ctl configtest
 systemctl restart apache2
 
-echo "=== 7. Verify ==="
+echo "=== 8. Verify ==="
 ss -tlnp | grep "${BACKEND_PORT}" || true
 ufw status | grep "${BACKEND_PORT}" || true
 wget -qO- "http://127.0.0.1:${BACKEND_PORT}/webapi_config.php" 2>&1 | head -c 120 || true
