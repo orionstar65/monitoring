@@ -2,7 +2,7 @@
 require_once BASEPATH . 'app/controllers/Base.php';
 require_once BASEPATH . 'app/services/StatusService.php';
 
-class LogBrowse extends Base {
+class Logbrowse extends Base {
     private $statusService;
     
     public function __construct() {
