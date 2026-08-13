@@ -126,6 +126,42 @@ ob_start();
     background: var(--logbrowse-text-primary);
 }
 
+.btn-remove {
+    background: var(--logbrowse-error);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.btn-remove:hover:not(:disabled) {
+    background: #dc2626;
+    transform: translateY(-1px);
+}
+
+.btn-remove:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.cleanup-progress {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    background: var(--logbrowse-background);
+    border: 1px solid var(--logbrowse-divider);
+    font-size: 0.875rem;
+    color: var(--logbrowse-text-primary);
+}
+
+.cleanup-progress.error {
+    border-color: var(--logbrowse-error);
+    color: var(--logbrowse-error);
+}
+
 /* Stats Panel */
 .stats-panel {
     background: var(--logbrowse-surface);
@@ -363,7 +399,8 @@ ob_start();
     }
     
     .filter-actions .btn-filter,
-    .filter-actions .btn-clear {
+    .filter-actions .btn-clear,
+    .filter-actions .btn-remove {
         flex: 1;
     }
     
@@ -467,8 +504,17 @@ ob_start();
                     <i class="fas fa-times"></i>
                     Clear
                 </button>
+                <?php if ($_SESSION['role'] === ROLE_ADMIN): ?>
+                <button class="btn-remove" id="btnRemoveScreenshots" onclick="removeScreenshots()">
+                    <i class="fas fa-trash"></i>
+                    Remove Screenshots
+                </button>
+                <?php endif; ?>
             </div>
         </div>
+        <?php if ($_SESSION['role'] === ROLE_ADMIN): ?>
+        <div class="cleanup-progress" id="cleanupProgress" style="display: none;"></div>
+        <?php endif; ?>
     </div>
 
     <!-- Stats Panel -->
@@ -595,6 +641,176 @@ function clearFilters() {
     document.getElementById('startDate').value = new Date().toISOString().split('T')[0];
     document.getElementById('endDate').value = new Date().toISOString().split('T')[0];
     applyFilters();
+}
+
+// ---------------------------------------------------------------------------
+// Screenshot cleanup (admin only)
+// ---------------------------------------------------------------------------
+const CLEANUP_BATCH_SIZE = 2000;
+
+function escapeCleanupText(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showCleanupProgress(message, isError) {
+    const panel = document.getElementById('cleanupProgress');
+    if (!panel) return;
+
+    panel.style.display = 'block';
+    panel.className = 'cleanup-progress' + (isError ? ' error' : '');
+    panel.innerHTML = message;
+}
+
+function buildCleanupBody(extra) {
+    const body = new URLSearchParams({
+        device_id: currentFilters.device_id,
+        start_date: currentFilters.start_date,
+        end_date: currentFilters.end_date
+    });
+
+    Object.keys(extra || {}).forEach(key => body.append(key, extra[key]));
+    return body;
+}
+
+function removeScreenshots() {
+    updateFilters();
+
+    if (!currentFilters.start_date || !currentFilters.end_date) {
+        alert('Please select a start date and an end date first.');
+        return;
+    }
+
+    const deviceSelect = document.getElementById('deviceFilter');
+    const deviceLabel = currentFilters.device_id
+        ? deviceSelect.options[deviceSelect.selectedIndex].text.trim()
+        : 'ALL DEVICES';
+
+    showCleanupProgress('<i class="fas fa-spinner fa-spin"></i> Checking how many screenshots match the filter...');
+
+    fetch('<?php echo BASE_URL; ?>cleanup/api_preview_screenshots', {
+        method: 'POST',
+        body: buildCleanupBody()
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) {
+            showCleanupProgress('Error: ' + escapeCleanupText(data.error || 'Failed to preview screenshots'), true);
+            return;
+        }
+
+        if (data.total === 0) {
+            showCleanupProgress('No screenshots found for the selected device and date range.');
+            return;
+        }
+
+        const scope = `${data.total.toLocaleString()} screenshot(s) (${data.total_size_formatted})\n`
+            + `Device: ${deviceLabel}\n`
+            + `Date range: ${currentFilters.start_date} to ${currentFilters.end_date}`;
+
+        if (!confirm(`This will permanently delete:\n\n${scope}\n\nScreenshots and thumbnails will be removed from disk. This action cannot be undone.\n\nContinue?`)) {
+            showCleanupProgress('Cleanup cancelled.');
+            return;
+        }
+
+        // Deleting across every device is the widest possible action - require typing
+        if (!currentFilters.device_id) {
+            const typed = prompt('No device is selected, so screenshots for ALL DEVICES in this date range will be deleted.\n\nType DELETE to confirm:');
+            if (typed !== 'DELETE') {
+                showCleanupProgress('Cleanup cancelled.');
+                return;
+            }
+        } else if (!confirm('Are you absolutely sure? This permanently removes the image files.')) {
+            showCleanupProgress('Cleanup cancelled.');
+            return;
+        }
+
+        runCleanupBatches(data.total);
+    })
+    .catch(error => {
+        showCleanupProgress('Error: ' + error.message, true);
+    });
+}
+
+function runCleanupBatches(totalToDelete) {
+    const btn = document.getElementById('btnRemoveScreenshots');
+    const originalHtml = btn.innerHTML;
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Removing...';
+
+    let deletedRows = 0;
+    let deletedFiles = 0;
+    let deletedThumbnails = 0;
+    let freedBytes = 0;
+    const errors = [];
+
+    const finish = (message, isError) => {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        showCleanupProgress(message, isError);
+        loadStats();
+        loadLogs();
+    };
+
+    const runBatch = () => {
+        fetch('<?php echo BASE_URL; ?>cleanup/api_delete_screenshots', {
+            method: 'POST',
+            body: buildCleanupBody({ limit: CLEANUP_BATCH_SIZE })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) {
+                finish('Error: ' + escapeCleanupText(data.error || 'Failed to delete screenshots'), true);
+                return;
+            }
+
+            deletedRows += data.deleted_rows;
+            deletedFiles += data.deleted_files;
+            deletedThumbnails += data.deleted_thumbnails;
+            freedBytes += data.freed_bytes;
+
+            if (data.errors && data.errors.length) {
+                errors.push(...data.errors);
+            }
+
+            const progress = `<i class="fas fa-spinner fa-spin"></i> Deleted ${deletedRows.toLocaleString()} of `
+                + `${totalToDelete.toLocaleString()} screenshot(s)... (${data.remaining.toLocaleString()} remaining)`;
+            showCleanupProgress(progress);
+
+            // No progress in this batch means the remaining rows cannot be removed
+            if (data.deleted_rows === 0) {
+                finish(`Stopped with ${data.remaining.toLocaleString()} screenshot(s) remaining - the files could not be deleted. `
+                    + `Removed ${deletedFiles.toLocaleString()} image(s) and ${deletedThumbnails.toLocaleString()} thumbnail(s).`
+                    + (errors.length ? '<br>First error: ' + escapeCleanupText(errors[0]) : ''), true);
+                return;
+            }
+
+            if (data.remaining > 0) {
+                runBatch();
+                return;
+            }
+
+            const summary = `<i class="fas fa-check-circle"></i> Removed ${deletedFiles.toLocaleString()} screenshot(s) and `
+                + `${deletedThumbnails.toLocaleString()} thumbnail(s), freeing ${formatBytes(freedBytes)}. `
+                + `${deletedRows.toLocaleString()} database record(s) deleted.`;
+            finish(summary + (errors.length ? `<br>${errors.length} file(s) reported errors.` : ''), false);
+        })
+        .catch(error => {
+            finish('Error: ' + error.message, true);
+        });
+    };
+
+    runBatch();
+}
+
+function formatBytes(bytes) {
+    if (!bytes) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+    return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
 }
 
 function loadStats() {
