@@ -2356,7 +2356,7 @@ int main() {
     // Fetch configuration from API
     fetchConfigurationFromAPI();
     
-    // Do not activate activity capture until an administrator-approved pairing.
+    // Do not activate activity capture until a User No and monitor are selected.
     setupSystemTray();
     if (!restoreClientSession()) showClientLogin();
     else if(selectedMonitorId.load()<1) showMonitorSettings();
@@ -2772,7 +2772,7 @@ void updateTrayIcon() {
     nid.uFlags=NIF_ICON|NIF_MESSAGE|NIF_TIP;
     nid.hIcon=active?greenTrayIcon:redTrayIcon;
     strcpy_s(nid.szTip,active?"MonitorClient v1.5 - Active":
-         "MonitorClient v1.5 - Offline / Pair device or configure monitor");
+         "MonitorClient v1.5 - Offline / select a User No or monitor");
     Shell_NotifyIconA(NIM_MODIFY,&nid);
 }
 
