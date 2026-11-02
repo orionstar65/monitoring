@@ -237,18 +237,16 @@ void ConfigDialog::onSaveClicked()
         QMessageBox::warning(this,"Monitor settings",saved.value("error").toString("Could not save monitor."));
         return;
     }
-    if(id==0){
-        saveSettings();
-        QMessageBox::information(this,"Awaiting approval",
-            "Monitor registration requested. The administrator must assign it to your account before monitoring can start.");
-        return;
+    const int selectedId=id>0?id:saved.value("monitor_id").toInt();
+    if(selectedId<1){
+        QMessageBox::warning(this,"Monitor","Registration did not return a monitor ID.");return;
     }
-    const QJsonObject selected=authRequest(QJsonObject{{"action","select"},{"monitor_id",id}},true);
+    const QJsonObject selected=authRequest(QJsonObject{{"action","select"},{"monitor_id",selectedId}},true);
     if(!selected.value("success").toBool()){
         QMessageBox::warning(this,"Monitor selection",selected.value("error").toString("Monitor not assigned."));
         return;
     }
-    monitorId=id;
+    monitorId=selectedId;
     saveSettings();
     accept();
 }
@@ -409,7 +407,15 @@ void ConfigDialog::onRequestMonitorClicked()
     if(authToken.isEmpty()){QMessageBox::information(this,"Sign in first","Please sign in before requesting a monitor.");return;}
     bool ok=false;const QString name=QInputDialog::getText(this,"Request monitor","Device name:",QLineEdit::Normal,QString(),&ok);
     if(!ok||name.trimmed().isEmpty())return;
-    QJsonObject response=authRequest(QJsonObject{{"action","request_monitor"},{"name",name.trimmed()}},true);
-    QMessageBox::information(this,"Monitor request",response.value("success").toBool()
-        ?"Request submitted. Your admin must assign it before selection.":response.value("error").toString("Request failed"));
+    QJsonObject response=authRequest(QJsonObject{{"action","request_monitor"},{"name",name.trimmed()},
+        {"os","Ubuntu"},{"machine","laptop"}},true);
+    if(response.value("success").toBool()){
+        monitorId=response.value("monitor_id").toInt();
+        QJsonObject all=authRequest(QJsonObject{{"action","monitors"}},true);
+        updateMonitorList(all.value("monitors").toArray());
+        int ix=monitorSelector->findData(monitorId);
+        if(ix>=0)monitorSelector->setCurrentIndex(ix);
+    }
+    QMessageBox::information(this,"Monitor registration",response.value("success").toBool()
+        ?"Monitor created and assigned to your account.":response.value("error").toString("Registration failed"));
 }

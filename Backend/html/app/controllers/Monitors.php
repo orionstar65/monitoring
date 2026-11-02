@@ -110,7 +110,7 @@ class Monitors extends Base {
         $this->requireAdmin();
         
         $monitor = $this->db->fetch(
-            "SELECT * FROM tbl_monitor_ips WHERE id = :id",
+            "SELECT m.*,u.name AS owner_name FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id WHERE m.id=:id",
             ['id' => $id]
         );
         

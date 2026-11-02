@@ -2086,18 +2086,18 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
                 MessageBoxA(dlg,msg.c_str(),"MonitorClient",MB_ICONERROR|MB_OK);
                 return TRUE;
             }
-            if(id<1) {
-                MessageBoxA(dlg,"New monitor requested. Ask your administrator to assign it before monitoring starts.",
-                    "Pending approval",MB_OK|MB_ICONINFORMATION);
-                EndDialog(dlg,IDCANCEL);return TRUE;
+            const int selectedId=id>0?id:saved.get("monitor_id",0).asInt();
+            if(selectedId<1){
+                MessageBoxA(dlg,"No monitor ID returned.","MonitorClient",MB_ICONERROR);
+                return TRUE;
             }
-            Json::Value req;req["action"]="select";req["monitor_id"]=id;
+            Json::Value req;req["action"]="select";req["monitor_id"]=selectedId;
             Json::Value result=callClientAuth(req);
             if(!result.get("success",false).asBool()){
                 MessageBoxA(dlg,"Monitor not assigned to your account.","MonitorClient",MB_ICONERROR);
                 return TRUE;
             }
-            selectedMonitorId.store(id);
+            selectedMonitorId.store(selectedId);
             signedInUsername=name;
             if(!keyboardHook)setupKeyboardHook();
             if(!usbMonitoringActive)setupUSBMONITORING();
