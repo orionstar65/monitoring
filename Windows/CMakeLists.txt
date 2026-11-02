@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(MonitorClient VERSION 1.7)
+project(MonitorClient VERSION 1.5)
 
 # Windows-specific build configuration for MinGW-w64
 
