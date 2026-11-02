@@ -2022,14 +2022,14 @@ static std::string selectedUserNo(HWND dlg) {
     if(length<=0||length>2048)return {};
     std::wstring item(static_cast<size_t>(length)+1,L'\0');
     SendMessageW(combo,CB_GETLBTEXT,ix,(LPARAM)item.data());
-    const size_t slash=item.find(L" / ");
+    const size_t slash=item.find(L"/");
     if(slash==std::wstring::npos)return {};
     return wideToUtf8(item.substr(0,slash));
 }
 static void selectDirectoryUser(HWND dlg,const std::string& userNo) {
     const HWND combo=GetDlgItem(dlg,SETTINGS_USER_NO);
     if(userNo.empty()){SendMessageW(combo,CB_SETCURSEL,0,0);return;}
-    const std::wstring prefix=utf8ToWide(userNo+" / ");
+    const std::wstring prefix=utf8ToWide(userNo+"/");
     const int index=(int)SendMessageW(combo,CB_FINDSTRING,(WPARAM)-1,(LPARAM)prefix.c_str());
     SendMessageW(combo,CB_SETCURSEL,index>=0?index:0,0);
 }
@@ -2042,8 +2042,8 @@ static void loadUserDirectory(HWND dlg) {
     for(const auto& entry:response.get("users",Json::arrayValue)){
         const std::string no=entry.get("user_no","").asString();
         if(no.empty())continue;
-        const std::string label=no+" / "+entry.get("full_name","").asString()+
-            " / "+entry.get("ip_address","—").asString();
+        const std::string label=no+"/"+entry.get("full_name","").asString()+
+            "/"+entry.get("ip_address","—").asString();
         const std::wstring wide=utf8ToWide(label);
         SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)wide.c_str());
     }
