@@ -367,11 +367,19 @@ QJsonObject ConfigDialog::authRequest(const QJsonObject &payload,bool authentica
     req.setHeader(QNetworkRequest::ContentTypeHeader,"application/json");
     if(authenticated && !authToken.isEmpty())req.setRawHeader("Authorization",("Bearer "+authToken).toUtf8());
     QNetworkReply *reply=manager.post(req,QJsonDocument(payload).toJson());
-    QEventLoop loop;QObject::connect(reply,&QNetworkReply::finished,&loop,&QEventLoop::quit);
-    loop.exec();
+    QEventLoop loop;
+    QTimer timer;
+    timer.setSingleShot(true);
+    QObject::connect(&timer,&QTimer::timeout,reply,&QNetworkReply::abort);
+    QObject::connect(reply,&QNetworkReply::finished,&loop,&QEventLoop::quit);
+    timer.start(8000);
+    if(!reply->isFinished())loop.exec();
     QJsonObject response=QJsonDocument::fromJson(reply->readAll()).object();
-    if(reply->error()!=QNetworkReply::NoError && !response.contains("error"))response["error"]=reply->errorString();
-    reply->deleteLater();return response;
+    if(reply->error()!=QNetworkReply::NoError && !response.contains("error")){
+        response["error"]=timer.isActive()?reply->errorString():"Server request timed out.";
+    }
+    reply->deleteLater();
+    return response;
 }
 void ConfigDialog::onLogoutClicked()
 {
@@ -414,6 +422,11 @@ void ConfigDialog::onSignInClicked()
         return;
     }
     authToken=response.value("token").toString();
+    if(authToken.length()!=64) {
+        authToken.clear();
+        QMessageBox::warning(this,"Sign in failed","Server returned an invalid session token.");
+        return;
+    }
     logoutPerformed = false;
     accountStatusLabel->setText("Signed in: "+loginEdit->text().trimmed());
     logoutButton->setEnabled(true);
