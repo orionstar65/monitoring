@@ -88,7 +88,6 @@ class Users extends Base {
                     $data = [
                         'name'=>$name,
                         'username' => $username,
-                        'name' => $name,
                         'email' => $email,
                         'role' => $role
                     ];

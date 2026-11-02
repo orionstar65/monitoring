@@ -461,7 +461,7 @@
             <h4><?php echo APP_NAME; ?></h4>
         </div>
         <div class="sidebar-nav">
-            <?php if(($_SESSION['role']??'')!=='viewer'): ?>
+            <?php if(($_SESSION['role']??'')===ROLE_ADMIN): ?>
             <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'dashboard' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>dashboard">
                     <i class="fas fa-tachometer-alt"></i>
@@ -483,7 +483,7 @@
                     <span>Monitor IPs</span>
                 </a>
             </div>
-            <?php if(($_SESSION['role']??'')!=='viewer'): ?>
+            <?php if(($_SESSION['role']??'')===ROLE_ADMIN): ?>
             <?php if ($_SESSION['role'] === ROLE_ADMIN): ?>
             <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'merge' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>merge">
