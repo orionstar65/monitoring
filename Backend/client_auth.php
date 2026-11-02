@@ -24,11 +24,17 @@ try {
     $action=$data['action']??'';
     if($action==='signup'){
         $username=trim((string)($data['username']??''));
+        $fullName=trim((string)($data['full_name']??$data['name']??$username));
         $password=(string)($data['password']??'');
         $confirm=(string)($data['confirm_password']??'');
         if(!preg_match('/^[A-Za-z0-9_.-]{3,50}$/',$username)
             ||strlen($password)<12||strlen($password)>1024){
             http_response_code(400);echo json_encode(['error'=>'Username must be 3–50 letters, numbers, underscores, periods or dashes; password at least 12 characters.']);exit;
+        }
+        if(strlen($fullName)<2||strlen($fullName)>150
+            ||preg_match('/[<>\\x00-\\x1f\\x7f]/',$fullName)){
+            http_response_code(400);
+            echo json_encode(['error'=>'Enter a valid full name (2–150 characters).']);exit;
         }
         if(!hash_equals($password,$confirm)){
             http_response_code(400);echo json_encode(['error'=>'Passwords do not match']);exit;
@@ -45,7 +51,7 @@ try {
         $hash=password_hash($password,PASSWORD_DEFAULT);
         try {
             $st=$db->prepare("INSERT INTO users (name,username,password,role) VALUES (?,?,?,'viewer')");
-            $st->bind_param('sss',$username,$username,$hash);$st->execute();$st->close();
+            $st->bind_param('sss',$fullName,$username,$hash);$st->execute();$st->close();
         } catch(mysqli_sql_exception $e) {
             if($e->getCode()===1062){http_response_code(409);echo json_encode(['error'=>'This username already exists. Please sign in instead.','code'=>'username_exists']);exit;}
             throw $e;
