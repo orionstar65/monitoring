@@ -62,8 +62,10 @@ class Auth extends Base {
                     return;
                 }
                 $this->db->insert('login_attempts',['attempt_key'=>$key]);
-                $existing=$this->db->fetch('SELECT id FROM users WHERE username=:username OR email=:email',
-                    ['username'=>$username,'email'=>$email]);
+                $existing=$email==='' ?
+                    $this->db->fetch('SELECT id FROM users WHERE username=:username',['username'=>$username])
+                    : $this->db->fetch('SELECT id FROM users WHERE username=:username OR email=:email',
+                        ['username'=>$username,'email'=>$email]);
                 if($existing)$error='Username or email already registered.';
                 else try{
                     $this->db->insert('users',['name'=>$name,'username'=>$username,'email'=>$email!==''?$email:null,

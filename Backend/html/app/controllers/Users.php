@@ -41,8 +41,9 @@ class Users extends Base {
                     ['username' => $username]
                 );
                 
-                if ($existing) {
-                    $error = 'Username already exists';
+                if ($existing || ($email!=='' && $this->db->fetch(
+                        'SELECT id FROM users WHERE email=:email',['email'=>$email]))) {
+                    $error = 'Username or email already exists';
                 } else {
                     $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
                     
@@ -93,8 +94,10 @@ class Users extends Base {
                     ['username' => $username, 'id' => $id]
                 );
                 
-                if ($existing) {
-                    $error = 'Username already exists';
+                if ($existing || ($email!=='' && $this->db->fetch(
+                        'SELECT id FROM users WHERE email=:email AND id!=:id',
+                        ['email'=>$email,'id'=>$id]))) {
+                    $error = 'Username or email already exists';
                 } else {
                     $data = [
                         'name'=>$name,

@@ -28,7 +28,11 @@ ob_start(); ?>
  <td data-order="<?= $escape($m['last_monitor_tic']??'') ?>"><?= $m['last_monitor_tic']?$escape($m['last_monitor_tic']):'Never' ?></td>
  <td><?= $escape($m['remark']??'') ?></td>
  <td class="text-nowrap">
+ <?php if(($_SESSION['role']??'')==='admin'): ?>
  <a href="<?= BASE_URL ?>view/logs/<?= (int)$m['id'] ?>" class="btn btn-sm btn-light" title="View logs" aria-label="View logs"><i class="fas fa-chart-line"></i></a>
+ <?php else: ?>
+ <a href="<?= BASE_URL ?>merge" class="btn btn-sm btn-light" title="Merge assigned monitor logs" aria-label="Merge assigned monitor logs"><i class="fas fa-code-branch"></i></a>
+ <?php endif; ?>
  <?php if(($_SESSION['role']??'')==='admin'): ?>
  <a href="<?= BASE_URL ?>monitors/edit/<?= (int)$m['id'] ?>" class="btn btn-sm btn-light" title="Edit" aria-label="Edit monitor"><i class="fas fa-pen"></i></a>
  <form method="post" action="<?= BASE_URL ?>monitors/delete/<?= (int)$m['id'] ?>" class="d-inline" onsubmit="return confirm('Delete this monitor and its logs?')">
