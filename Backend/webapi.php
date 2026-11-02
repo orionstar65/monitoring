@@ -278,7 +278,7 @@ switch ($request_type_param) {
             
             $result = uploadCacheScreenWithMetadata($com_name, $ctime, $_FILES['imagefile']);
             if (!$result) {
-                http_response_code(500);
+                if(http_response_code()<400)http_response_code(500);
                 echo json_encode(['error' => 'Failed to upload screenshot']);
             }
         } else {

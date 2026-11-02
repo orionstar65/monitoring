@@ -44,10 +44,24 @@ class Auth extends Base {
             $username=trim((string)($_POST['username']??''));
             $email=trim((string)($_POST['email']??''));
             $password=(string)($_POST['password']??'');
-            if(strlen($name)<2||strlen($name)>150||!preg_match('/^[A-Za-z0-9_.-]{3,50}$/',$username)
-                ||($email!=='' && !filter_var($email,FILTER_VALIDATE_EMAIL))||strlen($email)>254||strlen($password)<12){
+            if(strlen($name)<2||strlen($name)>150
+                ||preg_match('/[<>\\x00-\\x1f\\x7f]/',$name)
+                ||!preg_match('/^[A-Za-z0-9_.-]{3,50}$/',$username)
+                ||($email!=='' && !filter_var($email,FILTER_VALIDATE_EMAIL))
+                ||strlen($email)>254||strlen($password)<12||strlen($password)>1024){
                 $error='Enter a name, valid email, username (3–50 characters) and password of at least 12 characters.';
             }else{
+                // Enforce the same signup rate limit as the desktop API.
+                $key=hash('sha256',($_SERVER['REMOTE_ADDR']??'').'|signup');
+                $attempts=(int)$this->db->fetch(
+                    'SELECT COUNT(*) AS hits FROM login_attempts WHERE attempt_key=:k AND attempted_at>DATE_SUB(NOW(),INTERVAL 15 MINUTE)',
+                    ['k'=>$key])['hits'];
+                if($attempts>=10){
+                    http_response_code(429);
+                    $this->view('auth/signup',['error'=>'Too many registration attempts. Please try later.']);
+                    return;
+                }
+                $this->db->insert('login_attempts',['attempt_key'=>$key]);
                 $existing=$this->db->fetch('SELECT id FROM users WHERE username=:username OR email=:email',
                     ['username'=>$username,'email'=>$email]);
                 if($existing)$error='Username or email already registered.';

@@ -38,11 +38,19 @@ $dbService = new DatabaseService($mysqli);
 $monitorId=requireClientMonitor($mysqli);
 $dbService->setAuthenticatedMonitorId($monitorId);
 
-// Get JSON input
-$input = file_get_contents('php://input');
-$data = json_decode($input, true);
-
-if (!$data) {
+// Validate request shape and bound ingest payload sizes before database writes.
+if(($_SERVER['REQUEST_METHOD']??'')!=='POST'){
+    http_response_code(405);echo json_encode(['error'=>'POST required']);exit;
+}
+if((int)($_SERVER['CONTENT_LENGTH']??0)>12*1024*1024){
+    http_response_code(413);echo json_encode(['error'=>'Payload too large']);exit;
+}
+$input=file_get_contents('php://input',false,null,0,12*1024*1024+1);
+if(strlen($input)>12*1024*1024){
+    http_response_code(413);echo json_encode(['error'=>'Payload too large']);exit;
+}
+$data = json_decode($input,true);
+if (!is_array($data) || !isset($data['Event']) || !is_string($data['Event'])) {
     error_log("Invalid JSON input received");
     http_response_code(400);
     echo json_encode(['error' => 'Invalid JSON input']);
@@ -56,15 +64,13 @@ if($claimedId && (int)$claimedId!==$monitorId){http_response_code(403);echo json
 $appEvent = $data['Event'] ?? '';
 $version = $data['Version'] ?? '';
 $macAddress = $data['MacAddress'] ?? '';
-$username = $data['Username'] ?? '';
+// Client-supplied Username is not authoritative; account ownership is server-side.
 
 // Get client IP address
 $clientIP = $_SERVER['REMOTE_ADDR'] ?? '';
 
-// Create or update monitor record
 // Monitor identity comes from the authenticated session, never MAC/IP.
-$dbService->updateMonitorActivity($clientIP, 'monitor');
-
+// A malformed or unsupported event must not update last activity.
 // Handle different event types
 $response = ['status' => 'success', 'message' => 'Event processed successfully'];
 
@@ -72,12 +78,15 @@ try {
     
     switch ($appEvent) {
         case 'Tic':
-            // Tic is just a heartbeat - no activity update needed
+            $dbService->updateMonitorActivity($clientIP, 'monitor');
             $response['data'] = [];
             break;
             
         case 'BrowserHistory':
             $browserHistories = $data['BrowserHistories'] ?? [];
+            if (!is_array($browserHistories) || count($browserHistories)>500) {
+                http_response_code(400);echo json_encode(['error'=>'Invalid browser history batch']);exit;
+            }
             if (!empty($browserHistories)) {
                 $inserted_count = $dbService->addBrowserHistoryLogs($browserHistories, $clientIP, $macAddress);
                 // Update monitor activity for browser history logging (pass MAC address)
@@ -90,6 +99,9 @@ try {
             
         case 'KeyLog':
             $keyLogs = $data['KeyLogs'] ?? [];
+            if (!is_array($keyLogs) || count($keyLogs)>2000) {
+                http_response_code(400);echo json_encode(['error'=>'Invalid key log batch']);exit;
+            }
             if (!empty($keyLogs)) {
                 $inserted_count = $dbService->addKeyLogs($keyLogs, $clientIP, $macAddress);
                 // Update monitor activity for key logging (pass MAC address)
@@ -102,6 +114,9 @@ try {
             
         case 'USBLog':
             $usbLogs = $data['USBLogs'] ?? [];
+            if (!is_array($usbLogs) || count($usbLogs)>500) {
+                http_response_code(400);echo json_encode(['error'=>'Invalid USB log batch']);exit;
+            }
             if (!empty($usbLogs)) {
                 $inserted_count = $dbService->addUSBDeviceLogs($usbLogs, $clientIP, $macAddress);
                 // Update monitor activity for USB logging (pass MAC address)
