@@ -6,6 +6,9 @@ class Base {
     public function __construct() {
         $this->db = Database::getInstance();
         $this->loadUser();
+        if(($this->user['role']??'')==='viewer' && !in_array(get_class($this),['Auth','Monitors','Dashboard'],true)){
+            http_response_code(403);exit('Access denied');
+        }
     }
     
     protected function loadUser() {

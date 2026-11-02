@@ -27,6 +27,7 @@ ob_start();
                             <button type="submit" class="btn btn-primary">Sign In</button>
                         </div>
                     </form>
+                    <p class="text-center mt-3"><a href="<?php echo BASE_URL; ?>auth/signup">Create an account</a></p>
                 </div>
             </div>
         </div>

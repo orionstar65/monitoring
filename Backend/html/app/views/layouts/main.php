@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="csrf-token" content="<?= htmlspecialchars($_SESSION['csrf_token']??'',ENT_QUOTES,'UTF-8') ?>">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $title ?? APP_NAME; ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -460,6 +461,7 @@
             <h4><?php echo APP_NAME; ?></h4>
         </div>
         <div class="sidebar-nav">
+            <?php if(($_SESSION['role']??'')!=='viewer'): ?>
             <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'dashboard' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>dashboard">
                     <i class="fas fa-tachometer-alt"></i>
@@ -474,12 +476,14 @@
                 </a>
             </div>
             <?php endif; ?>
+            <?php endif; ?>
             <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'monitors' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>monitors">
                     <i class="fas fa-desktop"></i>
                     <span>Monitor IPs</span>
                 </a>
             </div>
+            <?php if(($_SESSION['role']??'')!=='viewer'): ?>
             <?php if ($_SESSION['role'] === ROLE_ADMIN): ?>
             <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'merge' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>merge">
@@ -518,6 +522,7 @@
                     <span>Export</span>
                 </a>
             </div>
+            <?php endif; ?>
             <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'logout' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>auth/logout">
                     <i class="fas fa-sign-out-alt"></i>
@@ -584,6 +589,31 @@
     <?php endif; ?>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+    (() => {
+      const token=document.querySelector('meta[name="csrf-token"]')?.content||'';
+      document.addEventListener('submit',(event)=>{
+        const form=event.target;
+        if(!(form instanceof HTMLFormElement)||form.method.toUpperCase()!=='POST')return;
+        if(!form.querySelector('input[name="csrf_token"]')){
+          const field=document.createElement('input');field.type='hidden';field.name='csrf_token';field.value=token;form.appendChild(field);
+        }
+      },true);
+      const oldFetch=window.fetch.bind(window);
+      window.fetch=(input,options={})=>{
+        const method=(options.method||(input instanceof Request?input.method:'GET')).toUpperCase();
+        const url=new URL(typeof input==='string'?input:input.url,location.href);
+        if(url.origin===location.origin && !['GET','HEAD','OPTIONS'].includes(method)){
+          options={...options,headers:new Headers(options.headers||(input instanceof Request?input.headers:undefined))};
+          options.headers.set('X-CSRF-Token',token);
+        }
+        return oldFetch(input,options);
+      };
+      if(window.jQuery)jQuery(document).ajaxSend((_event,xhr,settings)=>{
+        if(!/^(GET|HEAD|OPTIONS)$/i.test(settings.type||'GET'))xhr.setRequestHeader('X-CSRF-Token',token);
+      });
+    })();
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>

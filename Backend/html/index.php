@@ -1,5 +1,18 @@
 <?php
+session_set_cookie_params(['httponly'=>true,'secure'=>!empty($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off','samesite'=>'Lax']);
+ini_set('session.use_strict_mode','1');
 session_start();
+if(!isset($_SESSION['csrf_token'])) $_SESSION['csrf_token']=bin2hex(random_bytes(32));
+if(isset($_SESSION['last_activity']) && time()-$_SESSION['last_activity']>3600){
+    session_unset();session_regenerate_id(true);$_SESSION['csrf_token']=bin2hex(random_bytes(32));
+}
+$_SESSION['last_activity']=time();
+if(($_SERVER['REQUEST_METHOD']??'GET')==='POST'){
+    $csrf=$_POST['csrf_token']??($_SERVER['HTTP_X_CSRF_TOKEN']??'');
+    if(!is_string($csrf)||!hash_equals($_SESSION['csrf_token'],$csrf)){
+        http_response_code(403);exit('Invalid CSRF token');
+    }
+}
 
 // Define base path
 define('BASEPATH', __DIR__ . '/');
@@ -32,7 +45,7 @@ error_log("Base Path: " . $base_path);
 error_log("Path: " . $path);
 
 // Show debug info in browser for development
-if (strpos($request_uri, 'debug') !== false) {
+if (false) {
     echo "<h3>Routing Debug Info:</h3>";
     echo "<p><strong>Request URI:</strong> $request_uri</p>";
     echo "<p><strong>Base Path:</strong> $base_path</p>";
@@ -66,10 +79,10 @@ if (file_exists($controller_file)) {
     $controller_class = ucfirst($controller);
     $controller_instance = new $controller_class();
     
-    if (method_exists($controller_instance, $method)) {
+    if (preg_match('/^[a-z_][a-z0-9_]*$/i', $method) && !str_starts_with($method,'_') && method_exists($controller_instance, $method)) {
         // Check if method is public
         $reflection = new ReflectionMethod($controller_instance, $method);
-        if ($reflection->isPublic()) {
+        if ($reflection->isPublic() && $reflection->getDeclaringClass()->getName() === $controller_class && $method !== '__construct') {
             call_user_func_array([$controller_instance, $method], $params);
         } else {
             http_response_code(404);

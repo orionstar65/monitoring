@@ -17,11 +17,12 @@ class Auth extends Base {
                 );
                 
                 if ($user && password_verify($password, $user['password'])) {
+                    session_regenerate_id(true);
                     $_SESSION['user_id'] = $user['id'];
                     $_SESSION['username'] = $user['username'];
                     $_SESSION['role'] = $user['role'];
                     
-                    $this->redirect('dashboard');
+                    $this->redirect($user['role']==='viewer' ? 'monitors' : 'dashboard');
                 } else {
                     $error = 'Invalid username or password';
                 }
@@ -31,6 +32,30 @@ class Auth extends Base {
         $this->view('auth/login', ['error' => $error ?? null]);
     }
     
+    public function signup() {
+        if($_SERVER['REQUEST_METHOD']==='POST'){
+            $name=trim((string)($_POST['name']??''));
+            $username=trim((string)($_POST['username']??''));
+            $email=trim((string)($_POST['email']??''));
+            $password=(string)($_POST['password']??'');
+            if(strlen($name)<2||strlen($name)>150||!preg_match('/^[A-Za-z0-9_.-]{3,50}$/',$username)
+                ||!filter_var($email,FILTER_VALIDATE_EMAIL)||strlen($email)>254||strlen($password)<12){
+                $error='Enter a name, valid email, username (3–50 characters) and password of at least 12 characters.';
+            }else{
+                $existing=$this->db->fetch('SELECT id FROM users WHERE username=:username OR email=:email',
+                    ['username'=>$username,'email'=>$email]);
+                if($existing)$error='Username or email already registered.';
+                else try{
+                    $this->db->insert('users',['name'=>$name,'username'=>$username,'email'=>$email,
+                        'password'=>password_hash($password,PASSWORD_DEFAULT),'role'=>'viewer',
+                        'created_at'=>date('Y-m-d H:i:s')]);
+                    $_SESSION['success_message']='Account created. Please sign in.';
+                    $this->redirect('auth/login');
+                }catch(PDOException $e){$error='Could not create account.';}
+            }
+        }
+        $this->view('auth/signup',['error'=>$error??null]);
+    }
     public function logout() {
         session_destroy();
         $this->redirect('auth/login');

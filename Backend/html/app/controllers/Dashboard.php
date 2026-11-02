@@ -8,10 +8,11 @@ class Dashboard extends Base {
     }
     
     public function index() {
+        if (!$this->isAdmin()) $this->redirect('monitors');
         // Get statistics
         $totalUsers = $this->db->fetch("SELECT COUNT(*) as count FROM users")['count'];
         $totalMonitors = $this->db->fetch("SELECT COUNT(*) as count FROM tbl_monitor_ips")['count'];
-        $activeMonitors = $this->db->fetch("SELECT COUNT(*) as count FROM tbl_monitor_ips WHERE monitor_status = 1")['count'];
+        $activeMonitors = $this->db->fetch("SELECT COUNT(*) as count FROM tbl_monitor_ips WHERE updated_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)")['count'];
         
         // Get recent monitors with actual data from database
         $recentMonitors = $this->db->fetchAll(
