@@ -2908,6 +2908,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             updateMonitorFields()
         }
         func updateState() {
+            users.toolTip = users.selectedItem?.title
             let enrolled = !self.clientToken.isEmpty && self.selectedMonitorId > 0
             monitorPane.isHidden = !enrolled
             unpair.isHidden = !enrolled
