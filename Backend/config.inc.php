@@ -1,12 +1,13 @@
 <?php
 class JConfig {
     public function __construct() {
+        $this->dbhost = getenv('MONITOR_DB_HOST') ?: 'localhost';
         $this->dbuser = getenv('MONITOR_DB_USER') ?: 'monitoring_app';
         $this->dbpassword = getenv('MONITOR_DB_PASSWORD') ?: '';
         $this->dbname = getenv('MONITOR_DB_NAME') ?: 'monitoring_db';
         if (!$this->dbpassword) throw new RuntimeException('MONITOR_DB_PASSWORD is missing');
     }
-    public $dbhost = 'localhost';
+    public $dbhost;
     public $dbuser;
     public $dbpassword;
     public $dbname;

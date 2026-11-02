@@ -2,12 +2,26 @@
 $directHttps = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
 $trustedProxyHttps = getenv('MONITOR_TRUST_PROXY_HTTPS') === '1'
   && strtolower(trim($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
-if (!$directHttps && !$trustedProxyHttps) {
+$lanHttpAllowed = false;
+if (getenv('MONITOR_ALLOW_HTTP') === '1') {
+    $peer = $_SERVER['REMOTE_ADDR'] ?? '';
+    $lanHttpAllowed = $peer === '::1'
+        || (filter_var($peer, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)
+          && (str_starts_with($peer, '127.')
+          || !filter_var($peer, FILTER_VALIDATE_IP,
+              FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)));
+}
+if (!$directHttps && !$trustedProxyHttps && !$lanHttpAllowed) {
     http_response_code(426);
     header('Content-Type: text/plain; charset=utf-8');
     exit('HTTPS required. Configure a trusted TLS certificate before signing in.');
 }
-session_set_cookie_params(['httponly'=>true,'secure'=>true,'samesite'=>'Lax']);
+// Keep HTTP development sessions separate from HTTPS sessions, so that
+// a secure PHPSESSID cookie isn't sent to an unencrypted HTTP port.
+if (!$directHttps && !$trustedProxyHttps) session_name('MONITOR_LAN_HTTP_SESSION');
+session_set_cookie_params(['httponly'=>true,
+    'secure'=>$directHttps || $trustedProxyHttps,
+    'samesite'=>'Lax']);
 ini_set('session.use_strict_mode','1');
 session_start();
 if(!isset($_SESSION['csrf_token'])) $_SESSION['csrf_token']=bin2hex(random_bytes(32));

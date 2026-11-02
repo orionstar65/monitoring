@@ -1,11 +1,25 @@
 <?php
 /** Authentication for telemetry, bound to an admin-assigned monitor ID. */
+/**
+ * HTTP is available only as explicit LAN opt-in on a dedicated restricted vhost.
+ * This is not safe for credentials and sensitive monitoring telemetry on
+ * networks where other parties can intercept or modify traffic.
+ */
+function monitoringLanHttpAllowed(): bool {
+    if (getenv('MONITOR_ALLOW_HTTP') !== '1') return false;
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+    if ($ip === '::1') return true;
+    if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) return false;
+    if (str_starts_with($ip, '127.')) return true;
+    return filter_var($ip, FILTER_VALIDATE_IP,
+        FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
+}
 function requireSecureRequest(): void {
     // HTTPS must be end-to-end or terminated by a trusted, isolated reverse proxy.
     $direct = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
     $proxy = getenv('MONITOR_TRUST_PROXY_HTTPS') === '1'
         && strtolower(trim($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
-    if (!$direct && !$proxy) {
+    if (!$direct && !$proxy && !monitoringLanHttpAllowed()) {
         http_response_code(426);
         header('Content-Type: application/json');
         echo json_encode(['error'=>'HTTPS is required']);
