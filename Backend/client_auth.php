@@ -67,12 +67,16 @@ try {
         $st=$db->prepare('SELECT COUNT(*) AS hits FROM login_attempts WHERE attempt_key=? AND attempted_at>DATE_SUB(NOW(), INTERVAL 15 MINUTE)');
         $st->bind_param('s',$key);$st->execute();$count=(int)$st->get_result()->fetch_assoc()['hits'];$st->close();
         if($count>=8){http_response_code(429);echo json_encode(['error'=>'Too many attempts; try again later']);exit;}
-        $st=$db->prepare('SELECT id,name,username,password FROM users WHERE username=? OR email=? LIMIT 1');
+        $st=$db->prepare('SELECT id,name,username,password,must_change_password FROM users WHERE username=? OR email=? LIMIT 1');
         $st->bind_param('ss',$identifier,$identifier);$st->execute();$user=$st->get_result()->fetch_assoc();$st->close();
         if(!$user||!password_verify($password,$user['password'])){
             $st=$db->prepare('INSERT INTO login_attempts (attempt_key) VALUES (?)');
             $st->bind_param('s',$key);$st->execute();$st->close();
             http_response_code(401);echo json_encode(['error'=>'Incorrect credentials. If you forgot your password, ask an administrator to reset it.','code'=>'invalid_credentials']);exit;
+        }
+        if(!empty($user['must_change_password'])){
+            http_response_code(403);
+            echo json_encode(['error'=>'Change your temporary password in the web portal before signing into a desktop client.','code'=>'password_change_required']);exit;
         }
         $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);
         $st=$db->prepare('INSERT INTO client_sessions (token_hash,user_id,expires_at) VALUES (?,?,NULL)');

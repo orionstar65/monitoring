@@ -9,7 +9,13 @@ class Users extends Base {
     }
     
     public function index() {
-        $users = $this->db->fetchAll("SELECT * FROM users ORDER BY created_at DESC");
+        $users = $this->db->fetchAll(
+            "SELECT u.id,u.name,u.username,u.email,u.role,u.created_at,u.must_change_password,
+                    MAX(m.last_monitor_tic) AS last_activity
+             FROM users u LEFT JOIN tbl_monitor_ips m ON m.owner_user_id=u.id
+             GROUP BY u.id,u.name,u.username,u.email,u.role,u.created_at,u.must_change_password
+             ORDER BY u.created_at DESC"
+        );
         
         $this->view('users/index', ['users' => $users]);
     }
@@ -23,7 +29,8 @@ class Users extends Base {
             $role = $_POST['role'] ?? ROLE_USER;
             if(!in_array($role,['admin','user','viewer'],true))$role='viewer';
             
-            if (empty($username) || empty($password) || empty($email)) {
+            if (empty($username) || strlen($password)<12 || strlen($name)<2
+                || ($email!=='' && !filter_var($email,FILTER_VALIDATE_EMAIL))) {
                 $error = 'All fields are required';
             } else {
                 // Check if username already exists
@@ -41,7 +48,7 @@ class Users extends Base {
                         'username' => $username,
                         'name' => $name,
                         'password' => $hashedPassword,
-                        'email' => $email,
+                        'email' => $email!==''?$email:null,
                         'role' => $role,
                         'created_at' => date('Y-m-d H:i:s')
                     ]);
@@ -73,7 +80,7 @@ class Users extends Base {
             if(!in_array($role,['admin','user','viewer'],true))$role='viewer';
             $password = $_POST['password'] ?? '';
             
-            if (empty($username) || empty($email)) {
+            if (empty($username) || strlen($name)<2 || ($email!=='' && !filter_var($email,FILTER_VALIDATE_EMAIL))) {
                 $error = 'Username and email are required';
             } else {
                 // Check if username already exists for another user
@@ -88,12 +95,17 @@ class Users extends Base {
                     $data = [
                         'name'=>$name,
                         'username' => $username,
-                        'email' => $email,
+                        'email' => $email!==''?$email:null,
                         'role' => $role
                     ];
                     
                     if (!empty($password)) {
+                        if(strlen($password)<12){
+                            $this->view('users/edit',['user'=>$user,'error'=>'Password must contain at least 12 characters.']);
+                            return;
+                        }
                         $data['password'] = password_hash($password, PASSWORD_DEFAULT);
+                        $data['must_change_password'] = 1;
                     }
                     
                     $result = $this->db->update('users', $data, 'id = :id', ['id' => $id]);
@@ -108,6 +120,10 @@ class Users extends Base {
                     }
                     
                     if ($result > 0 || !$dataChanged) {
+                        if(!empty($password))$this->db->query(
+                            'UPDATE client_sessions SET revoked_at=NOW() WHERE user_id=:id AND revoked_at IS NULL',
+                            ['id'=>$id]
+                        );
                         // Success: either rows were updated OR no changes were needed
                         $_SESSION['success_message'] = 'User updated successfully';
                         $this->redirect('users');
@@ -121,6 +137,27 @@ class Users extends Base {
         $this->view('users/edit', ['user' => $user, 'error' => $error ?? null]);
     }
     
+    public function reset_password($id) {
+        if (($_SERVER['REQUEST_METHOD']??'') !== 'POST') {
+            http_response_code(405);exit('POST required');
+        }
+        $id=filter_var($id,FILTER_VALIDATE_INT);
+        if(!$id || (int)$id===(int)$this->user['id']){
+            http_response_code(400);exit('Cannot reset this account');
+        }
+        if(!$this->db->fetch('SELECT id FROM users WHERE id=:id',['id'=>$id])){
+            http_response_code(404);exit('User not found');
+        }
+        // Requested administrative default. Force a change on next web login.
+        $this->db->update('users',[
+            'password'=>password_hash('1234567890',PASSWORD_DEFAULT),
+            'must_change_password'=>1
+        ],'id=:id',['id'=>$id]);
+        $this->db->query('UPDATE client_sessions SET revoked_at=NOW() WHERE user_id=:id AND revoked_at IS NULL',['id'=>$id]);
+        $_SESSION['success_message']='Temporary default password applied. User must change it on next sign-in.';
+        $this->redirect('users');
+    }
+
     public function delete($id) {
         if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'){http_response_code(405);exit('POST required');}
         if ($id == $_SESSION['user_id']) {
