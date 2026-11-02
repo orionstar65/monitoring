@@ -183,6 +183,33 @@ func handleKeyDownCallback(
     return Unmanaged.passUnretained(event)
 }
 
+private final class MonitorPickerCoordinator: NSObject {
+    let picker: NSPopUpButton
+    let label: NSTextField
+    let remark: NSTextField
+    let os: NSPopUpButton
+    let machine: NSPopUpButton
+    let monitors: [[String: Any]]
+    init(_ picker: NSPopUpButton, _ label: NSTextField, _ remark: NSTextField,
+         _ os: NSPopUpButton, _ machine: NSPopUpButton, _ monitors: [[String: Any]]) {
+        self.picker = picker; self.label = label; self.remark = remark
+        self.os = os; self.machine = machine; self.monitors = monitors
+    }
+    @objc func update() {
+        let id = picker.selectedItem?.representedObject as? Int ?? 0
+        guard let monitor = monitors.first(where: { ($0["id"] as? Int ?? -1) == id }), id > 0 else {
+            label.stringValue = ""; remark.stringValue = ""
+            os.selectItem(withTitle: "Mac"); machine.selectItem(withTitle: "Laptop")
+            return
+        }
+        label.stringValue = monitor["name"] as? String ?? ""
+        remark.stringValue = monitor["remark"] as? String ?? ""
+        os.selectItem(withTitle: monitor["platform"] as? String ?? "Mac")
+        let type = monitor["type"] as? String ?? ""
+        machine.selectItem(withTitle: type.lowercased() == "desktop" ? "Desktop" : "Laptop")
+    }
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDelegate {
     
     var storage: UserDefaults!
@@ -2562,6 +2589,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         }
         clientToken = token
         selectedMonitorId = 0
+        if let user = response["user"] as? [String: Any], let canonical = user["username"] as? String {
+            storage.set(canonical, forKey: "username")
+        }
         keychainSaveToken(token)
         updateTrayStatusDot()
         return true
@@ -2678,10 +2708,37 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         notifyToggle.frame = NSRect(x:117,y:22,width:260,height:25)
         notifyToggle.state = notificationsEnabled ? .on : .off
         panel.addSubview(notifyToggle)
+        let pickerCoordinator=MonitorPickerCoordinator(monitorPicker,labelField,
+                              remarkField,osPicker,machinePicker,monitors)
+        monitorPicker.target=pickerCoordinator
+        monitorPicker.action=#selector(MonitorPickerCoordinator.update)
+        pickerCoordinator.update()
         account.accessoryView = panel
         account.addButton(withTitle:"Save / Add")
         account.addButton(withTitle:"Cancel")
         guard account.runModal() == .alertFirstButtonReturn else { return }
+        let newIP = ipField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newPort = portField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !newIP.isEmpty, let portNumber = Int(newPort), portNumber > 0, portNumber <= 65535 else {
+            let invalid=NSAlert();invalid.messageText="Invalid server address or port";invalid.runModal();return
+        }
+        notificationsEnabled = notifyToggle.state == .on
+        if newIP != (storage.string(forKey:"server-ip") ?? "")
+          || newPort != (storage.string(forKey:"server-port") ?? "8924") {
+            storage.set(newIP,forKey:"server-ip")
+            storage.set(newPort,forKey:"server-port")
+            storage.set(userField.stringValue,forKey:"username")
+            saveSettings(username:userField.stringValue,serverIP:newIP,serverPort:newPort)
+            if let tap=eventTap { CGEvent.tapEnable(tap:tap,enable:false);eventTap=nil }
+            clientToken="";selectedMonitorId=0;isServerConnected=false
+            updateTrayStatusDot()
+            let changed=NSAlert()
+            changed.messageText="Server changed"
+            changed.informativeText="Sign in again for the new server before selecting its monitor."
+            changed.runModal()
+            openLoginDialog()
+            return
+        }
         let id = monitorPicker.selectedItem?.representedObject as? Int ?? 0
         let payload:[String:Any] = ["action":id>0 ? "save_monitor":"request_monitor",
             "monitor_id":id, "label":labelField.stringValue,
@@ -2694,7 +2751,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             err.informativeText="Check your connection and monitor assignment."
             err.runModal();return
         }
-        notificationsEnabled = notifyToggle.state == .on
         storage.set(userField.stringValue,forKey:"username")
         storage.set(ipField.stringValue,forKey:"server-ip")
         storage.set(portField.stringValue,forKey:"server-port")
@@ -2707,6 +2763,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         guard let selection=clientAuthRequest(["action":"select","monitor_id":id],authenticated:true),
               selection["success"] as? Bool == true else { return }
         selectedMonitorId=id
+        keychainSaveToken(clientToken)
         startKeyboardMonitoring()
         updateTrayStatusDot()
     }
@@ -4048,6 +4105,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     }
     
     @objc private func statusBarIconClicked() {
+        updateTrayStatusDot()
         // Show a quick status notification
         let notification = NSUserNotification()
         notification.title = "MonitorClient Status"
@@ -4081,6 +4139,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     }
     
     @objc private func updateStatusMenu() {
+        updateTrayStatusDot()
         guard let menu = statusMenu else { return }
         
         // Update client information
