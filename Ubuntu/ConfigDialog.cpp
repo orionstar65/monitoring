@@ -143,7 +143,7 @@ void ConfigDialog::saveSettings()
 bool ConfigDialog::testConnection()
 {
     QNetworkAccessManager *manager = new QNetworkAccessManager(this);
-    QString url = QString("https://%1:%2").arg(serverIPEdit->text()).arg(serverPortEdit->value());
+    QString url = QString("%1://%2:%3").arg(serverPortEdit->value() == 8924 ? "http" : "https").arg(serverIPEdit->text()).arg(serverPortEdit->value());
     
     QNetworkRequest request(url);
     QNetworkReply *reply = manager->get(request);
@@ -203,7 +203,7 @@ void ConfigDialog::onTestConnectionClicked()
 QJsonObject ConfigDialog::authRequest(const QJsonObject &payload,bool authenticated)
 {
     QNetworkAccessManager manager;
-    QNetworkRequest req(QUrl(QString("https://%1:%2/client_auth.php").arg(serverIPEdit->text()).arg(serverPortEdit->value())));
+    QNetworkRequest req(QUrl(QString("%1://%2:%3/client_auth.php").arg(serverPortEdit->value() == 8924 ? "http" : "https").arg(serverIPEdit->text()).arg(serverPortEdit->value())));
     req.setHeader(QNetworkRequest::ContentTypeHeader,"application/json");
     if(authenticated && !authToken.isEmpty())req.setRawHeader("Authorization",("Bearer "+authToken).toUtf8());
     QNetworkReply *reply=manager.post(req,QJsonDocument(payload).toJson());

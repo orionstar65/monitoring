@@ -433,7 +433,7 @@ void MonitorClient::sendScreensAsync(const QString &filePath, std::function<void
         return;
     }
 
-    QNetworkRequest req(QUrl(QString("https://%1:%2/webapi.php?type=upload")
+    QNetworkRequest req(QUrl(QString("%1://%2:%3/webapi.php?type=upload").arg(serverPort == 8924 ? "http" : "https")
                                  .arg(serverIP)
                                  .arg(serverPort)));
     auto *multiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
@@ -511,7 +511,7 @@ int MonitorClient::sendTic()
     QJsonDocument doc(pingData);
     QByteArray data = doc.toJson();
 
-    QNetworkRequest request(QUrl(QString("https://%1:%2/eventhandler.php").arg(serverIP).arg(serverPort)));
+    QNetworkRequest request(QUrl(QString("%1://%2:%3/eventhandler.php").arg(serverPort == 8924 ? "http" : "https").arg(serverIP).arg(serverPort)));
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
     request.setRawHeader("Authorization",("Bearer "+authToken).toUtf8());
@@ -1143,7 +1143,7 @@ void MonitorClient::sendDataChunkAsync(const QString &serverIP, int serverPort,
                                        const QString &eventType, const QString &dataField,
                                        const QString &data, std::function<void(int)> onDone)
 {
-    const QString url = QString("https://%1:%2/eventhandler.php").arg(serverIP).arg(serverPort);
+    const QString url = QString("%1://%2:%3/eventhandler.php").arg(serverPort == 8924 ? "http" : "https").arg(serverIP).arg(serverPort);
     QNetworkRequest req{QUrl(url)};
     req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
 
@@ -1278,7 +1278,7 @@ bool MonitorClient::testAPIEndpoints(const QString& serverIP, int serverPort)
     QStringList endpoints = {"/eventhandler.php", "/webapi.php"};
     
     for (const QString& endpoint : endpoints) {
-        QString url = QString("https://%1:%2%3").arg(serverIP).arg(serverPort).arg(endpoint);
+        QString url = QString("%1://%2:%3%4").arg(serverPort == 8924 ? "http" : "https").arg(serverIP).arg(serverPort).arg(endpoint);
         qDebug() << "Testing endpoint:" << url;
         
         QNetworkRequest request(url);
@@ -1525,7 +1525,7 @@ QPair<bool, QString> MonitorClient::evaluateRemoteServer()
 {
     const QString serverIP = getServerIP();
     const int serverPort = getServerPort();
-    const QString url = QString("https://%1:%2/eventhandler.php").arg(serverIP).arg(serverPort);
+    const QString url = QString("%1://%2:%3/eventhandler.php").arg(serverPort == 8924 ? "http" : "https").arg(serverIP).arg(serverPort);
 
     qDebug() << "evaluateRemoteServer:" << url;
 
@@ -1772,7 +1772,7 @@ void MonitorClient::fetchConfigurationFromAPI(bool showTrayProgress)
     
     QString serverIP = getServerIP();
     int serverPort = getServerPort();
-    QString configURL = QString("https://%1:%2/webapi_config.php?platform=ubuntu").arg(serverIP).arg(serverPort);
+    QString configURL = QString("%1://%2:%3/webapi_config.php?platform=ubuntu").arg(serverPort == 8924 ? "http" : "https").arg(serverIP).arg(serverPort);
     
     QNetworkRequest request(configURL);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");

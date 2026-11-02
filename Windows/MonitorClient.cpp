@@ -1909,7 +1909,7 @@ bool loadSettings() {
         serverIP = "192.168.1.45";
         serverPort = "8924";
         username = "default_user";
-        API_BASE_URL = "https://" + serverIP + ":" + serverPort;
+        API_BASE_URL = (serverPort == "8924" ? "http://" : "https://") + serverIP + ":" + serverPort;
         return true;
     }
 
@@ -1957,7 +1957,7 @@ bool loadSettings() {
     }
     settingsFile.close();
 
-    API_BASE_URL = "https://" + serverIP + ":" + serverPort;
+    API_BASE_URL = (serverPort == "8924" ? "http://" : "https://") + serverIP + ":" + serverPort;
     // Settings loaded
     return true;
 }

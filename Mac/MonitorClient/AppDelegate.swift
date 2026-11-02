@@ -978,7 +978,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         }
         
         if !finalIP.isEmpty {
-            let endpoint = "https://\(finalIP):\(finalPort)" + (mode ? API_ROUTE : TIC_ROUTE)
+            let scheme = finalPort == "8924" ? "http" : "https"
+        let endpoint = "\(scheme)://\(finalIP):\(finalPort)" + (mode ? API_ROUTE : TIC_ROUTE)
             logMessage("Built endpoint: \(endpoint)", level: .debug)
             return endpoint
         } else {
@@ -2362,7 +2363,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             return
         }
         
-        let configURL = "https://\(serverIP):\(serverPort)/webapi_config.php?platform=macos"
+        let scheme = serverPort == "8924" ? "http" : "https"
+        let configURL = "\(scheme)://\(serverIP):\(serverPort)/webapi_config.php?platform=macos"
         
         guard let url = URL(string: configURL) else {
             logMessage("Invalid configuration URL: \(configURL)", level: .error)
@@ -2461,7 +2463,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         guard let address = storage.string(forKey: "server-ip") else { return nil }
         let host = address.split(separator: ":").first.map(String.init) ?? address
         let port = storage.string(forKey: "server-port") ?? "8924"
-        guard let url = URL(string: "https://\(host):\(port)/client_auth.php"),
+        let scheme = port == "8924" ? "http" : "https"
+        guard let url = URL(string: "\(scheme)://\(host):\(port)/client_auth.php"),
               let bytes = try? JSONSerialization.data(withJSONObject: body) else { return nil }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -2535,7 +2538,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     @objc private func openSettingsDialog() {
         let alert = NSAlert()
         alert.messageText = "MonitorClient Settings"
-        alert.informativeText = "Configure server connection settings"
+        alert.informativeText = "Port 8924: HTTP (trusted LAN only). Port 8925: HTTPS (recommended)."
         
         // Create custom view for input fields
         let customView = NSView(frame: NSRect(x: 0, y: 0, width: 350, height: 145))
