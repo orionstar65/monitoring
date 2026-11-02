@@ -837,11 +837,11 @@ class DatabaseService {
             $detected_platform = null;
             
             $stmt = $this->mysqli->prepare("
-                INSERT INTO tbl_monitor_ips (ip_address, mac_address, username, app_version, platform) 
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO tbl_monitor_ips (ip_address, mac_address, app_version, platform) 
+                VALUES (?, ?, ?, ?)
             ");
             
-            $stmt->bind_param("sssss", $ip_address, $mac_address, $username, $app_version, $detected_platform);
+            $stmt->bind_param("ssss", $ip_address, $mac_address, $app_version, $detected_platform);
             $result = $stmt->execute();
             $errno = $stmt->errno;
             $error = $stmt->error;
@@ -1115,12 +1115,12 @@ class DatabaseService {
         // Get all clients from database (no SQL filtering to ensure exact PHP calculation)
         $stmt = $this->mysqli->prepare("
             SELECT 
-                m.*,
+                m.*,owner.name AS username,
                 COALESCE(s.last_screenshot, '0000-00-00 00:00:00') as last_screenshot,
                 COALESCE(k.last_keylog, '0000-00-00 00:00:00') as last_keylog,
                 COALESCE(b.last_browser, '0000-00-00 00:00:00') as last_browser,
                 COALESCE(u.last_usb, '0000-00-00 00:00:00') as last_usb
-            FROM tbl_monitor_ips m
+            FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
             LEFT JOIN (
                 SELECT monitor_ip_id, MAX(capture_datetime) as last_screenshot
                 FROM screenshot_metadata 
@@ -1141,7 +1141,7 @@ class DatabaseService {
                 FROM usb_device_logs 
                 GROUP BY monitor_ip_id
             ) u ON m.id = u.monitor_ip_id
-            ORDER BY COALESCE(m.slack_id, m.username), m.name
+            ORDER BY COALESCE(m.slack_id, owner.name), m.name
         ");
         
         $stmt->execute();
@@ -1184,7 +1184,7 @@ class DatabaseService {
                 m.id,
                 m.ip_address,
                 m.name,
-                m.username,
+                owner.name AS username,
                 m.last_monitor_tic,
                 m.last_browser_tic,
                 m.updated_at,
@@ -1192,7 +1192,7 @@ class DatabaseService {
                 COALESCE(k.last_keylog, '0000-00-00 00:00:00') as last_keylog,
                 COALESCE(b.last_browser, '0000-00-00 00:00:00') as last_browser,
                 COALESCE(u.last_usb, '0000-00-00 00:00:00') as last_usb
-            FROM tbl_monitor_ips m
+            FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
             LEFT JOIN (
                 SELECT monitor_ip_id, MAX(capture_datetime) as last_screenshot
                 FROM screenshot_metadata 

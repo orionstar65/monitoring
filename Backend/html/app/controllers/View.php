@@ -144,7 +144,7 @@ class View extends Base {
             // This is MUCH faster than the correlated subquery approach
             // Include MAC address in JOIN for path resolution
             $latest_screenshots = $this->db->fetchAll(
-                "SELECT s.*, m.id as monitor_id, m.ip_address, m.mac_address, m.username, m.name as monitor_name
+                "SELECT s.*, m.id as monitor_id, m.ip_address, m.mac_address, owner.name AS username, m.name as monitor_name
                  FROM (
                      SELECT monitor_ip_id, MAX(id) as max_id
                      FROM screenshot_metadata
@@ -152,6 +152,7 @@ class View extends Base {
                  ) latest
                  INNER JOIN screenshot_metadata s ON s.id = latest.max_id
                  INNER JOIN tbl_monitor_ips m ON s.monitor_ip_id = m.id
+                 LEFT JOIN users owner ON owner.id=m.owner_user_id
                  {$where_clause}
                  ORDER BY s.capture_datetime DESC",
                 $params
@@ -273,9 +274,9 @@ class View extends Base {
         // Get monitors from database only (fast)
         // OPTIMIZED: Only select fields needed for status calculation and response
         $monitors = $this->db->fetchAll(
-            "SELECT id, ip_address, mac_address, username, name, type, last_monitor_tic, updated_at, created_at 
-             FROM tbl_monitor_ips 
-             ORDER BY name ASC"
+            "SELECT m.id,m.ip_address,m.mac_address,owner.name AS username,m.name,m.type,m.last_monitor_tic,m.updated_at,m.created_at
+             FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
+             ORDER BY m.name ASC"
         );
         
         // Add status based on database data only

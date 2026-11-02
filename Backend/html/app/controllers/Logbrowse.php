@@ -16,7 +16,7 @@ class Logbrowse extends Base {
     public function index() {
         // Get all monitors for device filtering
         $monitors = $this->db->fetchAll(
-            "SELECT * FROM tbl_monitor_ips ORDER BY username ASC, ip_address ASC"
+            "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.ip_address ASC"
         );
         
         $this->view('view/logbrowse', ['monitors' => $monitors]);
@@ -28,9 +28,9 @@ class Logbrowse extends Base {
     public function api_devices() {
         // OPTIMIZED: Remove SQL CASE statement - status calculation done in PHP for better performance
         $devices = $this->db->fetchAll(
-            "SELECT id, ip_address, mac_address, username, name, type, updated_at
-             FROM tbl_monitor_ips 
-             ORDER BY username ASC, ip_address ASC"
+            "SELECT m.id,m.ip_address,m.mac_address,owner.name AS username,m.name,m.type,m.updated_at
+             FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
+             ORDER BY owner.name ASC,m.ip_address ASC"
         );
         
         // Calculate status in PHP using StatusService for consistency
@@ -78,7 +78,7 @@ class Logbrowse extends Base {
         // Get total count
         $count_sql = "SELECT COUNT(*) as total 
                       FROM browser_history_logs b 
-                      JOIN tbl_monitor_ips m ON b.monitor_ip_id = m.id 
+                      JOIN tbl_monitor_ips m ON b.monitor_ip_id = m.id LEFT JOIN users owner ON owner.id=m.owner_user_id 
                       {$where_clause}";
         
         $total_result = $this->db->query($count_sql, $params)->fetch();
@@ -86,13 +86,13 @@ class Logbrowse extends Base {
         $total_pages = ceil($total_entries / $per_page);
         
         // Get paginated data
-        $data_sql = "SELECT b.*, m.ip_address, m.username, m.name, m.type,
+        $data_sql = "SELECT b.*, m.ip_address, owner.name AS username, m.name, m.type,
                             b.created_at as date,
                             b.browser,
                             b.url,
                             b.title
                      FROM browser_history_logs b 
-                     JOIN tbl_monitor_ips m ON b.monitor_ip_id = m.id 
+                     JOIN tbl_monitor_ips m ON b.monitor_ip_id = m.id LEFT JOIN users owner ON owner.id=m.owner_user_id 
                      {$where_clause}
                      ORDER BY b.created_at DESC 
                      LIMIT :limit OFFSET :offset";
@@ -152,7 +152,7 @@ class Logbrowse extends Base {
         // Get total count
         $count_sql = "SELECT COUNT(*) as total 
                       FROM key_logs k 
-                      JOIN tbl_monitor_ips m ON k.monitor_ip_id = m.id 
+                      JOIN tbl_monitor_ips m ON k.monitor_ip_id = m.id LEFT JOIN users owner ON owner.id=m.owner_user_id 
                       {$where_clause}";
         
         $total_result = $this->db->query($count_sql, $params)->fetch();
@@ -160,13 +160,13 @@ class Logbrowse extends Base {
         $total_pages = ceil($total_entries / $per_page);
         
         // Get paginated data
-        $data_sql = "SELECT k.*, m.ip_address, m.username, m.name, m.type,
+        $data_sql = "SELECT k.*, m.ip_address, owner.name AS username, m.name, m.type,
                             k.key_date as date,
                             k.application,
                             k.key_pressed as `key`,
                             'keydown' as action
                      FROM key_logs k 
-                     JOIN tbl_monitor_ips m ON k.monitor_ip_id = m.id 
+                     JOIN tbl_monitor_ips m ON k.monitor_ip_id = m.id LEFT JOIN users owner ON owner.id=m.owner_user_id 
                      {$where_clause}
                      ORDER BY k.key_date DESC 
                      LIMIT :limit OFFSET :offset";
@@ -226,7 +226,7 @@ class Logbrowse extends Base {
         // Get total count
         $count_sql = "SELECT COUNT(*) as total 
                       FROM usb_device_logs u 
-                      JOIN tbl_monitor_ips m ON u.monitor_ip_id = m.id 
+                      JOIN tbl_monitor_ips m ON u.monitor_ip_id = m.id LEFT JOIN users owner ON owner.id=m.owner_user_id 
                       {$where_clause}";
         
         $total_result = $this->db->query($count_sql, $params)->fetch();
@@ -234,13 +234,13 @@ class Logbrowse extends Base {
         $total_pages = ceil($total_entries / $per_page);
         
         // Get paginated data
-        $data_sql = "SELECT u.*, m.ip_address, m.username, m.name, m.type,
+        $data_sql = "SELECT u.*, m.ip_address, owner.name AS username, m.name, m.type,
                             u.device_date as date,
                             u.device_name as device,
                             u.action,
                             CONCAT(COALESCE(u.device_type, 'Unknown Type'), ' - ', COALESCE(u.device_path, 'No Path')) as details
                      FROM usb_device_logs u 
-                     JOIN tbl_monitor_ips m ON u.monitor_ip_id = m.id 
+                     JOIN tbl_monitor_ips m ON u.monitor_ip_id = m.id LEFT JOIN users owner ON owner.id=m.owner_user_id 
                      {$where_clause}
                      ORDER BY u.device_date DESC 
                      LIMIT :limit OFFSET :offset";
