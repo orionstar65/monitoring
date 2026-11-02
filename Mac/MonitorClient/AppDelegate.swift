@@ -212,38 +212,6 @@ private final class MonitorPickerCoordinator: NSObject {
 }
 
 
-// Owns the account window's keyboard focus and Sign In / Sign Up tabs.
-private final class AccountModalActions: NSObject, NSTabViewDelegate, NSWindowDelegate {
-    weak var window: NSWindow?
-    weak var signInUsername: NSTextField?
-    weak var signUpFullName: NSTextField?
-    weak var primaryButton: NSButton?
-
-    @objc func submit(_ sender: Any?) {
-        NSApp.stopModal(withCode: .OK)
-        window?.orderOut(nil)
-    }
-
-    @objc func cancel(_ sender: Any?) {
-        NSApp.stopModal(withCode: .cancel)
-        window?.orderOut(nil)
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        NSApp.stopModal(withCode: .cancel)
-    }
-
-    func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
-        let isSignUp = (tabViewItem?.identifier as? String) == "signup"
-        primaryButton?.title = isSignUp ? "Sign Up" : "Sign In"
-        // Keep forward and reverse Tab traversal within the selected pane.
-        primaryButton?.nextKeyView = isSignUp ? signUpFullName : signInUsername
-        window?.makeFirstResponder(isSignUp ? signUpFullName : signInUsername)
-    }
-}
-
-
-// Keeps one native window open while account and monitor sections change.
 private final class UnifiedWindowActions: NSObject, NSWindowDelegate {
     weak var window: NSWindow?
     var handler: ((String) -> Void)?
@@ -262,7 +230,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         get { storage.object(forKey: "notifications-enabled") as? Bool ?? true }
         set { storage.set(newValue, forKey: "notifications-enabled") }
     }
-    private let keychainService = "com.airentech.monitorclient.v14.session"
+    private let keychainService = "com.airentech.monitorclient.v15.device"
     private func sessionAccount() -> String {
         let ip = storage.string(forKey: "server-ip") ?? ""
         let port = storage.string(forKey: "server-port") ?? "8924"
@@ -278,7 +246,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         let status = SecItemAdd(item as CFDictionary, nil)
         if status != errSecSuccess {
-            showClientNotification("Session not saved", "Keychain is unavailable; sign in again after restarting.")
+            showClientNotification("Pairing not saved", "Keychain is unavailable; pair this device again after restarting.")
         }
     }
     private func keychainLoadToken() -> String? {
@@ -639,7 +607,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         // Configure server IP if not already set
         if storage.string(forKey: "server-ip") == nil {
-            storage.set("192.168.1.45:8924", forKey: "server-ip")
+            storage.set("192.168.1.45", forKey: "server-ip")
+            storage.set("8924", forKey: "server-port")
             // logMessage("Server IP configured: 192.168.1.45:8924", level: .info)
         } else {
             // logMessage("Server IP already configured: \(storage.string(forKey: "server-ip") ?? "unknown")", level: .info)
@@ -648,7 +617,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // Check permissions based on app mode and previous state
         checkPermissionsOnStartup()
 
-        APP_VERSION = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+        APP_VERSION = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.5"
 
         keyLogs = []
         
@@ -2805,7 +2774,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         rule()
 
         let server = section("Server Settings")
-        let ipField = entry("Server address", value: storage.string(forKey: "server-ip") ?? "")
+        let ipField = entry("Server address", value: (storage.string(forKey: "server-ip") ?? "").split(separator: ":").first.map(String.init) ?? "")
         let portField = entry("Port", value: storage.string(forKey: "server-port") ?? "8925")
         server.addArrangedSubview(line("Server IP", ipField))
         server.addArrangedSubview(line("Port", portField))

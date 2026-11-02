@@ -200,19 +200,19 @@ void ConfigDialog::onTestConnectionClicked(){
 }
 void ConfigDialog::clearStoredToken(const QString &host,int port){
     QProcess secret;
-    secret.start("secret-tool",{"clear","service","acc-monitor","host",host+":"+QString::number(port)});
+    secret.start("secret-tool",{"clear","service","acc-monitor-v15","host",host+":"+QString::number(port)});
     secret.waitForFinished(2500);
 }
 QString ConfigDialog::readRememberedToken() const {
     QProcess secret;
-    secret.start("secret-tool",{"lookup","service","acc-monitor","host",getServerIP()+":"+QString::number(getServerPort())});
+    secret.start("secret-tool",{"lookup","service","acc-monitor-v15","host",getServerIP()+":"+QString::number(getServerPort())});
     if(!secret.waitForFinished(2500)||secret.exitCode()!=0)return {};
     return QString::fromUtf8(secret.readAllStandardOutput()).trimmed();
 }
 void ConfigDialog::rememberToken(const QString &token){
     QProcess secret;
     secret.start("secret-tool",{"store","--label=MonitorClient v1.5 device",
-        "service","acc-monitor","host",getServerIP()+":"+QString::number(getServerPort())});
+        "service","acc-monitor-v15","host",getServerIP()+":"+QString::number(getServerPort())});
     if(!secret.waitForStarted(1500))return;
     secret.write(token.toUtf8());secret.write("\n");secret.closeWriteChannel();
     if(!secret.waitForFinished(3500)||secret.exitCode()!=0)

@@ -409,7 +409,7 @@ void updateTrayMenu() {
     
     // Configuration refresh button
     AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_CONFIG_REFRESH, "Refresh Configuration");
-    AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SIGN_IN, getClientToken().empty() ? "Sign in / Sign up" : "Switch account");
+    AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SIGN_IN, getClientToken().empty() ? "Pair Device / Settings" : "Device Settings");
     AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SETTINGS, "Monitor Settings...");
     AppendMenuA(hTrayMenu, MF_STRING | (notificationsEnabled ? MF_CHECKED : MF_UNCHECKED), ID_TRAY_NOTIFICATIONS, "Status notifications");
     
@@ -2352,7 +2352,7 @@ int main() {
     // Fetch configuration from API
     fetchConfigurationFromAPI();
     
-    // Do not activate activity capture before an explicit sign-in.
+    // Do not activate activity capture until an administrator-approved pairing.
     setupSystemTray();
     if (!restoreClientSession()) showClientLogin();
     else if(selectedMonitorId.load()<1) showMonitorSettings();
