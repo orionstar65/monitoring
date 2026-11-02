@@ -437,12 +437,33 @@
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
 
-        .table thead th {
-            background: var(--primary-color);
-            color: white;
-            border: none;
+        /* Consistent, accessible table headings across Bootstrap, DataTables,
+           report tables and log tables. Override Bootstrap's table cell CSS
+           variables on the actual <th>, not just the table, so its generated
+           background layer cannot hide the header background. */
+        .table thead th,
+        table.dataTable thead th,
+        .reports-table thead th,
+        .log-table thead th {
+            --bs-table-bg: #e8f0fa;
+            --bs-table-color: #243449;
+            --bs-table-accent-bg: transparent;
+            background-color: #e8f0fa;
+            background-image: none;
+            color: #243449;
+            border-bottom: 1px solid #cedae9;
+            box-shadow: inset 0 -1px 0 #cedae9;
             font-weight: 600;
-            padding: 16px;
+            padding: 14px 16px;
+        }
+
+        /* Keep sortable DataTables headings readable when hovered or focused. */
+        table.dataTable thead th.dt-orderable-asc:hover,
+        table.dataTable thead th.dt-orderable-desc:hover,
+        table.dataTable thead th:focus-visible {
+            --bs-table-bg: #dce8f7;
+            background-color: #dce8f7;
+            color: #18283d;
         }
 
         .table tbody td {
