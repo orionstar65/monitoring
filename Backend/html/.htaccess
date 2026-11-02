@@ -1,4 +1,6 @@
 RewriteEngine On
+# Never serve controller source, stored screenshots, or raw export archives directly.
+RewriteRule ^(app|data|exports)(/|$) - [F,L,NC]
 RewriteBase /html/
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
@@ -13,9 +15,9 @@ RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_URI} (.+)/$
 RewriteRule ^ %1 [L,R=301]
 
-# Allow direct access to PHP files (debug scripts, etc.)
-RewriteCond %{REQUEST_FILENAME} -f
-RewriteRule ^.*\.php$ - [L]
+# Only the front controller may be requested through /html.
+RewriteRule ^index\.php$ - [L]
+RewriteRule ^[^/]+\.php$ - [F,L,NC]
 
 # Send Requests To Front Controller...
 RewriteCond %{REQUEST_FILENAME} !-d

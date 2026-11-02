@@ -28,14 +28,14 @@ class Reports extends Base {
     public function api_devices() {
         // OPTIMIZED: Remove SQL CASE statement - status calculation done in PHP for better performance
         $devices = $this->db->fetchAll(
-            "SELECT id, ip_address, mac_address, username, name, type, updated_at
+            "SELECT id, ip_address, mac_address, username, name, type, last_monitor_tic, updated_at
              FROM tbl_monitor_ips 
              ORDER BY username ASC, ip_address ASC"
         );
         
         // Calculate status in PHP using StatusService for consistency
         foreach ($devices as &$device) {
-            $statusInfo = $this->statusService->calculateClientStatus($device['updated_at'] ?? null);
+            $statusInfo = $this->statusService->calculateClientStatus($device['last_monitor_tic'] ?? null);
             $device['status'] = $statusInfo['status'];
         }
         

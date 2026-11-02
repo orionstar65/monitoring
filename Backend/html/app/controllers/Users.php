@@ -123,6 +123,7 @@ class Users extends Base {
     }
     
     public function delete($id) {
+        if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'){http_response_code(405);exit('POST required');}
         if ($id == $_SESSION['user_id']) {
             $this->redirect('users');
         }

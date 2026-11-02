@@ -22,7 +22,7 @@ class View extends Base {
         // Add basic status based on database data only
         foreach ($monitors as &$monitor) {
             // Use StatusService's calculateClientStatus() for consistent status calculation
-            $statusInfo = $this->statusService->calculateClientStatus($monitor['updated_at'] ?? null);
+            $statusInfo = $this->statusService->calculateClientStatus($monitor['last_monitor_tic'] ?? null);
             $monitor['live_status'] = $statusInfo['status'];
             $monitor['status_class'] = $statusInfo['status_class'];
             $monitor['status_text'] = $statusInfo['status_text'];
@@ -273,7 +273,7 @@ class View extends Base {
         // Get monitors from database only (fast)
         // OPTIMIZED: Only select fields needed for status calculation and response
         $monitors = $this->db->fetchAll(
-            "SELECT id, ip_address, mac_address, username, name, type, updated_at, created_at 
+            "SELECT id, ip_address, mac_address, username, name, type, last_monitor_tic, updated_at, created_at 
              FROM tbl_monitor_ips 
              ORDER BY name ASC"
         );
@@ -281,7 +281,7 @@ class View extends Base {
         // Add status based on database data only
         foreach ($monitors as &$monitor) {
             // Use StatusService's calculateClientStatus() for consistent status calculation
-            $statusInfo = $this->statusService->calculateClientStatus($monitor['updated_at'] ?? null);
+            $statusInfo = $this->statusService->calculateClientStatus($monitor['last_monitor_tic'] ?? null);
             $monitor['live_status'] = $statusInfo['status'];
             $monitor['status_text'] = $statusInfo['status_text'];
             $monitor['latest_activity'] = $statusInfo['updated_at_timestamp'];
@@ -620,7 +620,7 @@ class View extends Base {
         // Add basic status based on database data only
         foreach ($monitors as &$monitor) {
             // Use StatusService's calculateClientStatus() for consistent status calculation
-            $statusInfo = $this->statusService->calculateClientStatus($monitor['updated_at'] ?? null);
+            $statusInfo = $this->statusService->calculateClientStatus($monitor['last_monitor_tic'] ?? null);
             $monitor['live_status'] = $statusInfo['status'];
             $monitor['status_class'] = $statusInfo['status_class'];
             $monitor['status_text'] = $statusInfo['status_text'];

@@ -27,6 +27,7 @@ ob_start();
             <table class="table table-striped">
                 <thead>
                     <tr>
+                        <th>Name</th>
                         <th>Username</th>
                         <th>Email</th>
                         <th>Role</th>
@@ -37,6 +38,7 @@ ob_start();
                 <tbody>
 <?php foreach ($users as $user): ?>
                     <tr>
+                        <td><?php echo htmlspecialchars($user['name']??''); ?></td>
                         <td><?php echo htmlspecialchars($user['username']); ?></td>
                         <td><?php echo htmlspecialchars($user['email']); ?></td>
                         <td><span class="badge bg-<?php echo $user['role'] === ROLE_ADMIN ? 'danger' : 'secondary'; ?>"><?php echo ucfirst($user['role']); ?></span></td>
@@ -45,7 +47,9 @@ ob_start();
                             <?php if ($_SESSION['role'] === ROLE_ADMIN): ?>
                             <a href="<?php echo BASE_URL; ?>users/edit/<?php echo $user['id']; ?>" class="btn btn-sm btn-outline-primary">Edit</a>
                             <?php if ($user['id'] != $_SESSION['user_id']): ?>
-                            <a href="<?php echo BASE_URL; ?>users/delete/<?php echo $user['id']; ?>" class="btn btn-sm btn-outline-danger" onclick="return confirm('Are you sure?')">Delete</a>
+                            <form method="POST" action="<?php echo BASE_URL; ?>users/delete/<?php echo (int)$user['id']; ?>" style="display:inline">
+<button class="btn btn-sm btn-outline-danger" type="submit" onclick="return confirm('Are you sure?')">Delete</button>
+</form>
                             <?php endif; ?>
                             <?php endif; ?>
                         </td>
