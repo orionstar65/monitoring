@@ -442,8 +442,8 @@ ob_start();
     }
     
     // Last activity - store raw timestamp for client-side conversion
-    $last_activity_timestamp = $monitor['updated_at'] ? strtotime($monitor['updated_at']) : null;
-    $last_activity_display = $monitor['updated_at'] ? date('M j, Y H:i', strtotime($monitor['updated_at'])) : 'Never';
+    $last_activity_timestamp = !empty($monitor['last_monitor_tic']) ? strtotime($monitor['last_monitor_tic']) : null;
+    $last_activity_display = !empty($monitor['last_monitor_tic']) ? date('M j, Y H:i', strtotime($monitor['last_monitor_tic'])) : 'Never';
 ?>
                     <tr data-id="<?php echo $monitor['id']; ?>"
                         data-ip="<?php echo strtolower(htmlspecialchars($monitor['ip_address'])); ?>"
@@ -508,11 +508,13 @@ ob_start();
                                     <i class="fas fa-edit"></i>
                                 </a>
                                 <?php endif; ?>
+                                <?php if (($_SESSION['role']??'')!=='viewer'): ?>
                                 <a href="<?php echo BASE_URL; ?>view/logs/<?php echo $monitor['id']; ?>" 
                                    class="btn btn-sm btn-outline-info" 
                                    title="View Logs">
                                     <i class="fas fa-file-alt"></i>
                                 </a>
+                                <?php endif; ?>
                                 <?php if ($_SESSION['role'] === ROLE_ADMIN): ?>
                                 <form method="POST" action="<?php echo BASE_URL; ?>monitors/delete/<?php echo (int)$monitor['id']; ?>" style="display:inline"><button type="submit" 
                                    class="btn btn-sm btn-outline-danger" 

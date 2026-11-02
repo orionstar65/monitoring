@@ -1154,10 +1154,10 @@ class DatabaseService {
         $grouped_clients = [];
         foreach ($clients as $client) {
             // Calculate status using the generic function
-            $statusInfo = $this->calculateClientStatus($client['updated_at'] ?? null);
+            $statusInfo = $this->calculateClientStatus($client['last_monitor_tic'] ?? null);
             
             // Only include clients that are actually "offline" according to UI logic
-            if ($statusInfo['time_diff'] >= max(1,(int)$threshold_minutes)*60) {
+            if (!empty($client['last_monitor_tic']) && $statusInfo['time_diff'] >= max(1,(int)$threshold_minutes)*60) {
                 // Use slack_id if available, otherwise fall back to username
                 $group_key = !empty($client['slack_id']) ? $client['slack_id'] : ($client['username'] ?? 'Unknown');
                 $client['status'] = $statusInfo['status'];

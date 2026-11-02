@@ -18,7 +18,7 @@ class Monitors extends Base {
         // Add dynamic status calculation for each monitor
         foreach ($monitors as &$monitor) {
             // Use StatusService's calculateClientStatus() for consistent status calculation
-            $statusInfo = $this->statusService->calculateClientStatus($monitor['updated_at'] ?? null);
+            $statusInfo = $this->statusService->calculateClientStatus($monitor['last_monitor_tic'] ?? null);
             $monitor['dynamic_status'] = $statusInfo['status'];
             $monitor['status_text'] = $statusInfo['status_text'];
             $monitor['status_class'] = $statusInfo['status_class'];
@@ -67,16 +67,6 @@ class Monitors extends Base {
             } else {
                 $existing = false;
                 $error = null;
-                if (!$existing) {
-                    $existing = $this->db->fetch(
-                        "SELECT id FROM tbl_monitor_ips WHERE ip_address = :ip_address",
-                        ['ip_address' => $ip_address]
-                    );
-                    if ($existing) {
-                        $error = 'IP address already exists';
-                    }
-                }
-                
                 if (!$existing) {
                     // No username uniqueness check needed - multiple monitors can have same username
                     if (empty($error)) {

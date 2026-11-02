@@ -66,6 +66,7 @@ class Users extends Base {
         
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $username = $_POST['username'] ?? '';
+            $name=trim((string)($_POST['name']??$username));
             $email = $_POST['email'] ?? '';
             $role = $_POST['role'] ?? ROLE_USER;
             $password = $_POST['password'] ?? '';
@@ -84,6 +85,7 @@ class Users extends Base {
                 } else {
                     $data = [
                         'username' => $username,
+                        'name' => $name,
                         'email' => $email,
                         'role' => $role
                     ];

@@ -12,7 +12,7 @@ class Dashboard extends Base {
         // Get statistics
         $totalUsers = $this->db->fetch("SELECT COUNT(*) as count FROM users")['count'];
         $totalMonitors = $this->db->fetch("SELECT COUNT(*) as count FROM tbl_monitor_ips")['count'];
-        $activeMonitors = $this->db->fetch("SELECT COUNT(*) as count FROM tbl_monitor_ips WHERE updated_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)")['count'];
+        $activeMonitors = $this->db->fetch("SELECT COUNT(*) as count FROM tbl_monitor_ips WHERE last_monitor_tic >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)")['count'];
         
         // Get recent monitors with actual data from database
         $recentMonitors = $this->db->fetchAll(

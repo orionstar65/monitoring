@@ -12,11 +12,14 @@ class Auth extends Base {
                 $error = 'Username and password are required';
             } else {
                 $user = $this->db->fetch(
-                    "SELECT * FROM users WHERE username = :username",
-                    ['username' => $username]
+                    "SELECT * FROM users WHERE username = :username OR email = :email",
+                    ['username' => $username,'email'=>$username]
                 );
                 
-                if ($user && password_verify($password, $user['password'])) {
+                $attemptKey=hash('sha256',($_SERVER['REMOTE_ADDR']??'').'|'.strtolower($username));
+                $attempts=(int)$this->db->fetch("SELECT COUNT(*) AS hits FROM login_attempts WHERE attempt_key=:k AND attempted_at>DATE_SUB(NOW(),INTERVAL 15 MINUTE)",['k'=>$attemptKey])['hits'];
+                if($attempts>=8){http_response_code(429);$error='Too many login attempts; try again later.';}
+                elseif ($user && password_verify($password, $user['password'])) {
                     session_regenerate_id(true);
                     $_SESSION['user_id'] = $user['id'];
                     $_SESSION['username'] = $user['username'];
@@ -24,6 +27,7 @@ class Auth extends Base {
                     
                     $this->redirect($user['role']==='viewer' ? 'monitors' : 'dashboard');
                 } else {
+                    $this->db->insert('login_attempts',['attempt_key'=>$attemptKey]);
                     $error = 'Invalid username or password';
                 }
             }
