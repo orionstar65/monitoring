@@ -33,8 +33,20 @@ specified IP in the Subject Alternative Name. The **public** root CA file is:
 /etc/monitoring/tls/ca/monitoring-lan-root.crt
 ```
 
-Copy ONLY that public file to client machines, using a trusted method (such
-as SSH/SCP). Verify its fingerprint using a trusted channel before installing.
+The `/etc/monitoring/tls` directory is root-only, so first export **only the
+public** CA certificate to your server user's home directory:
+
+```bash
+sudo install -m 0644 /etc/monitoring/tls/ca/monitoring-lan-root.crt \
+  "$HOME/monitoring-lan-root.crt"
+openssl x509 -in "$HOME/monitoring-lan-root.crt" -noout -fingerprint -sha256
+```
+
+Copy this public `~/monitoring-lan-root.crt` to client machines using a trusted
+method (e.g. SCP), placing it at `~/Downloads/monitoring-lan-root.crt` on
+macOS/Ubuntu or a known local file path on Windows. Compare the certificate's
+SHA-256 fingerprint with the server's fingerprint using a trusted channel
+before installing it. **Never distribute files from the `private/` directory.**
 
 **Windows:** run an elevated Command Prompt on the client:
 
