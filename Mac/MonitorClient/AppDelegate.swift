@@ -3075,7 +3075,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             guard !number.isEmpty else { continue }
             let name = record["full_name"] as? String ?? ""
             let ip = record["ip_address"] as? String ?? "—"
-            users.addItem(withTitle: "\(number) / \(name) / \(ip)")
+            users.addItem(withTitle: "\(number)/\(name)/\(ip)")
             users.lastItem?.representedObject = number
         }
         users.selectItem(at: 0)
