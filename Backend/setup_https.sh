@@ -103,6 +103,7 @@ cleanup(){
     echo "Restoring the previous Apache vhost after failure..." >&2
     cp -p "$backup" "$vhost" || true
     apache2ctl configtest >&2 || true
+    systemctl reload apache2 >&2 || true
   fi
   rm -rf "$work"
 }
@@ -163,6 +164,10 @@ else
   [[ "$cert_pub" == "$key_pub" ]] || die "Certificate and private key do not match"
   install -o root -g root -m 0600 "$key_source" "$server_key"
   install -o root -g root -m 0644 "$cert_source" "$server_cert"
+fi
+openssl x509 -in "$server_cert" -checkend 0 -noout >/dev/null || die "Server certificate is expired"
+if [[ "$mode" == lan ]]; then
+  openssl verify -CAfile "$ca_cert" "$server_cert" >/dev/null || die "LAN certificate failed CA verification"
 fi
 if [[ "$san_type" == IP ]]; then
   openssl x509 -in "$server_cert" -noout -checkip "$host" | grep -q 'does match' \

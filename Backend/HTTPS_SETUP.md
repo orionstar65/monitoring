@@ -39,7 +39,7 @@ as SSH/SCP). Verify its fingerprint using a trusted channel before installing.
 **Windows:** run an elevated Command Prompt on the client:
 
 ```powershell
-certutil -addstore -f Root "C:\\path\\to\\monitoring-lan-root.crt"
+certutil -addstore -f Root "C:\path\to\monitoring-lan-root.crt"
 ```
 
 **macOS:** run on the client (using the actual copied file path):
@@ -115,8 +115,7 @@ Set a calendar reminder to renew before expiration; it does not auto-renew.
 
 The script backs up `/etc/apache2/sites-available/mybackend.conf` to
 `/etc/monitoring/tls/backups`, checks `apache2ctl configtest`, and attempts
-to restore the previous Apache config if a step fails. Do not rerun older
-versions of `setup_ubuntu_server.sh`; they may overwrite HTTPS settings.
+to restore the previous Apache config if a step fails. The current `setup_ubuntu_server.sh` preserves HTTPS when it finds this script's managed Apache configuration. Do not deploy an older copy of the installer, which may overwrite TLS settings.
 
 If your user sees **403** after successful HTTPS, the existing Apache
 `<Directory>` allowlist may restrict the client subnet. Adjust it for your

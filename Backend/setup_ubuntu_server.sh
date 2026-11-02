@@ -256,6 +256,10 @@ else
 fi
 
 echo "=== 5. Configure Apache on port ${BACKEND_PORT} ==="
+if [[ -f /etc/apache2/sites-available/mybackend.conf ]] &&
+    grep -q '^    # BEGIN MONITORING HTTPS' /etc/apache2/sites-available/mybackend.conf; then
+    echo "Preserving existing HTTPS Apache virtual host; use setup_https.sh to renew."
+else
 cat > /etc/apache2/sites-available/mybackend.conf <<APACHE
 <VirtualHost *:${BACKEND_PORT}>
     ServerAdmin webmaster@localhost
@@ -275,6 +279,7 @@ cat > /etc/apache2/sites-available/mybackend.conf <<APACHE
     CustomLog \${APACHE_LOG_DIR}/backend_access.log combined
 </VirtualHost>
 APACHE
+fi
 
 if ! grep -q "^Listen ${BACKEND_PORT}" /etc/apache2/ports.conf; then
     sed -i "/^Listen 80/a Listen ${BACKEND_PORT}" /etc/apache2/ports.conf
@@ -311,5 +316,10 @@ wget -qO- "http://127.0.0.1:${BACKEND_PORT}/webapi_config.php" 2>&1 | head -c 12
 
 echo ""
 echo "Setup complete."
-echo "Dashboard : http://${SERVER_IP}:${BACKEND_PORT}/html/"
-echo "Client API: http://${SERVER_IP}:${BACKEND_PORT}/webapi.php"
+if grep -q '^    # BEGIN MONITORING HTTPS' /etc/apache2/sites-available/mybackend.conf; then
+  echo "Dashboard : https://${SERVER_IP}:${BACKEND_PORT}/html/"
+  echo "Client API: https://${SERVER_IP}:${BACKEND_PORT}/webapi.php"
+else
+  echo "Dashboard : http://${SERVER_IP}:${BACKEND_PORT}/html/ (TLS not yet configured)"
+  echo "Next: sudo bash ${BACKEND_DIR}/setup_https.sh --host ${SERVER_IP}"
+fi

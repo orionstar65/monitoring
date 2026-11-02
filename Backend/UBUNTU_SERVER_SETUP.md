@@ -1,3 +1,11 @@
+> **Updated November 2026:** The old HTTP-only server instructions below are retained for
+> historical reference. New monitoring clients and the PHP dashboard require HTTPS.
+> After installing the Apache backend, run `sudo bash Backend/setup_https.sh --host YOUR_IP`
+> and follow [HTTPS_SETUP.md](HTTPS_SETUP.md) to trust the public LAN CA
+> certificate on each client. The code no longer contains a default database password;
+> database credentials must be configured with `MONITOR_DB_*` environment variables.
+> **Do not** rerun `database_setup.sql` on an existing database; it drops tables.
+
 # Ubuntu Server Setup (ACC-Monitor Backend)
 
 Quick guide to deploy the monitoring backend on Ubuntu with Apache on port **8924**.
