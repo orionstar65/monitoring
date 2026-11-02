@@ -75,12 +75,8 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     userSelector=new QComboBox(userGroup);
     userSelector->setMinimumWidth(260);
     userForm->addRow("User No",userSelector);
-    pairingEdit=new QLineEdit(userGroup);
-    pairingEdit->setPlaceholderText("16-character administrator pairing code");
-    pairingEdit->setMaxLength(16);
-    userForm->addRow("Pairing code",pairingEdit);
     auto *actions=new QHBoxLayout();
-    pairButton=new QPushButton("Pair Device",userGroup);
+    pairButton=new QPushButton("Select User No",userGroup);
     switchButton=new QPushButton("Change User No",userGroup);
     logoutButton=new QPushButton("Disconnect Device",userGroup);
     actions->addWidget(pairButton);actions->addWidget(switchButton);actions->addWidget(logoutButton);
@@ -216,7 +212,7 @@ void ConfigDialog::rememberToken(const QString &token){
     if(!secret.waitForStarted(1500))return;
     secret.write(token.toUtf8());secret.write("\n");secret.closeWriteChannel();
     if(!secret.waitForFinished(3500)||secret.exitCode()!=0)
-        QMessageBox::warning(this,"Keyring","Install and unlock a Secret Service keyring to remember device pairing.");
+        QMessageBox::warning(this,"Keyring","Install and unlock a Secret Service keyring to remember your selected user.");
 }
 void ConfigDialog::loadRememberedSession(){
     authToken=readRememberedToken();
@@ -285,6 +281,25 @@ void ConfigDialog::updateMonitorList(const QJsonArray &items){
 }
 void ConfigDialog::onMonitorChanged(int){
     const int id=monitorSelector->currentData().toInt();
+    if(id>0 && !authToken.isEmpty() && id!=monitorId){
+        const auto response=authRequest({{"action","select"},{"monitor_id",id}},true);
+        if(!response.value("success").toBool()){
+            QMessageBox::warning(this,"Monitor selection",
+                response.value("error").toString("Cannot select this monitor."));
+            refreshMonitors();
+            return;
+        }
+        monitorId=id;
+        for(const auto &value:assignedMonitors){
+            const auto monitor=value.toObject();
+            if(monitor.value("id").toInt()==id){
+                assignmentLocked=monitor.value("assignment_locked").toBool();
+                break;
+            }
+        }
+        saveSettings();
+        emit sessionStateChanged();
+    }
     for(const auto &value:assignedMonitors){
         const QJsonObject m=value.toObject();
         if(m.value("id").toInt()!=id)continue;
@@ -297,7 +312,9 @@ void ConfigDialog::onMonitorChanged(int){
     }
     saveButton->setEnabled(authToken.isEmpty()||id==monitorId);
     if(id!=monitorId && monitorId>0)
-        assignmentStatusLabel->setText("This installation is paired with another monitor. Ask your administrator for a new pairing code.");
+        assignmentStatusLabel->setText("Select one of the assigned monitors.");
+    else
+        updateUI();
 }
 void ConfigDialog::onUserChanged(int){
     if(assignmentLocked&&!authToken.isEmpty()){
@@ -307,28 +324,26 @@ void ConfigDialog::onUserChanged(int){
 void ConfigDialog::updateUI(){
     const bool enrolled=!authToken.isEmpty()&&monitorId>0;
     monitorGroup->setVisible(enrolled);
-    pairingEdit->setVisible(!enrolled);
     pairButton->setVisible(!enrolled);
     logoutButton->setVisible(enrolled);
     switchButton->setVisible(enrolled);
     userSelector->setEnabled(!enrolled||!assignmentLocked);
     switchButton->setEnabled(enrolled&&!assignmentLocked);
     assignmentStatusLabel->setText(!enrolled?
-        "Select User No, then enter the one-time code provided by your administrator. Monitors appear after pairing.":
+        "Select User No to load its assigned monitors.":
         assignmentLocked?
         "User assignment is locked. Ask your administrator to edit this monitor.":
-        "Assignment unlocked. You may change User No on this paired monitor.");
+        "Assignment unlocked. You may change User No on this monitor.");
     saveButton->setText(enrolled?"Save Monitor":"Save Server");
     saveButton->setEnabled(true);
 }
 void ConfigDialog::onPairClicked(){
     if(!saveServerIfChanged())return;
     const QString number=userSelector->currentData().toString();
-    if(number.isEmpty()){QMessageBox::warning(this,"Pair Device","Select a User No.");return;}
-    const auto result=authRequest({{"action","enroll"},{"user_no",number},
-       {"pairing_code",pairingEdit->text().trimmed()}});
+    if(number.isEmpty()){QMessageBox::warning(this,"Select User No","Choose a User No.");return;}
+    const auto result=authRequest({{"action","enroll"},{"user_no",number}});
     if(!result.value("success").toBool()){
-        QMessageBox::warning(this,"Pairing failed",result.value("error").toString("Ask your administrator for a fresh pairing code."));
+        QMessageBox::warning(this,"User selection failed",result.value("error").toString("Could not load assigned monitors."));
         return;
     }
     authToken=result.value("token").toString();
@@ -336,9 +351,9 @@ void ConfigDialog::onPairClicked(){
     assignmentLocked=result.value("assignment_locked").toBool();
     if(authToken.length()!=64||monitorId<1){
         authToken.clear();monitorId=0;
-        QMessageBox::warning(this,"Pairing failed","Invalid device credentials returned.");return;
+        QMessageBox::warning(this,"User selection failed","Invalid session details returned.");return;
     }
-    rememberToken(authToken);pairingEdit->clear();
+    rememberToken(authToken);
     refreshMonitors();saveSettings();updateUI();
     emit sessionStateChanged();
 }
@@ -368,10 +383,10 @@ void ConfigDialog::onLogoutClicked(){
 }
 void ConfigDialog::onSaveClicked(){
     if(!saveServerIfChanged())return;
-    if(authToken.isEmpty()){connectionStatusLabel->setText("● Server saved · pair device");return;}
+    if(authToken.isEmpty()){connectionStatusLabel->setText("● Server saved · select User No");return;}
     const int id=monitorSelector->currentData().toInt();
     if(id<1||id!=monitorId){
-        QMessageBox::warning(this,"Monitor","This device is not paired to that monitor.");
+        QMessageBox::warning(this,"Monitor","Select an assigned monitor.");
         return;
     }
     const auto result=authRequest({{"action","save_monitor"},{"monitor_id",id},
