@@ -2,6 +2,7 @@
 #include <wininet.h>
 #include <wincred.h>
 #include <cstring>
+#include <cstddef>
 #include <string>
 #include <atomic>
 // MinGW compatibility patch
@@ -1838,10 +1839,47 @@ bool restoreClientSession() {
     updateTrayIcon();
     return true;
 }
+// API strings use UTF-8; Windows-native edit controls use UTF-16.
+static std::wstring utf8ToWide(const std::string& utf8) {
+    if(utf8.empty())return {};
+    const int n=MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,utf8.data(),
+                                   static_cast<int>(utf8.size()),nullptr,0);
+    if(n<=0)return {};
+    std::wstring result(static_cast<size_t>(n),L'\0');
+    MultiByteToWideChar(CP_UTF8,MB_ERR_INVALID_CHARS,utf8.data(),
+                        static_cast<int>(utf8.size()),&result[0],n);
+    return result;
+}
+static std::string wideToUtf8(const std::wstring& wide) {
+    if(wide.empty())return {};
+    const int n=WideCharToMultiByte(CP_UTF8,0,wide.data(),static_cast<int>(wide.size()),
+                                   nullptr,0,nullptr,nullptr);
+    if(n<=0)return {};
+    std::string result(static_cast<size_t>(n),'\0');
+    WideCharToMultiByte(CP_UTF8,0,wide.data(),static_cast<int>(wide.size()),
+                        &result[0],n,nullptr,nullptr);
+    return result;
+}
 static std::string editText(HWND dlg,int id) {
-    char buffer[1100]={0};
-    GetDlgItemTextA(dlg,id,buffer,sizeof(buffer));
-    return std::string(buffer);
+    const HWND control=GetDlgItem(dlg,id);
+    if(!control)return {};
+    const int count=GetWindowTextLengthW(control);
+    if(count<=0||count>4096)return {};
+    std::wstring result(static_cast<size_t>(count)+1,L'\0');
+    const int read=GetWindowTextW(control,&result[0],count+1);
+    result.resize(static_cast<size_t>(std::max(0,read)));
+    return wideToUtf8(result);
+}
+static void setWindowUtf8Text(HWND control,const std::string& text) {
+    const std::wstring wide=utf8ToWide(text);
+    if(control)SetWindowTextW(control,wide.c_str());
+}
+static void setDlgUtf8Text(HWND dialog,int id,const std::string& text) {
+    setWindowUtf8Text(GetDlgItem(dialog,id),text);
+}
+static int showUtf8Message(HWND parent,const std::string& text,const std::string& title,UINT flags) {
+    const std::wstring body=utf8ToWide(text),caption=utf8ToWide(title);
+    return MessageBoxW(parent,body.c_str(),caption.c_str(),flags);
 }
 enum {
     AUTH_TABS=4100,AUTH_USER=4101,AUTH_PASS=4102,AUTH_CONFIRM=4103,
@@ -1853,8 +1891,13 @@ enum {
 };
 static HWND addControl(HWND parent,const char* cls,const char* label,DWORD style,
                        int x,int y,int width,int height,int id) {
-    return CreateWindowExA(0,cls,label,WS_CHILD|WS_VISIBLE|style,
-        x,y,width,height,parent,(HMENU)(INT_PTR)id,GetModuleHandleA(NULL),nullptr);
+    const std::wstring wClass=utf8ToWide(cls),wLabel=utf8ToWide(label);
+    HWND control=CreateWindowExW(0,wClass.c_str(),wLabel.c_str(),
+        WS_CHILD|WS_VISIBLE|style,x,y,width,height,parent,
+        (HMENU)(INT_PTR)id,GetModuleHandleW(nullptr),nullptr);
+    if(control)SendMessageW(control,WM_SETFONT,
+        reinterpret_cast<WPARAM>(GetStockObject(DEFAULT_GUI_FONT)),TRUE);
+    return control;
 }
 static bool currentSignupTab(HWND dlg) {
     return TabCtrl_GetCurSel(GetDlgItem(dlg,AUTH_TABS))==1;
@@ -1870,9 +1913,9 @@ static INT_PTR CALLBACK accountDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp)
     case WM_INITDIALOG:{
         SetWindowTextA(dlg,"MonitorClient v1.4 - Account");
         HWND tabs=addControl(dlg,WC_TABCONTROLA,"",WS_TABSTOP,12,9,425,34,AUTH_TABS);
-        TCITEMA item={};item.mask=TCIF_TEXT;
-        item.pszText=const_cast<char*>("Sign In");TabCtrl_InsertItem(tabs,0,&item);
-        item.pszText=const_cast<char*>("Sign Up");TabCtrl_InsertItem(tabs,1,&item);
+        TCITEMW item={};item.mask=TCIF_TEXT;
+        item.pszText=const_cast<wchar_t*>(L"Sign In");TabCtrl_InsertItemW(tabs,0,&item);
+        item.pszText=const_cast<wchar_t*>(L"Sign Up");TabCtrl_InsertItemW(tabs,1,&item);
         addControl(dlg,"STATIC","Username/email",0,17,57,115,20,0);
         addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,130,54,290,26,AUTH_USER);
         addControl(dlg,"STATIC","Password",0,17,92,115,20,0);
@@ -1937,13 +1980,20 @@ static INT_PTR CALLBACK accountDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp)
     }
     return FALSE;
 }
-static INT_PTR runDialog(DLGPROC proc) {
-    struct BlankTemplate { DLGTEMPLATE dlg; WORD menu; WORD clazz; WORD title; };
-    BlankTemplate t={};
-    t.dlg.style=DS_MODALFRAME|WS_POPUP|WS_CAPTION|WS_SYSMENU;
-    t.dlg.dwExtendedStyle=0;t.dlg.cdit=0;
-    t.dlg.x=20;t.dlg.y=20;t.dlg.cx=285;t.dlg.cy=195;
-    return DialogBoxIndirectParamA(GetModuleHandleA(NULL),&t.dlg,hMainWindow,proc,0);
+// Exact 18-byte header plus three UTF-16 zero words, DWORD-aligned.
+struct alignas(DWORD) EmptyDialogTemplate {
+    DWORD style, extendedStyle;
+    WORD itemCount;
+    short x,y,cx,cy;
+    WORD menu, windowClass, title;
+};
+static_assert(offsetof(EmptyDialogTemplate,menu)==18,"Invalid dialog template layout");
+static INT_PTR runDialog(DLGPROC proc,short height=195) {
+    EmptyDialogTemplate t{};
+    t.style=DS_MODALFRAME|WS_POPUP|WS_CAPTION|WS_SYSMENU|DS_CENTER;
+    t.x=20;t.y=20;t.cx=285;t.cy=height;
+    return DialogBoxIndirectParamW(GetModuleHandleW(nullptr),
+        reinterpret_cast<const DLGTEMPLATE*>(&t),hMainWindow,proc,0);
 }
 bool showClientLogin() {
     if(keyboardHook)removeKeyboardHook();
@@ -2133,13 +2183,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
 bool showMonitorSettings() {
     // A signed-out user can also configure the server address before login.
     // Resize the same blank dialog template with room for monitor fields.
-    struct BlankTemplate { DLGTEMPLATE dlg; WORD menu; WORD clazz; WORD title; };
-    BlankTemplate t={};
-    t.dlg.style=DS_MODALFRAME|WS_POPUP|WS_CAPTION|WS_SYSMENU;
-    t.dlg.dwExtendedStyle=0;t.dlg.cdit=0;
-    t.dlg.x=20;t.dlg.y=20;t.dlg.cx=285;t.dlg.cy=295;
-    bool success=DialogBoxIndirectParamA(GetModuleHandleA(NULL),&t.dlg,
-        hMainWindow,settingsDialogProc,0)==IDOK;
+    bool success=runDialog(settingsDialogProc,295)==IDOK;
     updateTrayIcon();
     updateTrayMenu();
     return success;
