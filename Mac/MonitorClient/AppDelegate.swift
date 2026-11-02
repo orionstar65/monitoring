@@ -12,12 +12,13 @@ import CoreGraphics
 import IOKit
 import IOKit.usb
 import os.log
+import Security
 
 let CHECKER_IDENTIFIER = "com.airentech.MonitorClient"
 
 let API_ROUTE = "/webapi.php"
 let TIC_ROUTE = "/eventhandler.php"
-var APP_VERSION = "1.0"
+var APP_VERSION = "1.4"
 
 // Configuration variables (will be updated from API)
 var TIME_INTERVAL = 60      // Screenshots every 60 seconds (default)
@@ -187,6 +188,70 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     var storage: UserDefaults!
     private var clientToken: String = ""
     private var selectedMonitorId: Int = 0
+    private var notificationsEnabled: Bool {
+        get { storage.object(forKey: "notifications-enabled") as? Bool ?? true }
+        set { storage.set(newValue, forKey: "notifications-enabled") }
+    }
+    private let keychainService = "com.airentech.monitorclient.v14.session"
+    private func sessionAccount() -> String {
+        let ip = storage.string(forKey: "server-ip") ?? ""
+        let port = storage.string(forKey: "server-port") ?? "8924"
+        return ip + ":" + port
+    }
+    private func keychainSaveToken(_ token: String) {
+        let account = sessionAccount()
+        let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService, kSecAttrAccount as String: account]
+        SecItemDelete(base as CFDictionary)
+        var item = base
+        item[kSecValueData as String] = Data(token.utf8)
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let status = SecItemAdd(item as CFDictionary, nil)
+        if status != errSecSuccess {
+            showClientNotification("Session not saved", "Keychain is unavailable; sign in again after restarting.")
+        }
+    }
+    private func keychainLoadToken() -> String? {
+        var query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: sessionAccount(),
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne]
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+    private func showClientNotification(_ title: String, _ message: String) {
+        guard notificationsEnabled else { return }
+        let notification = NSUserNotification()
+        notification.title = title
+        notification.informativeText = message
+        NSUserNotificationCenter.default.deliver(notification)
+    }
+    private func restoreRememberedSession() {
+        guard let token = keychainLoadToken(), !token.isEmpty else {
+            openLoginDialog()
+            return
+        }
+        clientToken = token
+        guard let result = clientAuthRequest(["action": "restore"], authenticated: true),
+              result["success"] as? Bool == true else {
+            clientToken = ""
+            selectedMonitorId = 0
+            openLoginDialog()
+            return
+        }
+        selectedMonitorId = result["monitor_id"] as? Int ?? 0
+        if selectedMonitorId > 0 { startKeyboardMonitoring() }
+        else { showClientNotification("Monitor setup required", "Choose an assigned monitor in Settings.") }
+        updateTrayStatusDot()
+    }
+    private func updateTrayStatusDot() {
+        let active = !clientToken.isEmpty && selectedMonitorId > 0 && isServerConnected
+        statusBarItem?.button?.title = active ? "🗒️🟢" : "🗒️🔴"
+        statusBarItem?.button?.toolTip = active ? "MonitorClient v1.4 · Active" : "MonitorClient v1.4 · Offline, unsigned-in or unconfigured"
+    }
     var eventTap: CFMachPort?
     var keyLogs: [KeyLog]!
     var usbDeviceLogs: [USBDeviceLog]!
@@ -511,6 +576,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         // Setup status bar menu
         do {
             setupStatusBarMenu()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.restoreRememberedSession()
+            }
             // Status bar menu setup completed
         } catch {
             // Error setting up status bar menu
@@ -523,11 +591,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         // MonitorClient startup complete
         
         // Show a test notification to verify app is running
-        let notification = NSUserNotification()
-        notification.title = "MonitorClient Started"
-        notification.informativeText = "App is running in background. Look for 🗒️ icon in menu bar."
-        notification.soundName = NSUserNotificationDefaultSoundName
-        NSUserNotificationCenter.default.deliver(notification)
+        showClientNotification("MonitorClient Started", "App is running in the menu bar.")
         
         // Check permissions and log status
         checkAndLogPermissions()
@@ -2487,149 +2551,166 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     }
 
     private func signInAndSelectMonitor(identifier: String, password: String) -> Bool {
-        if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: false); eventTap = nil }
-        clientToken = ""
-        selectedMonitorId = 0
         guard let response = clientAuthRequest(["action": "login", "identifier": identifier, "password": password]),
               response["success"] as? Bool == true,
-              let token = response["token"] as? String,
-              let monitors = response["monitors"] as? [[String: Any]] else {
-            let warning = NSAlert()
-            warning.messageText = "Unable to sign in"
-            warning.informativeText = "Check your credentials and the HTTPS server certificate."
-            warning.runModal()
+              let token = response["token"] as? String, token.count == 64 else {
+            let alert = NSAlert()
+            alert.messageText = "Sign-in failed"
+            alert.informativeText = "Check your username and password. If the password is incorrect, ask an administrator to reset it."
+            alert.runModal()
             return false
         }
         clientToken = token
-        if monitors.isEmpty {
-            let dialog = NSAlert()
-            dialog.messageText = "No monitors assigned"
-            dialog.informativeText = "Request a new monitor for admin approval?"
-            dialog.addButton(withTitle: "Request")
-            dialog.addButton(withTitle: "Cancel")
-            if dialog.runModal() == .alertFirstButtonReturn {
-                let device = Host.current().name ?? "Mac"
-                _ = clientAuthRequest(["action": "request_monitor", "name": device], authenticated: true)
-            }
-            return false
-        }
-        let picker = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 325, height: 28), pullsDown: false)
-        for monitor in monitors {
-            let id = monitor["id"] as? Int ?? 0
-            picker.addItem(withTitle: "\(monitor["name"] as? String ?? "Monitor") (#\(id))")
-            picker.lastItem?.representedObject = id
-        }
-        let dialog = NSAlert()
-        dialog.messageText = "Select your assigned monitor"
-        dialog.informativeText = "This monitor ID will identify all activity from this client."
-        dialog.accessoryView = picker
-        dialog.addButton(withTitle: "Use monitor")
-        dialog.addButton(withTitle: "Cancel")
-        guard dialog.runModal() == .alertFirstButtonReturn,
-              let monitorId = picker.selectedItem?.representedObject as? Int,
-              monitorId > 0,
-              let result = clientAuthRequest(["action": "select", "monitor_id": monitorId], authenticated: true),
-              result["success"] as? Bool == true else { return false }
-        selectedMonitorId = monitorId
-        startKeyboardMonitoring()
+        selectedMonitorId = 0
+        keychainSaveToken(token)
+        updateTrayStatusDot()
         return true
     }
 
-    @objc private func openSettingsDialog() {
+    private func openLoginDialog() {
+        let tabView = NSTabView(frame: NSRect(x: 0, y: 0, width: 370, height: 165))
+        let signIn = NSTabViewItem(identifier: "signin")
+        signIn.label = "Sign In"
+        let signInView = NSView(frame: NSRect(x: 0, y: 0, width: 365, height: 140))
+        let username = NSTextField(frame: NSRect(x: 20, y: 92, width: 325, height: 25))
+        username.placeholderString = "Username or email"
+        let password = NSSecureTextField(frame: NSRect(x: 20, y: 52, width: 325, height: 25))
+        password.placeholderString = "Password"
+        signInView.addSubview(username);signInView.addSubview(password)
+        signIn.view = signInView;tabView.addTabViewItem(signIn)
+
+        let signUp = NSTabViewItem(identifier: "signup")
+        signUp.label = "Sign Up"
+        let signUpView = NSView(frame: NSRect(x: 0, y: 0, width: 365, height: 140))
+        let newUser = NSTextField(frame: NSRect(x: 20, y: 105, width: 325, height: 25))
+        newUser.placeholderString = "Username (3–50 characters)"
+        let newPass = NSSecureTextField(frame: NSRect(x: 20, y: 65, width: 325, height: 25))
+        newPass.placeholderString = "Password (at least 12 characters)"
+        let confirm = NSSecureTextField(frame: NSRect(x: 20, y: 25, width: 325, height: 25))
+        confirm.placeholderString = "Confirm password"
+        signUpView.addSubview(newUser);signUpView.addSubview(newPass);signUpView.addSubview(confirm)
+        signUp.view = signUpView;tabView.addTabViewItem(signUp)
+
         let alert = NSAlert()
-        alert.messageText = "MonitorClient Settings"
-        alert.informativeText = "Port 8924: HTTP (trusted LAN only). Port 8925: HTTPS (recommended)."
-        
-        // Create custom view for input fields
-        let customView = NSView(frame: NSRect(x: 0, y: 0, width: 350, height: 145))
-        
-        // Username field
-        let usernameLabel = NSTextField(labelWithString: "Username:")
-        usernameLabel.frame = NSRect(x: 0, y: 110, width: 115, height: 20)
-        customView.addSubview(usernameLabel)
-        
-        let usernameField = NSTextField(frame: NSRect(x: 125, y: 110, width: 210, height: 20))
-        usernameField.stringValue = storage.string(forKey: "username") ?? NSUserName()
-        usernameField.placeholderString = "Enter username"
-        customView.addSubview(usernameField)
-        
-        // Server IP field
-        let ipLabel = NSTextField(labelWithString: "Server IP:")
-        ipLabel.frame = NSRect(x: 0, y: 80, width: 110, height: 20)
-        customView.addSubview(ipLabel)
-        
-        // Get current server IP (extract from full address if needed)
-        let currentServerAddress = storage.string(forKey: "server-ip") ?? "192.168.1.45:8924"
-        let currentIP = currentServerAddress.contains(":") ? String(currentServerAddress.split(separator: ":")[0]) : currentServerAddress
-        
-        let ipField = NSTextField(frame: NSRect(x: 125, y: 80, width: 210, height: 20))
-        ipField.stringValue = currentIP
-        ipField.placeholderString = "Enter server IP address"
-        customView.addSubview(ipField)
-        
-        // Server Port field
-        let portLabel = NSTextField(labelWithString: "Port:")
-        portLabel.frame = NSRect(x: 0, y: 50, width: 110, height: 20)
-        customView.addSubview(portLabel)
-        
-        let portField = NSTextField(frame: NSRect(x: 125, y: 50, width: 210, height: 20))
-        portField.stringValue = storage.string(forKey: "server-port") ?? "8924"
-        portField.placeholderString = "Enter server port"
-        customView.addSubview(portField)
-        
-        let passwordLabel = NSTextField(labelWithString: "Password:")
-        passwordLabel.frame = NSRect(x: 0, y: 20, width: 110, height: 20)
-        customView.addSubview(passwordLabel)
-        let passwordField = NSSecureTextField(frame: NSRect(x: 125, y: 20, width: 210, height: 20))
-        passwordField.placeholderString = "Account password"
-        customView.addSubview(passwordField)
-        alert.accessoryView = customView
-        
-        // Add buttons
-        alert.addButton(withTitle: "Save")
+        alert.messageText = "MonitorClient v1.4 · Account"
+        alert.informativeText = "Sign in or create an account before configuring your monitor."
+        alert.accessoryView = tabView
+        alert.addButton(withTitle: "Continue")
         alert.addButton(withTitle: "Cancel")
-        
-        // Show dialog
-        let response = alert.runModal()
-        
-        if response == .alertFirstButtonReturn {
-            let username = usernameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            let serverIP = ipField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            let serverPort = portField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            
-            // Validate input
-            if username.isEmpty || serverIP.isEmpty || serverPort.isEmpty {
-                let errorAlert = NSAlert()
-                errorAlert.messageText = "Invalid Settings"
-                errorAlert.informativeText = "Please enter username, server IP and port."
-                errorAlert.runModal()
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            showClientNotification("Sign-in required", "Monitoring is disabled until you sign in and choose a monitor.")
+            return
+        }
+        if tabView.selectedTabViewItem === signUp {
+            guard newPass.stringValue == confirm.stringValue else {
+                let err = NSAlert()
+                err.messageText = "Passwords do not match"
+                err.runModal()
+                openLoginDialog()
                 return
             }
-            
-            // Save settings
-            storage.set(username, forKey: "username")
-            storage.set(serverIP, forKey: "server-ip")
-            storage.set(serverPort, forKey: "server-port")
-            
-            // Update the global server address for immediate use
-            let fullServerAddress = "\(serverIP):\(serverPort)"
-            // logMessage("Server address updated to: \(fullServerAddress)", level: .info)
-            
-            // Save to file
-            saveSettings(username: username, serverIP: serverIP, serverPort: serverPort)
-            
-            // logMessage("Settings updated - Username: \(username), Server: \(fullServerAddress)", level: .info)
-            
-            // Explicit sign-in. Token is held only in memory, never saved to settings.
-            guard signInAndSelectMonitor(identifier: username, password: passwordField.stringValue) else { return }
-            // Show confirmation
-            let confirmAlert = NSAlert()
-            confirmAlert.messageText = "Settings Saved"
-            confirmAlert.informativeText = "Settings have been updated successfully."
-            confirmAlert.runModal()
+            let data = clientAuthRequest(["action":"signup",
+                "username":newUser.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
+                "password":newPass.stringValue,
+                "confirm_password":confirm.stringValue])
+            let message = data?["code"] as? String == "username_exists"
+                ? "This username already exists. Please use Sign In instead."
+                : (data?["message"] as? String ?? data?["error"] as? String ?? "Account creation failed.")
+            let feedback = NSAlert();feedback.messageText = "Sign Up";feedback.informativeText = message;feedback.runModal()
+            if data?["success"] as? Bool == true { openLoginDialog() }
+            return
+        }
+        if signInAndSelectMonitor(identifier: username.stringValue, password: password.stringValue) {
+            openSettingsDialog()
         }
     }
-    
+
+    @objc private func openSettingsDialog() {
+        if clientToken.isEmpty { openLoginDialog();return }
+        let account = NSAlert()
+        account.messageText = "MonitorClient v1.4 · Settings"
+        account.informativeText = "Select your assigned monitor, or request an additional monitor for admin approval."
+        let panel = NSView(frame: NSRect(x: 0, y: 0, width: 380, height: 295))
+
+        func label(_ title: String, _ y: CGFloat) {
+            let l = NSTextField(labelWithString: title)
+            l.frame = NSRect(x: 0, y: y, width: 112, height: 22)
+            panel.addSubview(l)
+        }
+        func field(_ value: String, _ y: CGFloat) -> NSTextField {
+            let v = NSTextField(frame: NSRect(x: 117, y: y, width: 255, height: 24))
+            v.stringValue = value;panel.addSubview(v);return v
+        }
+        label("Username",263)
+        let userField = field(storage.string(forKey: "username") ?? NSUserName(),263)
+        label("Server IP",235)
+        let ipField = field(storage.string(forKey: "server-ip") ?? "192.168.1.45",235)
+        label("Port",207)
+        let portField = field(storage.string(forKey: "server-port") ?? "8924",207)
+        label("Monitor",179)
+        let monitorPicker = NSPopUpButton(frame: NSRect(x:117,y:179,width:255,height:26))
+        let response = clientAuthRequest(["action":"monitors"],authenticated:true)
+        let monitors = response?["monitors"] as? [[String:Any]] ?? []
+        for monitor in monitors {
+            let id = monitor["id"] as? Int ?? 0
+            monitorPicker.addItem(withTitle: "\(monitor["name"] as? String ?? "Monitor") (#\(id))")
+            monitorPicker.lastItem?.representedObject = id
+        }
+        monitorPicker.addItem(withTitle:"Add New...")
+        monitorPicker.lastItem?.representedObject = 0
+        if selectedMonitorId > 0,
+           let i = monitorPicker.itemArray.firstIndex(where: { ($0.representedObject as? Int ?? -1) == selectedMonitorId }) {
+            monitorPicker.selectItem(at:i)
+        }
+        panel.addSubview(monitorPicker)
+        label("Label",148)
+        let labelField = field("",148);labelField.placeholderString = "Optional"
+        label("OS",119)
+        let osPicker = NSPopUpButton(frame:NSRect(x:117,y:119,width:255,height:26))
+        osPicker.addItems(withTitles:["Windows","Mac","Ubuntu"]);osPicker.selectItem(withTitle:"Mac");panel.addSubview(osPicker)
+        label("Machine",90)
+        let machinePicker = NSPopUpButton(frame:NSRect(x:117,y:90,width:255,height:26))
+        machinePicker.addItems(withTitles:["Laptop","Desktop"]);panel.addSubview(machinePicker)
+        label("Remark",61)
+        let remarkField = field("",61);remarkField.placeholderString = "Optional"
+        let notifyToggle = NSButton(checkboxWithTitle:"Show connection/status notifications",
+                                    target:nil,action:nil)
+        notifyToggle.frame = NSRect(x:117,y:22,width:260,height:25)
+        notifyToggle.state = notificationsEnabled ? .on : .off
+        panel.addSubview(notifyToggle)
+        account.accessoryView = panel
+        account.addButton(withTitle:"Save / Add")
+        account.addButton(withTitle:"Cancel")
+        guard account.runModal() == .alertFirstButtonReturn else { return }
+        let id = monitorPicker.selectedItem?.representedObject as? Int ?? 0
+        let payload:[String:Any] = ["action":id>0 ? "save_monitor":"request_monitor",
+            "monitor_id":id, "label":labelField.stringValue,
+            "os":osPicker.titleOfSelectedItem ?? "Mac",
+            "machine":(machinePicker.titleOfSelectedItem ?? "Laptop").lowercased(),
+            "remark":remarkField.stringValue]
+        guard let saved = clientAuthRequest(payload,authenticated:true),
+              saved["success"] as? Bool == true else {
+            let err=NSAlert();err.messageText="Monitor settings not saved"
+            err.informativeText="Check your connection and monitor assignment."
+            err.runModal();return
+        }
+        notificationsEnabled = notifyToggle.state == .on
+        storage.set(userField.stringValue,forKey:"username")
+        storage.set(ipField.stringValue,forKey:"server-ip")
+        storage.set(portField.stringValue,forKey:"server-port")
+        saveSettings(username:userField.stringValue,serverIP:ipField.stringValue,serverPort:portField.stringValue)
+        if id==0 {
+            let pending=NSAlert();pending.messageText="Awaiting admin approval"
+            pending.informativeText="Your new monitor request was submitted. Ask the administrator to assign it before monitoring starts."
+            pending.runModal();updateTrayStatusDot();return
+        }
+        guard let selection=clientAuthRequest(["action":"select","monitor_id":id],authenticated:true),
+              selection["success"] as? Bool == true else { return }
+        selectedMonitorId=id
+        startKeyboardMonitoring()
+        updateTrayStatusDot()
+    }
+
     private func checkAndLogPermissions() {
         // logMessage("=== Permission Check ===", level: .info)
         
@@ -2793,6 +2874,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     }
 
     private func checkServerConnectionChange() {
+        updateTrayStatusDot()
         // Check if connection state has changed
         if wasServerConnected && !isServerConnected {
             // Connection was lost
@@ -2807,6 +2889,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     }
     
     private func showServerConnectionNotification(connected: Bool) {
+        guard notificationsEnabled else { return }
         let notification = NSUserNotification()
         notification.title = "MonitorClient"
         
@@ -3819,7 +3902,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
         if let button = statusBarItem?.button {
-            button.title = "🗒️"
+            button.title = "🗒️🔴"
             button.font = NSFont.systemFont(ofSize: 14)
             
             // Add click action for status bar icon
