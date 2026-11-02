@@ -20,7 +20,7 @@ ob_start(); ?>
 <?php foreach($monitors as $m): ?>
 <tr>
  <td><?= (int)$m['id'] ?></td>
- <td><?= $m['owner_name']!==null ? $escape($m['owner_name']) : '<span class="text-muted">Unassigned</span>' ?></td>
+ <td><?= $m['owner_name']!==null ? $escape(($m['owner_user_no']??'—').' / '.$m['owner_name'].' / '.($m['ip_address']??'—')) : '<span class="text-muted">Unassigned</span>' ?></td>
  <td><code><?= $escape($m['ip_address']) ?></code></td>
  <td><?= $escape(ucfirst(strtolower($m['type']??'desktop'))) ?></td>
  <td><?= $escape($m['platform']??'—') ?></td>
