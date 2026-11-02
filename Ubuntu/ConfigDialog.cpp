@@ -11,13 +11,17 @@
 #include <QJsonArray>
 #include <QEventLoop>
 #include <QInputDialog>
+#include <QProcess>
+#include <QTimer>
+#include <QFile>
+#include <QFormLayout>
 
 ConfigDialog::ConfigDialog(QWidget *parent)
     : QDialog(parent)
 {
     setWindowTitle(QStringLiteral("MonitorClient — Configuration"));
-    setMinimumSize(440, 320);
-    resize(460, 340);
+    setMinimumSize(470, 620);
+    resize(500, 670);
     setModal(true);
 
     // Create layout
@@ -59,18 +63,63 @@ ConfigDialog::ConfigDialog(QWidget *parent)
 
     mainLayout->addWidget(serverGroup);
 
-    QGroupBox *authGroup=new QGroupBox("Sign in and select an assigned monitor");
+    QGroupBox *authGroup=new QGroupBox("Account");
     QVBoxLayout *authLayout=new QVBoxLayout(authGroup);
-    loginEdit=new QLineEdit();loginEdit->setPlaceholderText("Email or username");
-    passwordEdit=new QLineEdit();passwordEdit->setEchoMode(QLineEdit::Password);passwordEdit->setPlaceholderText("Password");
-    monitorSelector=new QComboBox();monitorSelector->addItem("Sign in to load your monitors",0);
-    signInButton=new QPushButton("Sign in");
-    requestMonitorButton=new QPushButton("Request new monitor (admin approval)");
-    authLayout->addWidget(loginEdit);authLayout->addWidget(passwordEdit);
-    authLayout->addWidget(signInButton);authLayout->addWidget(monitorSelector);authLayout->addWidget(requestMonitorButton);
+    QTabWidget *tabs=new QTabWidget(authGroup);
+    QWidget *signInTab=new QWidget(tabs);
+    auto *signinLayout=new QVBoxLayout(signInTab);
+    loginEdit=new QLineEdit();
+    loginEdit->setPlaceholderText("Username or email");
+    passwordEdit=new QLineEdit();
+    passwordEdit->setEchoMode(QLineEdit::Password);
+    passwordEdit->setPlaceholderText("Password");
+    signInButton=new QPushButton("Sign In");
+    signinLayout->addWidget(loginEdit);
+    signinLayout->addWidget(passwordEdit);
+    signinLayout->addWidget(signInButton);
+    tabs->addTab(signInTab,"Sign In");
+    QWidget *signUpTab=new QWidget(tabs);
+    auto *signupLayout=new QVBoxLayout(signUpTab);
+    signupUsernameEdit=new QLineEdit();signupUsernameEdit->setPlaceholderText("Username");
+    signupPasswordEdit=new QLineEdit();signupPasswordEdit->setEchoMode(QLineEdit::Password);
+    signupPasswordEdit->setPlaceholderText("Password (12+ characters)");
+    signupConfirmEdit=new QLineEdit();signupConfirmEdit->setEchoMode(QLineEdit::Password);
+    signupConfirmEdit->setPlaceholderText("Confirm password");
+    QPushButton *signupButton=new QPushButton("Sign Up");
+    signupLayout->addWidget(signupUsernameEdit);
+    signupLayout->addWidget(signupPasswordEdit);
+    signupLayout->addWidget(signupConfirmEdit);
+    signupLayout->addWidget(signupButton);
+    tabs->addTab(signUpTab,"Sign Up");
+    authLayout->addWidget(tabs);
     mainLayout->addWidget(authGroup);
     connect(signInButton,&QPushButton::clicked,this,&ConfigDialog::onSignInClicked);
-    connect(requestMonitorButton,&QPushButton::clicked,this,&ConfigDialog::onRequestMonitorClicked);
+    connect(signupButton,&QPushButton::clicked,this,&ConfigDialog::onSignUpClicked);
+
+    QGroupBox *monitorGroup=new QGroupBox("Monitor Settings");
+    auto *monitorLayout=new QFormLayout(monitorGroup);
+    monitorSelector=new QComboBox();
+    monitorSelector->addItem("Add New...",0);
+    labelEdit=new QLineEdit();
+    labelEdit->setPlaceholderText("Optional monitor label");
+    osSelector=new QComboBox();
+    osSelector->addItems({"Windows","Mac","Ubuntu"});
+    osSelector->setCurrentText("Ubuntu");
+    machineSelector=new QComboBox();
+    machineSelector->addItems({"Laptop","Desktop"});
+    remarkEdit=new QLineEdit();
+    remarkEdit->setPlaceholderText("Remark (optional)");
+    monitorLayout->addRow("Monitor",monitorSelector);
+    monitorLayout->addRow("Label",labelEdit);
+    monitorLayout->addRow("OS",osSelector);
+    monitorLayout->addRow("Machine",machineSelector);
+    monitorLayout->addRow("Remark",remarkEdit);
+    mainLayout->addWidget(monitorGroup);
+    notificationsCheck=new QCheckBox("Show connection and status notifications");
+    notificationsCheck->setChecked(true);
+    mainLayout->addWidget(notificationsCheck);
+    connect(monitorSelector,QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this,&ConfigDialog::onMonitorChanged);
     // Buttons
     QHBoxLayout *buttonLayout = new QHBoxLayout();
     saveButton = new QPushButton("Save");
@@ -86,6 +135,7 @@ ConfigDialog::ConfigDialog(QWidget *parent)
 
     // Load current settings
     loadSettings();
+    loadRememberedSession();
 }
 
 ConfigDialog::~ConfigDialog()
@@ -119,6 +169,7 @@ void ConfigDialog::loadSettings()
     serverIPEdit->setText(settings.value("Server/ip", "192.168.1.45").toString());
     serverPortEdit->setValue(settings.value("Server/port", 8924).toInt());
     clientNameEdit->setText(settings.value("Client/name", qgetenv("USER")).toString());
+    notificationsCheck->setChecked(settings.value("Notifications/enabled",true).toBool());
 }
 
 void ConfigDialog::saveSettings()
@@ -132,12 +183,16 @@ void ConfigDialog::saveSettings()
     settings.setValue("Server/ip", serverIPEdit->text());
     settings.setValue("Server/port", serverPortEdit->value());
     settings.setValue("Client/name", clientNameEdit->text());
+    settings.setValue("Notifications/enabled",notificationsCheck->isChecked());
+    settings.setValue("Monitor/id",monitorId);
     
     // Also save to local settings.ini for backward compatibility
     QSettings localSettings("settings.ini", QSettings::IniFormat);
     localSettings.setValue("Server/ip", serverIPEdit->text());
     localSettings.setValue("Server/port", serverPortEdit->value());
     localSettings.setValue("Client/name", clientNameEdit->text());
+    localSettings.setValue("Notifications/enabled",notificationsCheck->isChecked());
+    localSettings.setValue("Monitor/id",monitorId);
 }
 
 bool ConfigDialog::testConnection()
@@ -161,24 +216,41 @@ bool ConfigDialog::testConnection()
 
 void ConfigDialog::onSaveClicked()
 {
-    if (serverIPEdit->text().isEmpty()) {
-        QMessageBox::warning(this, "Error", "Server IP cannot be empty!");
+    if(authToken.isEmpty()){
+        QMessageBox::warning(this,"Sign in required","Use the Sign In or Sign Up tab first.");
         return;
     }
-    
-    if (authToken.isEmpty() || monitorSelector->currentData().toInt()<1) {
-        QMessageBox::warning(this,"Sign in required","Sign in and select a monitor assigned to you.");return;
+    const int id=monitorSelector->currentData().toInt();
+    QJsonObject payload{{"label",labelEdit->text().trimmed()},
+                        {"os",osSelector->currentText()},
+                        {"machine",machineSelector->currentText().toLower()},
+                        {"remark",remarkEdit->text().trimmed()}};
+    if(id>0){
+        payload["action"]="save_monitor";
+        payload["monitor_id"]=id;
+    }else{
+        payload["action"]="request_monitor";
     }
-    const int selected=monitorSelector->currentData().toInt();
-    QJsonObject response=authRequest(QJsonObject{{"action","select"},{"monitor_id",selected}},true);
-    if (!response.value("success").toBool()) {
-        QMessageBox::warning(this,"Monitor not assigned",response.value("error").toString("Selection failed"));return;
+    const QJsonObject saved=authRequest(payload,true);
+    if(!saved.value("success").toBool()){
+        QMessageBox::warning(this,"Monitor settings",saved.value("error").toString("Could not save monitor."));
+        return;
     }
-    monitorId=selected;
+    if(id==0){
+        saveSettings();
+        QMessageBox::information(this,"Awaiting approval",
+            "Monitor registration requested. The administrator must assign it to your account before monitoring can start.");
+        return;
+    }
+    const QJsonObject selected=authRequest(QJsonObject{{"action","select"},{"monitor_id",id}},true);
+    if(!selected.value("success").toBool()){
+        QMessageBox::warning(this,"Monitor selection",selected.value("error").toString("Monitor not assigned."));
+        return;
+    }
+    monitorId=id;
     saveSettings();
     accept();
 }
-
 void ConfigDialog::onCancelClicked()
 {
     reject();
@@ -215,20 +287,121 @@ QJsonObject ConfigDialog::authRequest(const QJsonObject &payload,bool authentica
 }
 void ConfigDialog::onSignInClicked()
 {
-    authToken.clear();monitorId=0;
-    QJsonObject response=authRequest(QJsonObject{{"action","login"},{"identifier",loginEdit->text().trimmed()},{"password",passwordEdit->text()}});
+    const QJsonObject response=authRequest(
+        QJsonObject{{"action","login"},{"identifier",loginEdit->text().trimmed()},
+                    {"password",passwordEdit->text()}});
     passwordEdit->clear();
     if(!response.value("success").toBool()){
-        QMessageBox::warning(this,"Sign in failed",response.value("error").toString("Check server and credentials."));return;
+        QMessageBox::warning(this,"Sign in failed",
+            response.value("code").toString()=="invalid_credentials"
+                ? "Incorrect password or username. Ask your administrator to reset the password if needed."
+                : response.value("error").toString("Server unavailable."));
+        return;
     }
     authToken=response.value("token").toString();
-    monitorSelector->clear();
-    for(auto item:response.value("monitors").toArray()){
-        auto monitor=item.toObject();
-        monitorSelector->addItem(QString("%1 (#%2)").arg(monitor.value("name").toString()).arg(monitor.value("id").toInt()),
-                                 monitor.value("id").toInt());
+    rememberToken(authToken);
+    updateMonitorList(response.value("monitors").toArray());
+    QMessageBox::information(this,"Signed in","Choose your monitor below and save.");
+}
+void ConfigDialog::onSignUpClicked()
+{
+    if(signupPasswordEdit->text()!=signupConfirmEdit->text()){
+        QMessageBox::warning(this,"Password mismatch","Enter the same password twice.");
+        return;
     }
-    if(monitorSelector->count()==0)monitorSelector->addItem("No assigned monitors — request one or contact admin",0);
+    const QJsonObject response=authRequest(
+        QJsonObject{{"action","signup"},
+                    {"username",signupUsernameEdit->text().trimmed()},
+                    {"password",signupPasswordEdit->text()},
+                    {"confirm_password",signupConfirmEdit->text()}});
+    signupPasswordEdit->clear();signupConfirmEdit->clear();
+    if(!response.value("success").toBool()){
+        QMessageBox::information(this,"Sign up",
+            response.value("code").toString()=="username_exists"
+              ? "Username already exists. Use the Sign In tab instead."
+              : response.value("error").toString("Unable to create account."));
+        return;
+    }
+    loginEdit->setText(signupUsernameEdit->text().trimmed());
+    QMessageBox::information(this,"Account created","Account created. Switch to Sign In to continue.");
+}
+void ConfigDialog::updateMonitorList(const QJsonArray &monitors)
+{
+    assignedMonitors=monitors;
+    const QSignalBlocker block(monitorSelector);
+    monitorSelector->clear();
+    for(const QJsonValue &val:monitors){
+        const QJsonObject m=val.toObject();
+        const int id=m.value("id").toInt();
+        monitorSelector->addItem(QString("%1 (#%2)").arg(m.value("name").toString()).arg(id),id);
+    }
+    monitorSelector->addItem("Add New...",0);
+    QSettings settings(settingsPath(),QSettings::IniFormat);
+    const int saved=settings.value("Monitor/id",0).toInt();
+    const int index=monitorSelector->findData(saved);
+    monitorSelector->setCurrentIndex(index>=0?index:monitorSelector->count()-1);
+    onMonitorChanged(monitorSelector->currentIndex());
+}
+void ConfigDialog::onMonitorChanged(int)
+{
+    const int id=monitorSelector->currentData().toInt();
+    saveButton->setText(id>0?"Save":"Add");
+    if(!id){
+        labelEdit->clear();remarkEdit->clear();osSelector->setCurrentText("Ubuntu");
+        machineSelector->setCurrentText("Laptop");
+        return;
+    }
+    for(const QJsonValue &val:assignedMonitors){
+        const QJsonObject m=val.toObject();
+        if(m.value("id").toInt()!=id)continue;
+        labelEdit->setText(m.value("name").toString());
+        remarkEdit->setText(m.value("remark").toString());
+        osSelector->setCurrentText(m.value("platform").toString("Ubuntu"));
+        const QString type=m.value("type").toString().toLower();
+        machineSelector->setCurrentText(type=="desktop"?"Desktop":"Laptop");
+        break;
+    }
+}
+QString ConfigDialog::settingsPath() const
+{
+    return QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)+"/monitorclient/settings.ini";
+}
+QString ConfigDialog::readRememberedToken() const
+{
+    QProcess secret;
+    secret.start("secret-tool",{"lookup","service","acc-monitor","host",
+         serverIPEdit->text().trimmed()+":"+QString::number(serverPortEdit->value())});
+    if(!secret.waitForFinished(3000) || secret.exitCode()!=0)return {};
+    return QString::fromUtf8(secret.readAllStandardOutput()).trimmed();
+}
+void ConfigDialog::rememberToken(const QString &value)
+{
+    QProcess secret;
+    const QString address=serverIPEdit->text().trimmed()+":"+QString::number(serverPortEdit->value());
+    secret.start("secret-tool",{"store","--label=ACC Monitor v1.4",
+        "service","acc-monitor","host",address});
+    if(!secret.waitForStarted(2000))return;
+    secret.write(value.toUtf8());secret.write("\n");secret.closeWriteChannel();
+    if(!secret.waitForFinished(4000) || secret.exitCode()!=0){
+        QMessageBox::warning(this,"Session not saved",
+           "Install and unlock a Secret Service keyring (libsecret-tools) to remember your login across restarts.");
+    }
+}
+void ConfigDialog::loadRememberedSession()
+{
+    authToken=readRememberedToken();
+    if(authToken.isEmpty())return;
+    const QJsonObject restored=authRequest(QJsonObject{{"action","restore"}},true);
+    if(!restored.value("success").toBool()){
+        authToken.clear();return;
+    }
+    updateMonitorList(restored.value("monitors").toArray());
+    const int saved=restored.value("monitor_id").toInt();
+    if(saved>0){
+        monitorId=saved;
+        const int index=monitorSelector->findData(saved);
+        if(index>=0)monitorSelector->setCurrentIndex(index);
+    }
 }
 void ConfigDialog::onRequestMonitorClicked()
 {

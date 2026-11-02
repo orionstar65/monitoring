@@ -36,6 +36,9 @@
 // #include "utils/desktopinfo.h"
 #include "MonitorClient.h"
 #include "ConfigDialog.h"
+#include <QPainter>
+#include <QPen>
+#include <QApplication>
 
 #include "functions.h"
 #include "version.h"
@@ -131,6 +134,20 @@ MonitorClient::MonitorClient()
     connect(monitorTimer, &QTimer::timeout, this, &MonitorClient::monitorTimerTick);
     QTimer::singleShot(1000, this, [this]() { monitorTimer->start(); });
     
+    // Restore the revocable session from the Secret Service keyring.
+    // If no valid session exists, show the sign-in / sign-up dialog immediately.
+    QTimer::singleShot(0,this,[this]() {
+        ConfigDialog saved;
+        authToken=saved.getAuthToken();
+        monitorId=saved.getMonitorId();
+        if(authToken.isEmpty() || monitorId<1)onConfigureAction();
+        else {
+            clientName=saved.getClientName();
+            if(keyboardMonitor)keyboardMonitor->startMonitoring();
+            scheduleConnectionTest("Checking remembered session...");
+        }
+        updateTrayIcon();
+    });
     // Fetch configuration from API
     fetchConfigurationFromAPI();
     
@@ -1365,6 +1382,8 @@ void MonitorClient::setupSystemTray()
     trayMenu->addAction(configRefreshAction);
     trayMenu->addSeparator();
     trayMenu->addAction(sendAllAction);
+    trayMenu->addSeparator();
+    trayMenu->addAction("Quit", qApp, &QApplication::quit);
     
     // Set menu for tray icon
     trayIcon->setContextMenu(trayMenu);
@@ -1423,25 +1442,19 @@ void MonitorClient::updateTrayIcon()
     if (!trayIcon)
         return;
 
-    if (!m_trayActivity.isEmpty()) {
-        trayIcon->setIcon(QIcon::fromTheme(QStringLiteral("emblem-synchronizing"),
-            QIcon::fromTheme(QStringLiteral("view-refresh"),
-                QIcon::fromTheme(QStringLiteral("computer")))));
-        trayIcon->setToolTip(QStringLiteral("MonitorClient · %1").arg(m_trayActivity));
-        return;
-    }
+    const bool active=serverConnected && !authToken.isEmpty() && monitorId>0;
+    QPixmap icon(32,32);
+    icon.fill(Qt::transparent);
+    QPainter painter(&icon);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.drawPixmap(2,2,QIcon::fromTheme("computer").pixmap(27,27));
+    painter.setPen(QPen(Qt::white,2));
+    painter.setBrush(active?QColor("#20bf55"):QColor("#e53935"));
+    painter.drawEllipse(QRect(19,19,11,11));
+    painter.end();
+    trayIcon->setIcon(QIcon(icon));
+    trayIcon->setToolTip(active?"MonitorClient v1.4 · Online":"MonitorClient v1.4 · Offline / Not signed in / No monitor");
 
-    if (serverConnected) {
-        trayIcon->setIcon(QIcon::fromTheme(QStringLiteral("network-transmit-receive"),
-            QIcon::fromTheme(QStringLiteral("emblem-ok"),
-                QIcon::fromTheme(QStringLiteral("computer")))));
-        trayIcon->setToolTip(QStringLiteral("MonitorClient · Online"));
-    } else {
-        trayIcon->setIcon(QIcon::fromTheme(QStringLiteral("network-error"),
-            QIcon::fromTheme(QStringLiteral("emblem-error"),
-                QIcon::fromTheme(QStringLiteral("computer")))));
-        trayIcon->setToolTip(QStringLiteral("MonitorClient · Offline"));
-    }
 }
 
 void MonitorClient::updateTrayMenu()
@@ -1513,7 +1526,8 @@ void MonitorClient::showConnectionError(const QString& error)
     updateTrayMenu();
     
     // Show notification only for first error
-    if (trayIcon && !connectionErrorNotified) {
+    QSettings local(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)+"/monitorclient/settings.ini",QSettings::IniFormat);
+    if (trayIcon && local.value("Notifications/enabled",true).toBool() && !connectionErrorNotified) {
         trayIcon->showMessage("Connection Error", error, QSystemTrayIcon::Warning, 5000);
         connectionErrorNotified = true;
     }
