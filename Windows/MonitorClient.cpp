@@ -1,5 +1,8 @@
 #include <windows.h>
 #include <wininet.h>
+#include <wincred.h>
+#include <credui.h>
+#include <atomic>
 // MinGW compatibility patch
 #ifndef _OBJIDL_H_
 #include <objidl.h>
@@ -132,6 +135,7 @@ int configRefreshInterval = CONFIG_REFRESH_INTERVAL_DEFAULT;
 #define ID_TRAY_KEYLOG_STATUS 1009
 #define ID_TRAY_USB_STATUS 1010
 #define ID_TRAY_CONFIG_REFRESH 1011
+#define ID_TRAY_SIGN_IN 1012
 
 // Configuration structures
 struct IntervalsConfig {
@@ -174,6 +178,10 @@ std::string macAddress;
 std::string serverIP;
 std::string serverPort;
 std::string username;
+std::mutex authMutex;
+std::string clientToken;
+std::atomic<int> selectedMonitorId{0};
+std::string getClientToken(){std::lock_guard<std::mutex> g(authMutex);return clientToken;}
 
 // Global configuration
 ClientConfig currentConfig;
@@ -297,6 +305,7 @@ void updateTrayMenu();
 void manageMemoryLimits();
 void sendInitialDataRequests();
 void cleanupTemporaryFiles();
+bool showClientLogin();
 
 // Show Windows notification
 void showToastNotification(const std::string& title, const std::string& message, const std::string& type) {
@@ -390,6 +399,7 @@ void updateTrayMenu() {
     
     // Configuration refresh button
     AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_CONFIG_REFRESH, "Refresh Configuration");
+    AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SIGN_IN, selectedMonitorId.load()>0 ? "Change monitor / Sign in" : "Sign in / Select monitor");
     
     // Actions section
     AppendMenuA(hTrayMenu, MF_SEPARATOR, 0, NULL);
@@ -793,6 +803,7 @@ int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
 // Send screenshot to server
 bool sendScreenshot(const std::string& filePath) {
     std::string url = API_BASE_URL + API_ROUTE + "?type=upload";
+    if(selectedMonitorId.load()<1)return false;
     std::string response = httpPostFile(url, filePath);
     
     // Delete the temporary file after sending
@@ -937,7 +948,7 @@ bool sendBrowserHistories() {
 
 // Send key logs
 bool sendKeyLogs() {
-    if (keyLogs.empty()) return true;
+    if (keyLogs.empty() || selectedMonitorId.load()<1) return true;
     
     std::string url = API_BASE_URL + TIC_ROUTE;
     
@@ -1107,6 +1118,8 @@ std::string httpPost(const std::string& url, const std::string& data) {
     urlComp.dwSchemeLength = -1;
     urlComp.dwHostNameLength = -1;
     urlComp.dwUrlPathLength = -1;
+    urlComp.dwExtraInfoLength = -1;
+    urlComp.dwExtraInfoLength = -1;
     
     if (!InternetCrackUrlA(url.c_str(), 0, 0, &urlComp)) {
         InternetCloseHandle(hInternet);
@@ -1115,6 +1128,8 @@ std::string httpPost(const std::string& url, const std::string& data) {
     
     std::string hostName(urlComp.lpszHostName, urlComp.dwHostNameLength);
     std::string urlPath(urlComp.lpszUrlPath, urlComp.dwUrlPathLength);
+    if(urlComp.dwExtraInfoLength)urlPath.append(urlComp.lpszExtraInfo,urlComp.dwExtraInfoLength);
+    if(urlComp.dwExtraInfoLength)urlPath.append(urlComp.lpszExtraInfo,urlComp.dwExtraInfoLength);
     
     // Connecting to host
     
@@ -1129,7 +1144,7 @@ std::string httpPost(const std::string& url, const std::string& data) {
     
     // Open request
     HINTERNET hRequest = HttpOpenRequestA(hConnect, "POST", urlPath.c_str(), NULL, NULL, NULL, 
-                                        INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
+                                        INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | (urlComp.nScheme==INTERNET_SCHEME_HTTPS?INTERNET_FLAG_SECURE:0), 0);
     if (!hRequest) {
         InternetCloseHandle(hConnect);
         InternetCloseHandle(hInternet);
@@ -1138,6 +1153,8 @@ std::string httpPost(const std::string& url, const std::string& data) {
     
     // Set headers
     std::string headers = "Content-Type: application/json\r\n";
+    std::string tokenCopy=getClientToken();
+    if(!tokenCopy.empty())headers += "Authorization: Bearer "+tokenCopy+"\r\n";
     HttpAddRequestHeadersA(hRequest, headers.c_str(), headers.length(), HTTP_ADDREQ_FLAG_ADD);
     
     // Send request
@@ -1227,7 +1244,7 @@ std::string httpPostFile(const std::string& url, const std::string& filePath) {
     
     // Create HTTP request
     HINTERNET hRequest = HttpOpenRequestA(hConnect, "POST", urlPath.c_str(), NULL, NULL, NULL, 
-                                        INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
+                                        INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | (urlComp.nScheme==INTERNET_SCHEME_HTTPS?INTERNET_FLAG_SECURE:0), 0);
     if (!hRequest) {
         InternetCloseHandle(hConnect);
         InternetCloseHandle(hInternet);
@@ -1236,6 +1253,8 @@ std::string httpPostFile(const std::string& url, const std::string& filePath) {
     
     // Set headers
     std::string headers = "Content-Type: " + contentType + "\r\n";
+    std::string tokenCopy=getClientToken();
+    if(!tokenCopy.empty())headers += "Authorization: Bearer "+tokenCopy+"\r\n";
     HttpAddRequestHeadersA(hRequest, headers.c_str(), headers.length(), HTTP_ADDREQ_FLAG_ADD);
     
     // Send request
@@ -1680,9 +1699,10 @@ void monitorTask() {
     }
 
     // Send initial data requests within 5 seconds of startup
-    sendInitialDataRequests();
+    if(selectedMonitorId.load()>0)sendInitialDataRequests();
     
     while (activeRunning) {
+        if(selectedMonitorId.load()<1){std::this_thread::sleep_for(std::chrono::seconds(1));continue;}
         auto now = std::chrono::steady_clock::now();
         
         // Test connection every 120 seconds (reduced frequency)
@@ -1738,6 +1758,68 @@ void monitorTask() {
     }
 }
 
+
+bool showClientLogin() {
+    selectedMonitorId.store(0);
+    {std::lock_guard<std::mutex> guard(authMutex);clientToken.clear();}
+    CREDUI_INFOA info={};
+    info.cbSize=sizeof(info);
+    info.hwndParent=hMainWindow;
+    info.pszCaptionText="MonitorClient sign in";
+    info.pszMessageText="Sign in using your registered email/username and password.";
+    char login[256]={0},password[256]={0};
+    BOOL save=FALSE;
+    DWORD rc=CredUIPromptForCredentialsA(&info,API_BASE_URL.c_str(),nullptr,0,
+                  login,sizeof(login),password,sizeof(password),&save,
+                  CREDUI_FLAGS_GENERIC_CREDENTIALS|CREDUI_FLAGS_ALWAYS_SHOW_UI|CREDUI_FLAGS_DO_NOT_PERSIST);
+    if(rc!=NO_ERROR)return false;
+    Json::Value body;body["action"]="login";body["identifier"]=login;body["password"]=password;
+    std::string payload=Json::FastWriter().write(body);
+    SecureZeroMemory(password,sizeof(password));
+    Json::Value answer;Json::CharReaderBuilder reader;std::string errors;
+    std::istringstream input(httpPost(API_BASE_URL+"/client_auth.php",payload));
+    if(!Json::parseFromStream(reader,input,&answer,&errors)||!answer.get("success",false).asBool()){
+        MessageBoxA(hMainWindow,"Sign-in failed. Check credentials and HTTPS server settings.","MonitorClient",MB_ICONERROR|MB_OK);
+        return false;
+    }
+    const std::string token=answer.get("token","").asString();
+    if(token.size()!=64)return false;
+    {std::lock_guard<std::mutex> guard(authMutex);clientToken=token;}
+    int monitor=0;
+    const Json::Value devices=answer["monitors"];
+    for(const auto &device:devices) {
+        std::string label=device.get("name","Unnamed device").asString()+
+                  "  (#"+std::to_string(device.get("id",0).asInt())+")\n\nUse this assigned monitor?";
+        int choice=MessageBoxA(hMainWindow,label.c_str(),"Select monitor",MB_YESNOCANCEL|MB_ICONQUESTION);
+        if(choice==IDCANCEL)return false;
+        if(choice==IDYES){monitor=device.get("id",0).asInt();break;}
+    }
+    if(monitor<=0) {
+        if(MessageBoxA(hMainWindow,"No monitor selected. Request registration for this computer? An admin must approve it.",
+             "Request monitor",MB_YESNO|MB_ICONQUESTION)==IDYES){
+            char computer[256]={0};DWORD size=sizeof(computer);
+            GetComputerNameA(computer,&size);
+            Json::Value req;req["action"]="request_monitor";req["name"]=computer;
+            httpPost(API_BASE_URL+"/client_auth.php",Json::FastWriter().write(req));
+            MessageBoxA(hMainWindow,"Request submitted. Ask your admin to assign this monitor, then sign in again.",
+                         "Pending approval",MB_OK|MB_ICONINFORMATION);
+        }
+        return false;
+    }
+    Json::Value selection;selection["action"]="select";selection["monitor_id"]=monitor;
+    std::istringstream selectedInput(httpPost(API_BASE_URL+"/client_auth.php",Json::FastWriter().write(selection)));
+    Json::Value selected;std::string selectionErrors;
+    if(!Json::parseFromStream(reader,selectedInput,&selected,&selectionErrors)||!selected.get("success",false).asBool()){
+        MessageBoxA(hMainWindow,"Monitor selection was not approved.","MonitorClient",MB_OK|MB_ICONERROR);
+        return false;
+    }
+    selectedMonitorId.store(monitor);
+    if(!keyboardHook)setupKeyboardHook();
+    if(!usbMonitoringActive)setupUSBMONITORING();
+    updateTrayMenu();
+    return true;
+}
+
 // Main function
 int main() {
     // Set DPI awareness to handle scaling properly (MinGW compatible)
@@ -1767,14 +1849,9 @@ int main() {
     // Fetch configuration from API
     fetchConfigurationFromAPI();
     
-    // Setup keyboard monitoring
-    setupKeyboardHook();
-    
-    // Setup USB monitoring
-    setupUSBMONITORING();
-    
-    // Setup system tray
+    // Do not activate activity capture before an explicit sign-in.
     setupSystemTray();
+    showClientLogin();
     
     // Start monitoring thread
     std::thread monitorThread(monitorTask);
@@ -1823,7 +1900,7 @@ bool loadSettings() {
         serverIP = "192.168.1.45";
         serverPort = "8924";
         username = "default_user";
-        API_BASE_URL = "http://" + serverIP + ":" + serverPort;
+        API_BASE_URL = "https://" + serverIP + ":" + serverPort;
         return true;
     }
 
@@ -1871,7 +1948,7 @@ bool loadSettings() {
     }
     settingsFile.close();
 
-    API_BASE_URL = "http://" + serverIP + ":" + serverPort;
+    API_BASE_URL = "https://" + serverIP + ":" + serverPort;
     // Settings loaded
     return true;
 }
@@ -2117,6 +2194,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     std::thread([](){
                         sendInitialDataRequests();
                     }).detach();
+                    break;
+                case ID_TRAY_SIGN_IN:
+                    showClientLogin();
                     break;
                 case ID_TRAY_CONFIG_REFRESH:
                     std::thread([](){
