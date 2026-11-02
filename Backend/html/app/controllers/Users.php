@@ -22,16 +22,18 @@ class Users extends Base {
     
     public function create() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $username = $_POST['username'] ?? '';
+            $username = trim((string)($_POST['username'] ?? ''));
             $name=trim((string)($_POST['name']??$username));
             $password = $_POST['password'] ?? '';
-            $email = $_POST['email'] ?? '';
+            $email = trim((string)($_POST['email'] ?? ''));
             $role = $_POST['role'] ?? ROLE_USER;
             if(!in_array($role,['admin','user','viewer'],true))$role='viewer';
             
-            if (empty($username) || strlen($password)<12 || strlen($name)<2
+            if (!preg_match('/^[A-Za-z0-9_.-]{3,50}$/',$username)
+                || strlen($password)<12 || strlen($password)>1024
+                || strlen($name)<2 || strlen($name)>150
                 || ($email!=='' && !filter_var($email,FILTER_VALIDATE_EMAIL))) {
-                $error = 'All fields are required';
+                $error = 'Enter a valid name, username, optional email and password (12+ characters).';
             } else {
                 // Check if username already exists
                 $existing = $this->db->fetch(
@@ -73,15 +75,17 @@ class Users extends Base {
         }
         
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $username = $_POST['username'] ?? '';
+            $username = trim((string)($_POST['username'] ?? ''));
             $name=trim((string)($_POST['name']??$username));
-            $email = $_POST['email'] ?? '';
+            $email = trim((string)($_POST['email'] ?? ''));
             $role = $_POST['role'] ?? ROLE_USER;
             if(!in_array($role,['admin','user','viewer'],true))$role='viewer';
             $password = $_POST['password'] ?? '';
             
-            if (empty($username) || strlen($name)<2 || ($email!=='' && !filter_var($email,FILTER_VALIDATE_EMAIL))) {
-                $error = 'Username and email are required';
+            if (!preg_match('/^[A-Za-z0-9_.-]{3,50}$/',$username)
+                || strlen($name)<2 || strlen($name)>150
+                || ($email!=='' && !filter_var($email,FILTER_VALIDATE_EMAIL))) {
+                $error = 'Enter a valid name, username and optional email.';
             } else {
                 // Check if username already exists for another user
                 $existing = $this->db->fetch(
@@ -100,7 +104,7 @@ class Users extends Base {
                     ];
                     
                     if (!empty($password)) {
-                        if(strlen($password)<12){
+                        if(strlen($password)<12 || strlen($password)>1024){
                             $this->view('users/edit',['user'=>$user,'error'=>'Password must contain at least 12 characters.']);
                             return;
                         }
@@ -108,6 +112,13 @@ class Users extends Base {
                         $data['must_change_password'] = 1;
                     }
                     
+                    if($user['role']==='admin' && $role!=='admin'){
+                        $admins=(int)$this->db->fetch("SELECT COUNT(*) AS n FROM users WHERE role='admin'")['n'];
+                        if($admins<=1){
+                            $this->view('users/edit',['user'=>$user,'error'=>'Cannot demote the last administrator.']);
+                            return;
+                        }
+                    }
                     $result = $this->db->update('users', $data, 'id = :id', ['id' => $id]);
                     
                     // Check if data actually changed by comparing with original user data
@@ -120,10 +131,12 @@ class Users extends Base {
                     }
                     
                     if ($result > 0 || !$dataChanged) {
-                        if(!empty($password))$this->db->query(
-                            'UPDATE client_sessions SET revoked_at=NOW() WHERE user_id=:id AND revoked_at IS NULL',
-                            ['id'=>$id]
-                        );
+                        if(!empty($password) || $role!==$user['role'] || $username!==$user['username']){
+                            $this->db->query(
+                                'UPDATE client_sessions SET revoked_at=NOW() WHERE user_id=:id AND revoked_at IS NULL',
+                                ['id'=>$id]
+                            );
+                        }
                         // Success: either rows were updated OR no changes were needed
                         $_SESSION['success_message'] = 'User updated successfully';
                         $this->redirect('users');
@@ -164,6 +177,12 @@ class Users extends Base {
             $this->redirect('users');
         }
         
+        $target=$this->db->fetch('SELECT role FROM users WHERE id=:id',['id'=>$id]);
+        if(!$target){http_response_code(404);exit('User not found');}
+        if($target['role']==='admin'){
+            $admins=(int)$this->db->fetch("SELECT COUNT(*) AS n FROM users WHERE role='admin'")['n'];
+            if($admins<=1){http_response_code(409);exit('Cannot delete the last administrator');}
+        }
         $this->db->delete('users', 'id = :id', ['id' => $id]);
         $this->redirect('users');
     }

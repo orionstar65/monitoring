@@ -55,15 +55,25 @@ class Monitors extends Base {
             $name = $_POST['name'] ?? '';
             $owner_user_id=filter_var($_POST['owner_user_id']??null,FILTER_VALIDATE_INT)?:null;
             $mac_address = $_POST['mac_address'] ?? '';
-            $type = $_POST['type'] ?? 'user';
+            $type = $_POST['type'] ?? 'desktop';
             $platform = trim($_POST['platform'] ?? '');
             
+            // Verify the new owner and field shapes before creating any monitor.
+            if($owner_user_id && !$this->db->fetch('SELECT id FROM users WHERE id=:id',['id'=>$owner_user_id])){
+                $error='Unknown account';
+            } elseif(!in_array($type,['desktop','laptop','server'],true)){
+                $error='Invalid machine type';
+            } elseif(!filter_var($ip_address,FILTER_VALIDATE_IP)){
+                $error='Enter a valid IP address';
+            } elseif(strlen(trim($name))>255 || strlen($mac_address)>17){
+                $error='Invalid device name or MAC address';
+            }
             // Validate platform if provided
-            if (!empty($platform) && !in_array($platform, ['Windows', 'Mac', 'Ubuntu'])) {
+            if (!isset($error) && !empty($platform) && !in_array($platform, ['Windows', 'Mac', 'Ubuntu'],true)) {
                 $error = 'Invalid platform selected';
-            } elseif (empty($ip_address) || empty($name)) {
+            } elseif (!isset($error) && (empty($ip_address) || trim($name)==='')) {
                 $error = 'IP address and name are required';
-            } else {
+            } elseif(!isset($error)) {
                 $existing = false;
                 $error = null;
                 if (!$existing) {
@@ -144,7 +154,11 @@ class Monitors extends Base {
                     ];
                     
                     $this->db->update('tbl_monitor_ips', $update_data, 'id = :id', ['id' => $id]);
-                    
+                    if((int)($monitor['owner_user_id']??0)!==(int)($owner_user_id??0)){
+                        // A former owner must reselect an owned monitor on every device.
+                        $this->db->query('UPDATE client_sessions SET monitor_id=NULL WHERE monitor_id=:id',
+                            ['id'=>$id]);
+                    }
                     $this->redirect('monitors');
                 }
             }
