@@ -38,53 +38,50 @@ try {
         $st->execute();$rows=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
         echo json_encode(['success'=>true,'users'=>array_map(static fn($u)=>['user_no'=>(string)$u['user_no']],$rows)]);exit;
     }
-    // One-time admin-issued pairing code is required on first use. This prevents
-    // simply knowing an employee's user number from granting telemetry access.
+    // User No selection replaces administrator pairing codes. The server issues
+    // a monitor-bound session; the client cannot choose another user's monitor.
     if($action==='enroll'){
-        $userNo=(string)($data['user_no']??'');
-        $code=strtoupper(trim((string)($data['pairing_code']??'')));
-        if(!preg_match('/^[0-9]{6,15}$/',$userNo)||!preg_match('/^[A-F0-9]{16}$/',$code)){
-            http_response_code(400);echo json_encode(['error'=>'Enter User No and the 16-character administrator pairing code']);exit;
+        $userNo=trim((string)($data['user_no']??''));
+        if(!preg_match('/^[1-9][0-9]{0,14}$/',$userNo)){
+            http_response_code(400);echo json_encode(['error'=>'Select a valid User No']);exit;
         }
         $attemptKey=hash('sha256',($_SERVER['REMOTE_ADDR']??'').'|enroll');
         $st=$db->prepare('SELECT COUNT(*) AS hits FROM login_attempts WHERE attempt_key=? AND attempted_at>DATE_SUB(NOW(),INTERVAL 15 MINUTE)');
         $st->bind_param('s',$attemptKey);$st->execute();$hits=(int)$st->get_result()->fetch_assoc()['hits'];$st->close();
-        if($hits>=12){http_response_code(429);echo json_encode(['error'=>'Too many attempts, try later']);exit;}
+        if($hits>=30){http_response_code(429);echo json_encode(['error'=>'Too many selections. Try again later']);exit;}
         $st=$db->prepare('INSERT INTO login_attempts (attempt_key) VALUES (?)');
         $st->bind_param('s',$attemptKey);$st->execute();$st->close();
-        $codeHash=hash('sha256',$code);
         $db->begin_transaction();
         try {
-            $st=$db->prepare("SELECT m.id,m.owner_user_id,m.assignment_locked FROM tbl_monitor_ips m JOIN users u ON u.id=m.owner_user_id WHERE u.user_no=? AND u.role IN ('user','viewer') AND m.pairing_code_hash=? AND m.pairing_expires_at>NOW() LIMIT 1 FOR UPDATE");
-            $st->bind_param('ss',$userNo,$codeHash);$st->execute();$monitor=$st->get_result()->fetch_assoc();$st->close();
-            if(!$monitor){$db->rollback();http_response_code(403);echo json_encode(['error'=>'Invalid or expired pairing code. Ask your administrator to generate a new code.']);exit;}
-            $mid=(int)$monitor['id'];$uid=(int)$monitor['owner_user_id'];
-            $st=$db->prepare('UPDATE tbl_monitor_ips SET pairing_code_hash=NULL,pairing_expires_at=NULL WHERE id=?');
-            $st->bind_param('i',$mid);$st->execute();$st->close();
-            // Re-enrollment invalidates the old installation's credentials.
-            $st=$db->prepare("UPDATE client_sessions SET revoked_at=NOW() WHERE monitor_id=? AND session_type='device' AND revoked_at IS NULL");
-            $st->bind_param('i',$mid);$st->execute();$st->close();
+            $st=$db->prepare("SELECT u.id AS user_id,m.id AS monitor_id,m.assignment_locked FROM users u JOIN tbl_monitor_ips m ON m.owner_user_id=u.id WHERE u.user_no=? AND u.role IN ('user','viewer') ORDER BY m.id LIMIT 1 FOR UPDATE");
+            $st->bind_param('s',$userNo);$st->execute();$monitor=$st->get_result()->fetch_assoc();$st->close();
+            if(!$monitor){
+                $db->rollback();http_response_code(404);
+                echo json_encode(['error'=>'No monitors are assigned to this User No. Ask your administrator to assign a monitor.']);exit;
+            }
+            $mid=(int)$monitor['monitor_id'];$uid=(int)$monitor['user_id'];
             $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);
             $st=$db->prepare("INSERT INTO client_sessions (token_hash,user_id,monitor_id,session_type,expires_at) VALUES (?,?,?,'device',NULL)");
             $st->bind_param('sii',$hash,$uid,$mid);$st->execute();$st->close();
             $db->commit();
-            echo json_encode(['success'=>true,'token'=>$token,'monitor_id'=>$mid,'user_no'=>$userNo,'assignment_locked'=>(bool)$monitor['assignment_locked']]);exit;
+            echo json_encode(['success'=>true,'token'=>$token,'monitor_id'=>$mid,'user_no'=>$userNo,
+                'assignment_locked'=>(bool)$monitor['assignment_locked']]);exit;
         } catch(Throwable $failure){$db->rollback();throw $failure;}
     }
     if($action==='signup'||$action==='login'){
         http_response_code(410);
-        echo json_encode(['error'=>'Desktop passwords were retired. Select User No and enroll with an administrator pairing code.','code'=>'use_device_pairing']);exit;
+        echo json_encode(['error'=>'Desktop passwords were retired. Select User No in Monitor Settings.','code'=>'use_user_no']);exit;
     }
     $session=clientAuthenticatedSession($db,false);
     if(!$session || ($session['session_type']??'')!=='device'){
-        http_response_code(401);echo json_encode(['error'=>'Pair this device using the administrator enrollment code']);exit;
+        http_response_code(401);echo json_encode(['error'=>'Select a User No to register this device']);exit;
     }
     $userId=(int)$session['user_id'];
     if($action==='switch_user'){
         $newNo=(string)($data['user_no']??'');
-        if(!preg_match('/^[0-9]{6,15}$/',$newNo)){http_response_code(400);echo json_encode(['error'=>'Invalid User No']);exit;}
+        if(!preg_match('/^[1-9][0-9]{0,14}$/',$newNo)){http_response_code(400);echo json_encode(['error'=>'Invalid User No']);exit;}
         $mid=(int)($session['monitor_id']??0);
-        if($mid<1){http_response_code(403);echo json_encode(['error'=>'Device is not paired']);exit;}
+        if($mid<1){http_response_code(403);echo json_encode(['error'=>'Device is not registered']);exit;}
         $db->begin_transaction();
         try {
             $st=$db->prepare('SELECT owner_user_id,assignment_locked FROM tbl_monitor_ips WHERE id=? FOR UPDATE');
@@ -128,9 +125,7 @@ try {
     if($action==='select'){
         $monitorId=filter_var($data['monitor_id']??null,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
         if(!$monitorId){http_response_code(400);echo json_encode(['error'=>'Invalid monitor ID']);exit;}
-        if((int)$session['monitor_id']!==$monitorId){
-            http_response_code(403);echo json_encode(['error'=>'This device is paired to a different monitor. Ask an administrator for its pairing code.']);exit;
-        }
+        // Only a monitor owned by this session's user may be activated.
         $st=$db->prepare('SELECT id FROM tbl_monitor_ips WHERE id=? AND owner_user_id=?');
         $st->bind_param('ii',$monitorId,$userId);$st->execute();$owned=$st->get_result()->fetch_assoc();$st->close();
         if(!$owned){http_response_code(403);echo json_encode(['error'=>'Monitor not assigned to your account']);exit;}
