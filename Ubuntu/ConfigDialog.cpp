@@ -70,17 +70,13 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     content->addWidget(serverGroup);
     divider();
 
-    auto *userGroup=new QGroupBox("User Selection",page);
+    auto *userGroup=new QWidget(page);
     auto *userForm=new QFormLayout(userGroup);
     userSelector=new QComboBox(userGroup);
-    userSelector->setMinimumWidth(260);
-    userForm->addRow("User No",userSelector);
-    auto *actions=new QHBoxLayout();
-    pairButton=new QPushButton("Select User No",userGroup);
-    switchButton=new QPushButton("Change User No",userGroup);
-    logoutButton=new QPushButton("Disconnect Device",userGroup);
-    actions->addWidget(pairButton);actions->addWidget(switchButton);actions->addWidget(logoutButton);
-    userForm->addRow("",actions);
+    userSelector->setMinimumWidth(350);
+    userForm->addRow("User:",userSelector);
+    logoutButton=new QPushButton("Disconnect",userGroup);
+    userForm->addRow("",logoutButton);
     assignmentStatusLabel=new QLabel(userGroup);
     assignmentStatusLabel->setWordWrap(true);
     userForm->addRow("",assignmentStatusLabel);
@@ -113,8 +109,6 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     buttons->addStretch();buttons->addWidget(saveButton);buttons->addWidget(closeButton);
     outer->addLayout(buttons);
     connect(testButton,&QPushButton::clicked,this,&ConfigDialog::onTestConnectionClicked);
-    connect(pairButton,&QPushButton::clicked,this,&ConfigDialog::onPairClicked);
-    connect(switchButton,&QPushButton::clicked,this,&ConfigDialog::onSwitchClicked);
     connect(logoutButton,&QPushButton::clicked,this,&ConfigDialog::onLogoutClicked);
     connect(userSelector,QOverload<int>::of(&QComboBox::currentIndexChanged),this,&ConfigDialog::onUserChanged);
     connect(monitorSelector,QOverload<int>::of(&QComboBox::currentIndexChanged),this,&ConfigDialog::onMonitorChanged);
@@ -220,6 +214,7 @@ void ConfigDialog::loadRememberedSession(){
     auto state=authRequest({{"action","restore"}},true);
     if(!state.value("success").toBool()){authToken.clear();return;}
     monitorId=state.value("monitor_id").toInt();
+    activeUserNo=state.value("user").toObject().value("user_no").toString();
     assignmentLocked=state.value("assignment_locked").toBool();
     if(monitorId<1)authToken.clear();
 }
@@ -230,7 +225,7 @@ bool ConfigDialog::saveServerIfChanged(){
     const int oldPort=previous.value("Server/port",8924).toInt();
     if(oldHost!=getServerIP()||oldPort!=getServerPort()){
         clearStoredToken(oldHost,oldPort);
-        authToken.clear();monitorId=0;assignmentLocked=false;
+        authToken.clear();monitorId=0;assignmentLocked=false;activeUserNo.clear();
         emit sessionStateChanged();
     }
     saveSettings();
@@ -243,25 +238,31 @@ void ConfigDialog::refreshDirectory(){
         QSettings(settingsPath(),QSettings::IniFormat).value("User/no").toString()
         : userSelector->currentData().toString();
     userSelector->clear();
+    userSelector->addItem("Select a user…",QString());
     for(auto entry:result.value("users").toArray()){
-        const QString number=entry.toObject().value("user_no").toString();
-        if(!number.isEmpty())userSelector->addItem(number,number);
+        const auto user=entry.toObject();
+        const QString number=user.value("user_no").toString();
+        if(number.isEmpty())continue;
+        const QString label=number+" / "+user.value("full_name").toString()+
+            " / "+user.value("ip_address").toString("—");
+        userSelector->addItem(label,number);
     }
     const int ix=userSelector->findData(current);
-    if(ix>=0)userSelector->setCurrentIndex(ix);
+    userSelector->setCurrentIndex(ix>=0?ix:0);
 }
 void ConfigDialog::refreshMonitors(){
     if(authToken.isEmpty()){updateMonitorList({});return;}
     const auto result=authRequest({{"action","restore"}},true);
     if(!result.value("success").toBool()){
-        authToken.clear();monitorId=0;assignmentLocked=false;
+        authToken.clear();monitorId=0;assignmentLocked=false;activeUserNo.clear();
         updateMonitorList({});updateUI();return;
     }
     monitorId=result.value("monitor_id").toInt();
     assignmentLocked=result.value("assignment_locked").toBool();
-    const QString userNo=result.value("user").toObject().value("user_no").toString();
-    const int ix=userSelector->findData(userNo);
-    if(ix>=0)userSelector->setCurrentIndex(ix);
+    activeUserNo=result.value("user").toObject().value("user_no").toString();
+    const QSignalBlocker blocked(userSelector);
+    const int ix=userSelector->findData(activeUserNo);
+    userSelector->setCurrentIndex(ix>=0?ix:0);
     updateMonitorList(result.value("monitors").toArray());
 }
 void ConfigDialog::updateMonitorList(const QJsonArray &items){
@@ -317,24 +318,28 @@ void ConfigDialog::onMonitorChanged(int){
         updateUI();
 }
 void ConfigDialog::onUserChanged(int){
+    const QString number=userSelector->currentData().toString();
+    if(number.isEmpty()||number==activeUserNo)return;
     if(assignmentLocked&&!authToken.isEmpty()){
-        assignmentStatusLabel->setText("User assignment is locked. Ask your administrator to edit this monitor.");
+        QMessageBox::warning(this,"Assignment locked",
+            "User assignment is locked. Ask your administrator to edit this monitor.");
+        const QSignalBlocker blocked(userSelector);
+        const int ix=userSelector->findData(activeUserNo);
+        userSelector->setCurrentIndex(ix>=0?ix:0);
+        return;
     }
+    if(authToken.isEmpty())onPairClicked();
+    else onSwitchClicked();
 }
 void ConfigDialog::updateUI(){
     const bool enrolled=!authToken.isEmpty()&&monitorId>0;
     monitorGroup->setVisible(enrolled);
-    pairButton->setVisible(!enrolled);
     logoutButton->setVisible(enrolled);
     logoutButton->setEnabled(enrolled&&!assignmentLocked);
-    switchButton->setVisible(enrolled);
     userSelector->setEnabled(!enrolled||!assignmentLocked);
-    switchButton->setEnabled(enrolled&&!assignmentLocked);
-    assignmentStatusLabel->setText(!enrolled?
-        "Select User No to load its assigned monitors.":
-        assignmentLocked?
-        "User assignment is locked. Ask your administrator to edit this monitor.":
-        "Assignment unlocked. You may change User No on this monitor.");
+    assignmentStatusLabel->setVisible(enrolled&&assignmentLocked);
+    if(enrolled&&assignmentLocked)
+        assignmentStatusLabel->setText("User selection is locked. Ask your administrator to edit.");
     saveButton->setText(enrolled?"Save Monitor":"Save Server");
     saveButton->setEnabled(true);
 }
@@ -350,6 +355,7 @@ void ConfigDialog::onPairClicked(){
     authToken=result.value("token").toString();
     monitorId=result.value("monitor_id").toInt();
     assignmentLocked=result.value("assignment_locked").toBool();
+    activeUserNo=number;
     if(authToken.length()!=64||monitorId<1){
         authToken.clear();monitorId=0;
         QMessageBox::warning(this,"User selection failed","Invalid session details returned.");return;
@@ -367,6 +373,7 @@ void ConfigDialog::onSwitchClicked(){
         refreshMonitors();updateUI();return;
     }
     authToken=result.value("token").toString();
+    activeUserNo=userSelector->currentData().toString();
     rememberToken(authToken);
     refreshMonitors();saveSettings();updateUI();
     emit sessionStateChanged();
@@ -382,7 +389,7 @@ void ConfigDialog::onLogoutClicked(){
     if(!authToken.isEmpty()&&oldHost==getServerIP()&&oldPort==getServerPort())
         authRequest({{"action","logout"}},true);
     clearStoredToken(oldHost,oldPort);
-    authToken.clear();monitorId=0;assignmentLocked=false;logoutPerformed=true;
+    authToken.clear();monitorId=0;assignmentLocked=false;activeUserNo.clear();logoutPerformed=true;
     updateMonitorList({});saveSettings();updateUI();
     emit sessionStateChanged();
 }
