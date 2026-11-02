@@ -2101,6 +2101,7 @@ static void updateUnifiedVisibility(HWND dlg) {
     ShowWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),enrolled?SW_SHOW:SW_HIDE);
     EnableWindow(GetDlgItem(dlg,SETTINGS_USER_NO),!enrolled||!settingsAssignmentLocked);
     EnableWindow(GetDlgItem(dlg,SETTINGS_SWITCH),!settingsAssignmentLocked);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),!settingsAssignmentLocked);
     setDlgUtf8Text(dlg,SETTINGS_NOTICE,
        !enrolled?"Select a User No to load its assigned monitors."
        :settingsAssignmentLocked?
@@ -2258,6 +2259,11 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             updateTrayIcon();return TRUE;
         }
         if(id==SETTINGS_LOGOUT){
+            if(settingsAssignmentLocked){
+                showUtf8Message(dlg,"User assignment is locked. Ask your administrator to edit the monitor.",
+                    "Assignment locked",MB_OK|MB_ICONWARNING);
+                return TRUE;
+            }
             if(!getClientToken().empty()){
                 Json::Value req;req["action"]="logout";callClientAuth(req);
             }
