@@ -305,6 +305,11 @@ class Apilogs extends Base {
     }
     
     public function deleteOldTables() {
+        // Deleting archived tables must never be triggered by a GET or link preview.
+        if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'){
+            http_response_code(405);
+            $this->json(['success'=>false,'error'=>'POST required']);
+        }
         // Turn off error display for JSON responses
         ini_set('display_errors', 0);
         error_reporting(0);
