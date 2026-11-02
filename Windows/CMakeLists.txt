@@ -50,7 +50,6 @@ target_link_libraries(MonitorClient
     ${SQLITE3_LIBRARY}
     ${JSONCPP_LIBRARY}
     wininet
-    credui
     gdiplus
     psapi
     setupapi

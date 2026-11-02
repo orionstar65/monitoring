@@ -1,7 +1,6 @@
 #include <windows.h>
 #include <wininet.h>
 #include <wincred.h>
-#include <credui.h>
 #include <cstring>
 #include <string>
 #include <atomic>
@@ -2463,8 +2462,8 @@ void setupSystemTray() {
 // Cleanup system tray
 void cleanupSystemTray() {
     Shell_NotifyIconA(NIM_DELETE, &nid);
-    if(greenTrayIcon && greenTrayIcon!=LoadIconA(nullptr,IDI_APPLICATION))DestroyIcon(greenTrayIcon);
-    if(redTrayIcon && redTrayIcon!=LoadIconA(nullptr,IDI_APPLICATION))DestroyIcon(redTrayIcon);
+    if(greenTrayIcon && greenTrayIcon!=LoadIconA(nullptr,(LPCSTR)IDI_APPLICATION))DestroyIcon(greenTrayIcon);
+    if(redTrayIcon && redTrayIcon!=LoadIconA(nullptr,(LPCSTR)IDI_APPLICATION))DestroyIcon(redTrayIcon);
     greenTrayIcon=redTrayIcon=nullptr;
     if (hTrayMenu) {
         DestroyMenu(hTrayMenu);
@@ -2537,7 +2536,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
 // Build a colored status dot over the system tray icon.
 static HICON buildStatusIcon(COLORREF dot) {
-    HICON base=LoadIconA(nullptr,IDI_APPLICATION);
+    HICON base=LoadIconA(nullptr,(LPCSTR)IDI_APPLICATION);
     ICONINFO info={};
     if(!GetIconInfo(base,&info))return base;
     HBITMAP color=(HBITMAP)CopyImage(info.hbmColor,IMAGE_BITMAP,32,32,LR_CREATEDIBSECTION);
