@@ -399,7 +399,7 @@ code {
                                         </div>
                                     <?php else: ?>
                                         <div class="table-responsive">
-                                            <table class="table table-sm table-hover log-table">
+                                            <table id="log-files-1" class="table table-sm table-hover log-table advanced-table" style="width:100%">
                                                 <thead>
                                                     <tr>
                                                         <th>Date</th>
@@ -442,7 +442,7 @@ code {
                                         </div>
                                     <?php else: ?>
                                         <div class="table-responsive">
-                                            <table class="table table-sm table-hover log-table">
+                                            <table id="log-files-2" class="table table-sm table-hover log-table advanced-table" style="width:100%">
                                                 <thead>
                                                     <tr>
                                                         <th>Date</th>
@@ -485,7 +485,7 @@ code {
                                         </div>
                                     <?php else: ?>
                                         <div class="table-responsive">
-                                            <table class="table table-sm table-hover log-table">
+                                            <table id="log-files-3" class="table table-sm table-hover log-table advanced-table" style="width:100%">
                                                 <thead>
                                                     <tr>
                                                         <th>Date</th>

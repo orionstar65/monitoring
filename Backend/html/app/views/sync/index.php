@@ -63,7 +63,7 @@ ob_start();
             </div>
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-striped">
+                    <table id="sync-directories" class="table table-striped <?= empty($ip_dirs)?'':'advanced-table' ?>" style="width:100%">
                         <thead>
                             <tr>
                                 <th>IP Directory</th>
