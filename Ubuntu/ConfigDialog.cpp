@@ -25,7 +25,7 @@
 #include <QVBoxLayout>
 
 ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
-    setWindowTitle("MonitorClient v1.7 — Settings");
+    setWindowTitle("MonitorClient v1.5 — Settings");
     setMinimumSize(470,420);
     resize(520,700);
     setModal(true);
@@ -47,7 +47,7 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     auto *brand=new QVBoxLayout();
     auto *name=new QLabel("MonitorClient");
     QFont font=name->font();font.setBold(true);font.setPointSize(15);name->setFont(font);
-    brand->addWidget(name);brand->addWidget(new QLabel("v1.7"));
+    brand->addWidget(name);brand->addWidget(new QLabel("v1.5"));
     header->addLayout(brand);header->addStretch();
     content->addLayout(header);
     auto divider=[&](){
@@ -206,7 +206,7 @@ QString ConfigDialog::readRememberedToken() const {
 }
 void ConfigDialog::rememberToken(const QString &token){
     QProcess secret;
-    secret.start("secret-tool",{"store","--label=MonitorClient v1.7 device",
+    secret.start("secret-tool",{"store","--label=MonitorClient v1.5 device",
         "service","acc-monitor-v15","host",getServerIP()+":"+QString::number(getServerPort())});
     if(!secret.waitForStarted(1500))return;
     secret.write(token.toUtf8());secret.write("\n");secret.closeWriteChannel();
