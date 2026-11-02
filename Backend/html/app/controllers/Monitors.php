@@ -12,8 +12,8 @@ class Monitors extends Base {
     
     public function index() {
         $monitors = $this->isAdmin()
-          ? $this->db->fetchAll("SELECT * FROM tbl_monitor_ips ORDER BY id")
-          : $this->db->fetchAll("SELECT * FROM tbl_monitor_ips WHERE owner_user_id=:uid ORDER BY id", ['uid'=>$this->user['id']]);
+          ? $this->db->fetchAll("SELECT m.*,u.name AS owner_name FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id ORDER BY m.id")
+          : $this->db->fetchAll("SELECT m.*,u.name AS owner_name FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id WHERE m.owner_user_id=:uid ORDER BY m.id", ['uid'=>$this->user['id']]);
         
         // Add dynamic status calculation for each monitor
         foreach ($monitors as &$monitor) {
@@ -25,8 +25,7 @@ class Monitors extends Base {
         }
         
         // Calculate distinct usernames count
-        $distinct_usernames = array_unique(array_filter(array_column($monitors, 'username')));
-        $distinct_username_count = count($distinct_usernames);
+        $distinct_username_count = count(array_unique(array_filter(array_column($monitors, 'owner_user_id'))));
         
         $this->view('monitors/index', [
             'monitors' => $monitors,
@@ -54,7 +53,7 @@ class Monitors extends Base {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ip_address = $_POST['ip_address'] ?? '';
             $name = $_POST['name'] ?? '';
-            $username = $_POST['username'] ?? '';
+            $owner_user_id=filter_var($_POST['owner_user_id']??null,FILTER_VALIDATE_INT)?:null;
             $mac_address = $_POST['mac_address'] ?? '';
             $type = $_POST['type'] ?? 'user';
             $platform = trim($_POST['platform'] ?? '');
@@ -74,7 +73,7 @@ class Monitors extends Base {
                             $monitorId = $this->db->insert('tbl_monitor_ips', [
                                 'ip_address' => $ip_address,
                                 'name' => $name,
-                                'username' => $username,
+                                'owner_user_id' => $owner_user_id,
                                 'mac_address' => ($mac_address !== '' ? $mac_address : null),
                                 'type' => $type,
                                 'platform' => ($platform ?: null),
@@ -103,14 +102,15 @@ class Monitors extends Base {
             }
         }
         
-        $this->view('monitors/create', ['error' => $error ?? null]);
+        $accounts=$this->db->fetchAll("SELECT id,name,username FROM users ORDER BY name,username");
+        $this->view('monitors/create', ['error' => $error ?? null,'accounts'=>$accounts]);
     }
     
     public function edit($id) {
         $this->requireAdmin();
         
         $monitor = $this->db->fetch(
-            "SELECT * FROM tbl_monitor_ips WHERE id = :id",
+            "SELECT m.*,u.name AS owner_name FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id WHERE m.id=:id",
             ['id' => $id]
         );
         
@@ -120,13 +120,14 @@ class Monitors extends Base {
         
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $type = $_POST['type'] ?? 'desktop';
-            $username = trim($_POST['username'] ?? '');
+            $remark = trim((string)($_POST['remark']??''));
             $slack_id = trim($_POST['slack_id'] ?? '');
             $platform = trim($_POST['platform'] ?? '');
             $owner_user_id = filter_var($_POST['owner_user_id']??null,FILTER_VALIDATE_INT)?:null;
             if($owner_user_id && !$this->db->fetch('SELECT id FROM users WHERE id=:id',['id'=>$owner_user_id])) $error='Unknown account';
             // Validate type
-            if (!in_array($type, ['desktop', 'laptop', 'server'])) {
+            if(strlen($remark)>500){$error='Remark too long';}
+            elseif (!in_array($type, ['desktop', 'laptop', 'server'])) {
                 $error = 'Invalid device type selected';
             } elseif (!empty($platform) && !in_array($platform, ['Windows', 'Mac', 'Ubuntu'])) {
                 $error = 'Invalid platform selected';
@@ -136,7 +137,7 @@ class Monitors extends Base {
                     // Update username, slack_id, platform and type fields (but NOT updated_at - that's only for monitoring events)
                     $update_data = [
                         'type' => $type,
-                        'username' => $username,
+                        'remark' => $remark,
                         'slack_id' => $slack_id,
                         'platform' => !empty($platform) ? $platform : null,
                         'owner_user_id' => $owner_user_id

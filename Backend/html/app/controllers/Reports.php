@@ -16,7 +16,7 @@ class Reports extends Base {
     public function index() {
         // Get all monitors for device filtering
         $monitors = $this->db->fetchAll(
-            "SELECT * FROM tbl_monitor_ips ORDER BY username ASC, ip_address ASC"
+            "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.ip_address ASC"
         );
         
         $this->view('view/reports', ['monitors' => $monitors]);
@@ -28,9 +28,9 @@ class Reports extends Base {
     public function api_devices() {
         // OPTIMIZED: Remove SQL CASE statement - status calculation done in PHP for better performance
         $devices = $this->db->fetchAll(
-            "SELECT id, ip_address, mac_address, username, name, type, last_monitor_tic, updated_at
-             FROM tbl_monitor_ips 
-             ORDER BY username ASC, ip_address ASC"
+            "SELECT m.id,m.ip_address,m.mac_address,owner.name AS username,m.name,m.type,m.last_monitor_tic,m.updated_at
+             FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
+             ORDER BY owner.name ASC,m.ip_address ASC"
         );
         
         // Calculate status in PHP using StatusService for consistency
@@ -118,18 +118,18 @@ class Reports extends Base {
         $has_platform = !empty($columns);
         
         if ($has_platform) {
-            $devices_sql = "SELECT m.id, m.ip_address, m.username, m.name, m.type, 
+            $devices_sql = "SELECT m.id, m.ip_address, owner.name AS username, m.name, m.type, 
                                    COALESCE(NULLIF(m.platform, ''), m.type, 'Unknown') as os
-                           FROM tbl_monitor_ips m 
+                           FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
                            WHERE 1=1 {$device_filter}
-                           ORDER BY m.username ASC, m.ip_address ASC";
+                           ORDER BY owner.name ASC, m.ip_address ASC";
         } else {
             // If platform column doesn't exist, use type as OS
-            $devices_sql = "SELECT m.id, m.ip_address, m.username, m.name, m.type, 
+            $devices_sql = "SELECT m.id, m.ip_address, owner.name AS username, m.name, m.type, 
                                    COALESCE(m.type, 'Unknown') as os
-                       FROM tbl_monitor_ips m 
+                       FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
                        WHERE 1=1 {$device_filter}
-                       ORDER BY m.username ASC, m.ip_address ASC";
+                       ORDER BY owner.name ASC, m.ip_address ASC";
         }
         
         $devices = $this->db->query($devices_sql, $device_filter ? $params : [])->fetchAll();

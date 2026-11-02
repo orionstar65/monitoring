@@ -8,6 +8,8 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.datatables.net/3.1.5/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/colreorder/3.1.2/css/colReorder.bootstrap5.min.css" rel="stylesheet">
     <style>
         :root {
             --primary-color: #1976d2;
@@ -483,15 +485,13 @@
                     <span>Monitor IPs</span>
                 </a>
             </div>
-            <?php if(($_SESSION['role']??'')===ROLE_ADMIN): ?>
-            <?php if ($_SESSION['role'] === ROLE_ADMIN): ?>
             <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'merge' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>merge">
                     <i class="fas fa-code-branch"></i>
                     <span>Merge Logs</span>
                 </a>
             </div>
-            <?php endif; ?>
+            <?php if(($_SESSION['role']??'')===ROLE_ADMIN): ?>
             <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'view' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>view">
                     <i class="fas fa-eye"></i>
@@ -523,6 +523,11 @@
                 </a>
             </div>
             <?php endif; ?>
+            <div class="nav-item">
+                <a class="nav-link <?php echo $active_page === 'password' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>auth/change_password">
+                    <i class="fas fa-key"></i><span>Change Password</span>
+                </a>
+            </div>
             <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'logout' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>auth/logout">
                     <i class="fas fa-sign-out-alt"></i>
@@ -589,6 +594,10 @@
     <?php endif; ?>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/3.1.5/js/dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/3.1.5/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/colreorder/3.1.2/js/dataTables.colReorder.min.js"></script>
+    <script src="https://cdn.datatables.net/colreorder/3.1.2/js/colReorder.bootstrap5.min.js"></script>
     <script>
     (() => {
       const token=document.querySelector('meta[name="csrf-token"]')?.content||'';
@@ -731,6 +740,56 @@
     });
     </script>
     
+    <script>
+    // Persistent sortable, reorderable, filterable tables.
+    // Independent state keys prevent one signed-in user inheriting another's layout.
+    document.addEventListener('DOMContentLoaded',()=>{
+      if(!window.DataTable)return;
+      const uid=<?= json_encode((string)($_SESSION['user_id']??'guest')) ?>;
+      document.querySelectorAll('table.advanced-table').forEach((table,index)=>{
+        if(table.dataset.initialized)return;
+        table.dataset.initialized='1';
+        if(!table.id)table.id='advanced-table-'+index;
+        const key='acc-monitor-v14:tables:'+uid+':'+location.pathname+':'+table.id;
+        const instance=new DataTable(table,{
+          pageLength:20,
+          lengthMenu:[10,20,50,100],
+          stateSave:true,
+          stateDuration:0,
+          colReorder:true,
+          order:[],
+          columnDefs:[{targets:'_all',defaultContent:''}],
+          stateSaveCallback:(_settings,data)=>{try{localStorage.setItem(key,JSON.stringify(data))}catch(_){}},
+          stateLoadCallback:()=>{try{return JSON.parse(localStorage.getItem(key)||'null')}catch(_){return null}},
+          language:{searchPlaceholder:'Search records...',search:'Filter:'}
+        });
+        // Column-specific filters persist via the DataTables state callback.
+        const container=document.createElement('details');
+        container.className='mb-3 small';
+        const caption=document.createElement('summary');
+        caption.className='text-primary fw-medium';caption.textContent='Column filters';
+        container.append(caption);
+        const fields=document.createElement('div');
+        fields.className='row row-cols-2 row-cols-md-3 row-cols-xl-4 g-2 mt-1';
+        table.querySelectorAll('thead tr:first-child th').forEach((header,originalIndex)=>{
+          if(header.hasAttribute('data-dt-order'))return;
+          const div=document.createElement('div');
+          const label=document.createElement('label');
+          label.className='form-label mb-1';label.textContent=header.textContent.trim();
+          const input=document.createElement('input');
+          input.type='search';input.className='form-control form-control-sm';
+          input.setAttribute('aria-label','Filter by '+label.textContent);
+          // Use named columns so filtering still maps correctly after drag-reorder.
+          const col=instance.column(originalIndex);
+          input.value=col.search();
+          input.addEventListener('input',()=>col.search(input.value).draw());
+          div.append(label,input);fields.append(div);
+        });
+        container.append(fields);
+        table.closest('.table-responsive')?.parentElement?.prepend(container);
+      });
+    });
+    </script>
     <?php if (isset($scripts)): ?>
         <?php echo $scripts; ?>
     <?php endif; ?>

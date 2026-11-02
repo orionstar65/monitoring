@@ -937,51 +937,52 @@ function displaySummaryCards(reportData) {
 }
 
 function displayReportTable(reportData, reportInfo) {
-    const reportsTableBody = document.getElementById('reportsTableBody');
-    
-    if (reportData.length === 0) {
-        reportsTableBody.innerHTML = `
-            <tr>
-                <td colspan="5" class="empty-state">
-                    <i class="fas fa-chart-line"></i>
-                    <h3>No Data Found</h3>
-                    <p>No monitoring data found for the selected period and filters.</p>
-                </td>
-            </tr>
-        `;
-        return;
+    const table = document.getElementById('reportsTable');
+    const body = document.getElementById('reportsTableBody');
+    if (window.DataTable && DataTable.isDataTable(table)) {
+        new DataTable(table).destroy();
     }
-    
-    reportsTableBody.innerHTML = '';
-    
-    reportData.forEach(device => {
-        const row = document.createElement('tr');
-        
-        // Get device name or use IP address as fallback
+    body.replaceChildren();
+    for (const device of reportData) {
         const deviceName = device.name || device.ip_address || 'Unknown Device';
-        
-        // Calculate online hours = captured hours + not monitored hours
         const onlineHours = (device.captured_hours || 0) + (device.not_captured_while_online || 0);
         const notMonitoredHours = device.not_captured_while_online || 0;
-        
-        // Check if device is a laptop and not monitored hours exceed 30 minutes (0.5 hours)
-        const deviceType = (device.type || '').toLowerCase();
-        const isLaptop = deviceType.includes('laptop');
-        const exceedsThreshold = notMonitoredHours > 0.5; // 30 minutes = 0.5 hours
-        
-        // Add warning class if it's a laptop and exceeds threshold
-        const notMonitoredClass = (isLaptop && exceedsThreshold) ? 'hours-cell warning' : 'hours-cell';
-        
-        row.innerHTML = `
-            <td>${device.username || 'Unknown User'}</td>
-            <td>${deviceName}</td>
-            <td>${device.os || 'Unknown'}</td>
-            <td class="hours-cell">${formatHoursMinutes(onlineHours)}</td>
-            <td class="${notMonitoredClass}">${formatNotMonitoredTime(notMonitoredHours)}</td>
-        `;
-        
-        reportsTableBody.appendChild(row);
-    });
+        const isLaptop = String(device.type || '').toLowerCase().includes('laptop');
+        const row = document.createElement('tr');
+        function cell(value, className) {
+            const td = document.createElement('td');
+            td.textContent = String(value ?? '');
+            if (className) td.className = className;
+            row.append(td);
+        }
+        cell(device.username || 'Unknown User');
+        cell(deviceName);
+        cell(device.os || 'Unknown');
+        cell(formatHoursMinutes(onlineHours), 'hours-cell');
+        cell(formatNotMonitoredTime(notMonitoredHours),
+            isLaptop && notMonitoredHours > 0.5 ? 'hours-cell warning' : 'hours-cell');
+        body.append(row);
+    }
+    if (window.DataTable) {
+        const stateKey = 'acc-monitor-v14-reports-' +
+            <?= json_encode((string)($_SESSION['user_id']??'guest')) ?>;
+        new DataTable(table, {
+            pageLength: 20,
+            lengthMenu: [10, 20, 50, 100],
+            stateSave: true,
+            stateDuration: 0,
+            colReorder: true,
+            order: [],
+            language: {emptyTable: 'No monitoring data found for the selected filters.'},
+            stateSaveCallback: (_settings, data) => {
+                try { localStorage.setItem(stateKey, JSON.stringify(data)); } catch (_) {}
+            },
+            stateLoadCallback: () => {
+                try { return JSON.parse(localStorage.getItem(stateKey) || 'null'); }
+                catch (_) { return null; }
+            }
+        });
+    }
 }
 
 function getUsageClass(percentage) {

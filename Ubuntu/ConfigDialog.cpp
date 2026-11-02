@@ -62,6 +62,9 @@ ConfigDialog::ConfigDialog(QWidget *parent)
     testButton = new QPushButton("Test Connection");
     serverLayout->addWidget(testButton);
 
+    connectionStatusLabel=new QLabel("● Not connected / Not configured");
+    connectionStatusLabel->setStyleSheet("color:#d32f2f;font-weight:600");
+    serverLayout->addWidget(connectionStatusLabel);
     mainLayout->addWidget(serverGroup);
 
     QGroupBox *authGroup=new QGroupBox("Account");
@@ -81,19 +84,29 @@ ConfigDialog::ConfigDialog(QWidget *parent)
     tabs->addTab(signInTab,"Sign In");
     QWidget *signUpTab=new QWidget(tabs);
     auto *signupLayout=new QVBoxLayout(signUpTab);
+    signupFullNameEdit=new QLineEdit();signupFullNameEdit->setPlaceholderText("Full Name");
     signupUsernameEdit=new QLineEdit();signupUsernameEdit->setPlaceholderText("Username");
     signupPasswordEdit=new QLineEdit();signupPasswordEdit->setEchoMode(QLineEdit::Password);
     signupPasswordEdit->setPlaceholderText("Password (12+ characters)");
     signupConfirmEdit=new QLineEdit();signupConfirmEdit->setEchoMode(QLineEdit::Password);
     signupConfirmEdit->setPlaceholderText("Confirm password");
     QPushButton *signupButton=new QPushButton("Sign Up");
+    signupLayout->addWidget(signupFullNameEdit);
     signupLayout->addWidget(signupUsernameEdit);
     signupLayout->addWidget(signupPasswordEdit);
     signupLayout->addWidget(signupConfirmEdit);
     signupLayout->addWidget(signupButton);
     tabs->addTab(signUpTab,"Sign Up");
     authLayout->addWidget(tabs);
+    accountStatusLabel=new QLabel("Not signed in");
+    logoutButton=new QPushButton("Log Out");
+    logoutButton->setEnabled(false);
+    QHBoxLayout *sessionLayout=new QHBoxLayout();
+    sessionLayout->addWidget(accountStatusLabel);
+    sessionLayout->addWidget(logoutButton);
+    authLayout->addLayout(sessionLayout);
     mainLayout->addWidget(authGroup);
+    connect(logoutButton,&QPushButton::clicked,this,&ConfigDialog::onLogoutClicked);
     connect(signInButton,&QPushButton::clicked,this,&ConfigDialog::onSignInClicked);
     connect(signupButton,&QPushButton::clicked,this,&ConfigDialog::onSignUpClicked);
 
@@ -237,18 +250,18 @@ void ConfigDialog::onSaveClicked()
         QMessageBox::warning(this,"Monitor settings",saved.value("error").toString("Could not save monitor."));
         return;
     }
-    if(id==0){
-        saveSettings();
-        QMessageBox::information(this,"Awaiting approval",
-            "Monitor registration requested. The administrator must assign it to your account before monitoring can start.");
-        return;
+    const int selectedId=id>0?id:saved.value("monitor_id").toInt();
+    if(selectedId<1){
+        QMessageBox::warning(this,"Monitor","Registration did not return a monitor ID.");return;
     }
-    const QJsonObject selected=authRequest(QJsonObject{{"action","select"},{"monitor_id",id}},true);
+    const QJsonObject selected=authRequest(QJsonObject{{"action","select"},{"monitor_id",selectedId}},true);
     if(!selected.value("success").toBool()){
         QMessageBox::warning(this,"Monitor selection",selected.value("error").toString("Monitor not assigned."));
         return;
     }
-    monitorId=id;
+    monitorId=selectedId;
+    connectionStatusLabel->setText("● Authenticated · monitor #"+QString::number(monitorId));
+    connectionStatusLabel->setStyleSheet("color:#1b8c40;font-weight:600");
     saveSettings();
     accept();
 }
@@ -286,6 +299,25 @@ QJsonObject ConfigDialog::authRequest(const QJsonObject &payload,bool authentica
     if(reply->error()!=QNetworkReply::NoError && !response.contains("error"))response["error"]=reply->errorString();
     reply->deleteLater();return response;
 }
+void ConfigDialog::onLogoutClicked()
+{
+    if(!authToken.isEmpty()){
+        authRequest(QJsonObject{{"action","logout"}},true);
+    }
+    QProcess secret;
+    const QString address=serverIPEdit->text().trimmed()+":"+QString::number(serverPortEdit->value());
+    secret.start("secret-tool",{"clear","service","acc-monitor","host",address});
+    secret.waitForFinished(4000);
+    authToken.clear();
+    monitorId=0;
+    assignedMonitors=QJsonArray();
+    monitorSelector->clear();
+    monitorSelector->addItem("Add New...",0);
+    accountStatusLabel->setText("Not signed in");
+    logoutButton->setEnabled(false);
+    connectionStatusLabel->setText("● Not signed in");
+    connectionStatusLabel->setStyleSheet("color:#d32f2f;font-weight:600");
+}
 void ConfigDialog::onSignInClicked()
 {
     const QJsonObject response=authRequest(
@@ -300,6 +332,8 @@ void ConfigDialog::onSignInClicked()
         return;
     }
     authToken=response.value("token").toString();
+    accountStatusLabel->setText("Signed in: "+loginEdit->text().trimmed());
+    logoutButton->setEnabled(true);
     rememberToken(authToken);
     updateMonitorList(response.value("monitors").toArray());
     QMessageBox::information(this,"Signed in","Choose your monitor below and save.");
@@ -312,6 +346,7 @@ void ConfigDialog::onSignUpClicked()
     }
     const QJsonObject response=authRequest(
         QJsonObject{{"action","signup"},
+                    {"full_name",signupFullNameEdit->text().trimmed()},
                     {"username",signupUsernameEdit->text().trimmed()},
                     {"password",signupPasswordEdit->text()},
                     {"confirm_password",signupConfirmEdit->text()}});
@@ -334,7 +369,11 @@ void ConfigDialog::updateMonitorList(const QJsonArray &monitors)
     for(const QJsonValue &val:monitors){
         const QJsonObject m=val.toObject();
         const int id=m.value("id").toInt();
-        monitorSelector->addItem(QString("%1 (#%2)").arg(m.value("name").toString()).arg(id),id);
+        monitorSelector->addItem(QString("%1 · %2 · %3 · %4")
+        .arg(m.value("name").toString("Monitor"),
+             m.value("platform").toString("—"),
+             m.value("type").toString("Desktop"),
+             m.value("ip_address").toString("—")),id);
     }
     monitorSelector->addItem("Add New...",0);
     QSettings settings(settingsPath(),QSettings::IniFormat);
@@ -396,6 +435,9 @@ void ConfigDialog::loadRememberedSession()
     if(!restored.value("success").toBool()){
         authToken.clear();return;
     }
+    accountStatusLabel->setText("Signed in: "+
+        restored.value("user").toObject().value("username").toString());
+    logoutButton->setEnabled(true);
     updateMonitorList(restored.value("monitors").toArray());
     const int saved=restored.value("monitor_id").toInt();
     if(saved>0){
@@ -409,7 +451,15 @@ void ConfigDialog::onRequestMonitorClicked()
     if(authToken.isEmpty()){QMessageBox::information(this,"Sign in first","Please sign in before requesting a monitor.");return;}
     bool ok=false;const QString name=QInputDialog::getText(this,"Request monitor","Device name:",QLineEdit::Normal,QString(),&ok);
     if(!ok||name.trimmed().isEmpty())return;
-    QJsonObject response=authRequest(QJsonObject{{"action","request_monitor"},{"name",name.trimmed()}},true);
-    QMessageBox::information(this,"Monitor request",response.value("success").toBool()
-        ?"Request submitted. Your admin must assign it before selection.":response.value("error").toString("Request failed"));
+    QJsonObject response=authRequest(QJsonObject{{"action","request_monitor"},{"name",name.trimmed()},
+        {"os","Ubuntu"},{"machine","laptop"}},true);
+    if(response.value("success").toBool()){
+        monitorId=response.value("monitor_id").toInt();
+        QJsonObject all=authRequest(QJsonObject{{"action","monitors"}},true);
+        updateMonitorList(all.value("monitors").toArray());
+        int ix=monitorSelector->findData(monitorId);
+        if(ix>=0)monitorSelector->setCurrentIndex(ix);
+    }
+    QMessageBox::information(this,"Monitor registration",response.value("success").toBool()
+        ?"Monitor created and assigned to your account.":response.value("error").toString("Registration failed"));
 }

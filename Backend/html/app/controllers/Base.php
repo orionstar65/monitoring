@@ -6,7 +6,10 @@ class Base {
     public function __construct() {
         $this->db = Database::getInstance();
         $this->loadUser();
-        if(($this->user['role']??'')!=='admin' && !in_array(get_class($this),['Auth','Monitors','Dashboard'],true)){
+        if(!empty($this->user['must_change_password']) && get_class($this)!=='Auth'){
+            $this->redirect('auth/change_password');
+        }
+        if(($this->user['role']??'')!=='admin' && !in_array(get_class($this),['Auth','Monitors','Dashboard','Merge'],true)){
             http_response_code(403);exit('Access denied');
         }
     }
