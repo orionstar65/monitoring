@@ -485,15 +485,13 @@
                     <span>Monitor IPs</span>
                 </a>
             </div>
-            <?php if(($_SESSION['role']??'')===ROLE_ADMIN): ?>
-            <?php if ($_SESSION['role'] === ROLE_ADMIN): ?>
             <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'merge' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>merge">
                     <i class="fas fa-code-branch"></i>
                     <span>Merge Logs</span>
                 </a>
             </div>
-            <?php endif; ?>
+            <?php if(($_SESSION['role']??'')===ROLE_ADMIN): ?>
             <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'view' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>view">
                     <i class="fas fa-eye"></i>
@@ -525,6 +523,11 @@
                 </a>
             </div>
             <?php endif; ?>
+            <div class="nav-item">
+                <a class="nav-link <?php echo $active_page === 'password' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>auth/change_password">
+                    <i class="fas fa-key"></i><span>Change Password</span>
+                </a>
+            </div>
             <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'logout' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>auth/logout">
                     <i class="fas fa-sign-out-alt"></i>
