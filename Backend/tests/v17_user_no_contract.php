@@ -9,6 +9,11 @@ $api=$read('Backend/client_auth.php');
 $mac=$read('Mac/MonitorClient/AppDelegate.swift');
 $win=$read('Windows/MonitorClient.cpp');
 $linux=$read('Ubuntu/ConfigDialog.cpp');
+$webUsers=$read('Backend/html/app/views/users/index.php');
+$webMonitors=$read('Backend/html/app/views/monitors/index.php');
+$winCmake=$read('Windows/CMakeLists.txt');
+$macProject=$read('Mac/MonitorClient.xcodeproj/project.pbxproj');
+$ubuntuVersion=$read('Ubuntu/version.h');
 $check=[
  'Login uses User No'=>str_contains($auth,'WHERE user_no = :user_no OR email = :email'),
  'No accounts.username in account controller'=>!str_contains($users,'username'),
@@ -19,6 +24,16 @@ $check=[
  'macOS has no select/switch buttons'=>!str_contains($mac,'let pair = action(')&&!str_contains($mac,'let switchUser = action('),
  'Ubuntu selection triggers action'=>str_contains($linux,'if(authToken.isEmpty())onPairClicked();'),
  'Ubuntu select button removed'=>!str_contains($linux,'pairButton='),
+ 'Users table separate columns'=>str_contains($webUsers,'<th>User No</th><th>Full Name</th><th>IP Address</th>'),
+ 'Monitors table separate columns'=>str_contains($webMonitors,'<th>User No</th><th>Full Name</th><th>IP Address</th>'),
+ 'Windows keeps v1.5'=>str_contains($winCmake,'VERSION 1.5'),
+ 'macOS keeps v1.5'=>str_contains($macProject,'MARKETING_VERSION = 1.5;'),
+ 'Ubuntu keeps v1.5'=>str_contains($ubuntuVersion,'MONITORAPP_VERSION "1.5"'),
+ 'Windows reports directory failure'=>str_contains($win,'settingsDirectoryError'),
+ 'macOS reports directory failure'=>str_contains($mac,'directoryError ='),
+ 'Ubuntu reports directory failure'=>str_contains($linux,'directoryError=result.value("error")'),
+ 'macOS top-pinned document'=>str_contains($mac,'MonitorSettingsDocumentView'),
+ 'Ubuntu top-pinned content'=>str_contains($linux,'content->setAlignment(Qt::AlignTop)'),
 ];
 foreach($check as $name=>$ok){
     if(!$ok){fwrite(STDERR,"FAIL: $name\n");exit(1);}
