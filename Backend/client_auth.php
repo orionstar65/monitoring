@@ -32,89 +32,101 @@ try {
         http_response_code(400);echo json_encode(['error'=>'Invalid JSON request']);exit;
     }
     $action=$data['action'];
-    if($action==='signup'){
-        $username=trim((string)($data['username']??''));
-        $fullName=trim((string)($data['full_name']??$data['name']??$username));
-        $password=(string)($data['password']??'');
-        $confirm=(string)($data['confirm_password']??'');
-        if(!preg_match('/^[A-Za-z0-9_.-]{3,50}$/',$username)
-            ||strlen($password)<12||strlen($password)>1024){
-            http_response_code(400);echo json_encode(['error'=>'Username must be 3–50 letters, numbers, underscores, periods or dashes; password at least 12 characters.']);exit;
-        }
-        if(strlen($fullName)<2||strlen($fullName)>150
-            ||preg_match('/[<>\\x00-\\x1f\\x7f]/',$fullName)){
-            http_response_code(400);
-            echo json_encode(['error'=>'Enter a valid full name (2–150 characters).']);exit;
-        }
-        if(!hash_equals($password,$confirm)){
-            http_response_code(400);echo json_encode(['error'=>'Passwords do not match']);exit;
-        }
-        $key=hash('sha256',($_SERVER['REMOTE_ADDR']??'').'|signup');
-        $st=$db->prepare('SELECT COUNT(*) AS hits FROM login_attempts WHERE attempt_key=? AND attempted_at>DATE_SUB(NOW(),INTERVAL 15 MINUTE)');
-        $st->bind_param('s',$key);$st->execute();$hits=(int)$st->get_result()->fetch_assoc()['hits'];$st->close();
-        if($hits>=10){http_response_code(429);echo json_encode(['error'=>'Too many signup attempts; try again later']);exit;}
-        $st=$db->prepare('INSERT INTO login_attempts (attempt_key) VALUES (?)');
-        $st->bind_param('s',$key);$st->execute();$st->close();
-        $st=$db->prepare('SELECT id FROM users WHERE username=? OR email=? LIMIT 1');
-        $st->bind_param('ss',$username,$username);$st->execute();$exists=$st->get_result()->fetch_assoc();$st->close();
-        if($exists){http_response_code(409);echo json_encode(['error'=>'This username already exists. Please sign in instead.','code'=>'username_exists']);exit;}
-        $hash=password_hash($password,PASSWORD_DEFAULT);
-        try {
-            $st=$db->prepare("INSERT INTO users (name,username,password,role) VALUES (?,?,?,'viewer')");
-            $st->bind_param('sss',$fullName,$username,$hash);$st->execute();$st->close();
-        } catch(mysqli_sql_exception $e) {
-            if($e->getCode()===1062){http_response_code(409);echo json_encode(['error'=>'This username already exists. Please sign in instead.','code'=>'username_exists']);exit;}
-            throw $e;
-        }
-        http_response_code(201);
-        echo json_encode(['success'=>true,'message'=>'Account created. Please sign in.']);exit;
+    // Public directory reveals user numbers only. No names, email or monitor data.
+    if($action==='directory'){
+        $st=$db->prepare('SELECT user_no FROM users ORDER BY user_no LIMIT 10000');
+        $st->execute();$rows=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
+        echo json_encode(['success'=>true,'users'=>array_map(static fn($u)=>['user_no'=>(string)$u['user_no']],$rows)]);exit;
     }
-    if($action==='login'){
-        $identifier=trim((string)($data['identifier']??''));
-        $password=(string)($data['password']??'');
-        if(!$identifier||!$password||strlen($identifier)>254||strlen($password)>1024){http_response_code(400);echo json_encode(['error'=>'Invalid credentials']);exit;}
-        $key=hash('sha256',($_SERVER['REMOTE_ADDR']??'').'|'.strtolower($identifier));
-        $st=$db->prepare('SELECT COUNT(*) AS hits FROM login_attempts WHERE attempt_key=? AND attempted_at>DATE_SUB(NOW(), INTERVAL 15 MINUTE)');
-        $st->bind_param('s',$key);$st->execute();$count=(int)$st->get_result()->fetch_assoc()['hits'];$st->close();
-        if($count>=8){http_response_code(429);echo json_encode(['error'=>'Too many attempts; try again later']);exit;}
-        $st=$db->prepare('SELECT id,name,username,password,must_change_password FROM users WHERE username=? OR email=? LIMIT 1');
-        $st->bind_param('ss',$identifier,$identifier);$st->execute();$user=$st->get_result()->fetch_assoc();$st->close();
-        if(!$user||!password_verify($password,$user['password'])){
-            $st=$db->prepare('INSERT INTO login_attempts (attempt_key) VALUES (?)');
-            $st->bind_param('s',$key);$st->execute();$st->close();
-            http_response_code(401);echo json_encode(['error'=>'Incorrect credentials. If you forgot your password, ask an administrator to reset it.','code'=>'invalid_credentials']);exit;
+    // One-time admin-issued pairing code is required on first use. This prevents
+    // simply knowing an employee's user number from granting telemetry access.
+    if($action==='enroll'){
+        $userNo=(string)($data['user_no']??'');
+        $code=strtoupper(trim((string)($data['pairing_code']??'')));
+        if(!preg_match('/^[0-9]{6,15}$/',$userNo)||!preg_match('/^[A-F0-9]{16}$/',$code)){
+            http_response_code(400);echo json_encode(['error'=>'Enter User No and the 16-character administrator pairing code']);exit;
         }
-        if(!empty($user['must_change_password'])){
-            http_response_code(403);
-            echo json_encode(['error'=>'Change your temporary password in the web portal before signing into a desktop client.','code'=>'password_change_required']);exit;
-        }
-        $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);
-        $st=$db->prepare('INSERT INTO client_sessions (token_hash,user_id,expires_at) VALUES (?,?,NULL)');
-        $st->bind_param('si',$hash,$user['id']);$st->execute();$st->close();
-        $st=$db->prepare('SELECT id,name,ip_address,platform,type,remark,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY name,id');
-        $st->bind_param('i',$user['id']);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
-        echo json_encode(['success'=>true,'token'=>$token,'expires_in'=>null,'monitors'=>$monitors,'user'=>['id'=>(int)$user['id'],'name'=>$user['name'],'username'=>$user['username']]]);exit;
+        $attemptKey=hash('sha256',($_SERVER['REMOTE_ADDR']??'').'|enroll');
+        $st=$db->prepare('SELECT COUNT(*) AS hits FROM login_attempts WHERE attempt_key=? AND attempted_at>DATE_SUB(NOW(),INTERVAL 15 MINUTE)');
+        $st->bind_param('s',$attemptKey);$st->execute();$hits=(int)$st->get_result()->fetch_assoc()['hits'];$st->close();
+        if($hits>=12){http_response_code(429);echo json_encode(['error'=>'Too many attempts, try later']);exit;}
+        $st=$db->prepare('INSERT INTO login_attempts (attempt_key) VALUES (?)');
+        $st->bind_param('s',$attemptKey);$st->execute();$st->close();
+        $codeHash=hash('sha256',$code);
+        $db->begin_transaction();
+        try {
+            $st=$db->prepare('SELECT m.id,m.owner_user_id,m.assignment_locked FROM tbl_monitor_ips m JOIN users u ON u.id=m.owner_user_id WHERE u.user_no=? AND m.pairing_code_hash=? AND m.pairing_expires_at>NOW() LIMIT 1 FOR UPDATE');
+            $st->bind_param('ss',$userNo,$codeHash);$st->execute();$monitor=$st->get_result()->fetch_assoc();$st->close();
+            if(!$monitor){$db->rollback();http_response_code(403);echo json_encode(['error'=>'Invalid or expired pairing code. Ask your administrator to generate a new code.']);exit;}
+            $mid=(int)$monitor['id'];$uid=(int)$monitor['owner_user_id'];
+            $st=$db->prepare('UPDATE tbl_monitor_ips SET pairing_code_hash=NULL,pairing_expires_at=NULL WHERE id=?');
+            $st->bind_param('i',$mid);$st->execute();$st->close();
+            // Re-enrollment invalidates the old installation's credentials.
+            $st=$db->prepare("UPDATE client_sessions SET revoked_at=NOW() WHERE monitor_id=? AND session_type='device' AND revoked_at IS NULL");
+            $st->bind_param('i',$mid);$st->execute();$st->close();
+            $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);
+            $st=$db->prepare("INSERT INTO client_sessions (token_hash,user_id,monitor_id,session_type,expires_at) VALUES (?,?,?,'device',NULL)");
+            $st->bind_param('sii',$hash,$uid,$mid);$st->execute();$st->close();
+            $db->commit();
+            echo json_encode(['success'=>true,'token'=>$token,'monitor_id'=>$mid,'user_no'=>$userNo,'assignment_locked'=>(bool)$monitor['assignment_locked']]);exit;
+        } catch(Throwable $failure){$db->rollback();throw $failure;}
+    }
+    if($action==='signup'||$action==='login'){
+        http_response_code(410);
+        echo json_encode(['error'=>'Desktop passwords were retired. Select User No and enroll with an administrator pairing code.','code'=>'use_device_pairing']);exit;
     }
     $session=clientAuthenticatedSession($db,false);
-    if(!$session){http_response_code(401);echo json_encode(['error'=>'Sign in first']);exit;}
+    if(!$session || ($session['session_type']??'')!=='device'){
+        http_response_code(401);echo json_encode(['error'=>'Pair this device using the administrator enrollment code']);exit;
+    }
     $userId=(int)$session['user_id'];
+    if($action==='switch_user'){
+        $newNo=(string)($data['user_no']??'');
+        if(!preg_match('/^[0-9]{6,15}$/',$newNo)){http_response_code(400);echo json_encode(['error'=>'Invalid User No']);exit;}
+        $mid=(int)($session['monitor_id']??0);
+        if($mid<1){http_response_code(403);echo json_encode(['error'=>'Device is not paired']);exit;}
+        $db->begin_transaction();
+        try {
+            $st=$db->prepare('SELECT owner_user_id,assignment_locked FROM tbl_monitor_ips WHERE id=? FOR UPDATE');
+            $st->bind_param('i',$mid);$st->execute();$monitor=$st->get_result()->fetch_assoc();$st->close();
+            if(!$monitor||(int)$monitor['owner_user_id']!==$userId){$db->rollback();http_response_code(403);echo json_encode(['error'=>'Assignment changed. Ask your administrator to re-enroll this device.']);exit;}
+            if((int)$monitor['assignment_locked']===1){$db->rollback();http_response_code(423);echo json_encode(['error'=>'User assignment is locked. Ask your administrator to edit the monitor.','code'=>'assignment_locked']);exit;}
+            $st=$db->prepare('SELECT id FROM users WHERE user_no=? LIMIT 1');
+            $st->bind_param('s',$newNo);$st->execute();$target=$st->get_result()->fetch_assoc();$st->close();
+            if(!$target){$db->rollback();http_response_code(404);echo json_encode(['error'=>'User No not found']);exit;}
+            $newId=(int)$target['id'];
+            $st=$db->prepare('UPDATE tbl_monitor_ips SET owner_user_id=? WHERE id=?');
+            $st->bind_param('ii',$newId,$mid);$st->execute();$st->close();
+            $st=$db->prepare('UPDATE client_sessions SET revoked_at=NOW() WHERE monitor_id=? AND revoked_at IS NULL');
+            $st->bind_param('i',$mid);$st->execute();$st->close();
+            $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);
+            $st=$db->prepare("INSERT INTO client_sessions(token_hash,user_id,monitor_id,session_type,expires_at) VALUES(?,?,?,'device',NULL)");
+            $st->bind_param('sii',$hash,$newId,$mid);$st->execute();$st->close();
+            $db->commit();
+            echo json_encode(['success'=>true,'token'=>$token,'user_no'=>$newNo,'monitor_id'=>$mid]);exit;
+        }catch(Throwable $failure){$db->rollback();throw $failure;}
+    }
     if($action==='restore'){
-        $st=$db->prepare('SELECT id,name,username FROM users WHERE id=?');
+        $st=$db->prepare('SELECT id,name,username,user_no FROM users WHERE id=?');
         $st->bind_param('i',$userId);$st->execute();$user=$st->get_result()->fetch_assoc();$st->close();
-        $st=$db->prepare('SELECT id,name,ip_address,platform,type,remark,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY name,id');
+        $st=$db->prepare('SELECT id,name,ip_address,platform,type,remark,assignment_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY name,id');
         $st->bind_param('i',$userId);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
         $monitorId=(int)($session['monitor_id']??0);
         if($monitorId && !in_array($monitorId,array_map(static fn($m)=>(int)$m['id'],$monitors),true))$monitorId=0;
-        echo json_encode(['success'=>true,'user'=>$user,'monitors'=>$monitors,'monitor_id'=>$monitorId]);exit;
+        echo json_encode(['success'=>true,'user'=>$user,'monitors'=>$monitors,'monitor_id'=>$monitorId,
+            'assignment_locked'=>!empty(array_values(array_filter($monitors,static fn($m)=>(int)$m['id']===$monitorId))[0]['assignment_locked'])]);exit;
     }
     if($action==='monitors'){
-        $st=$db->prepare('SELECT id,name,ip_address,platform,type,remark,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY name,id');
+        $st=$db->prepare('SELECT id,name,ip_address,platform,type,remark,assignment_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY name,id');
         $st->bind_param('i',$userId);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);
         echo json_encode(['success'=>true,'monitors'=>$monitors]);exit;
     }
     if($action==='select'){
         $monitorId=filter_var($data['monitor_id']??null,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
         if(!$monitorId){http_response_code(400);echo json_encode(['error'=>'Invalid monitor ID']);exit;}
+        if((int)$session['monitor_id']!==$monitorId){
+            http_response_code(403);echo json_encode(['error'=>'This device is paired to a different monitor. Ask an administrator for its pairing code.']);exit;
+        }
         $st=$db->prepare('SELECT id FROM tbl_monitor_ips WHERE id=? AND owner_user_id=?');
         $st->bind_param('ii',$monitorId,$userId);$st->execute();$owned=$st->get_result()->fetch_assoc();$st->close();
         if(!$owned){http_response_code(403);echo json_encode(['error'=>'Monitor not assigned to your account']);exit;}
@@ -125,6 +137,9 @@ try {
     if($action==='save_monitor'){
         $monitorId=filter_var($data['monitor_id']??null,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
         if(!$monitorId){http_response_code(400);echo json_encode(['error'=>'Select an assigned monitor']);exit;}
+        if((int)$session['monitor_id']!==$monitorId){
+            http_response_code(403);echo json_encode(['error'=>'Monitor is not paired to this device']);exit;
+        }
         $st=$db->prepare('SELECT id FROM tbl_monitor_ips WHERE id=? AND owner_user_id=? LIMIT 1');
         $st->bind_param('ii',$monitorId,$userId);$st->execute();$owned=$st->get_result()->fetch_assoc();$st->close();
         if(!$owned){http_response_code(403);echo json_encode(['error'=>'Monitor not assigned to your account']);exit;}
@@ -136,18 +151,8 @@ try {
         echo json_encode(['success'=>true,'monitor_id'=>$monitorId]);exit;
     }
     if($action==='request_monitor'){
-        $fields=clientMonitorFields($data);
-        if(isset($fields['error'])){http_response_code(400);echo json_encode(['error'=>$fields['error']]);exit;}
-        $st=$db->prepare('SELECT COUNT(*) AS total FROM tbl_monitor_ips WHERE owner_user_id=?');
-        $st->bind_param('i',$userId);$st->execute();$count=(int)$st->get_result()->fetch_assoc()['total'];$st->close();
-        if($count>=100){http_response_code(429);echo json_encode(['error'=>'Monitor registration limit reached']);exit;}
-        $ip=$_SERVER['REMOTE_ADDR']??'';
-        $st=$db->prepare('INSERT INTO tbl_monitor_ips (name,ip_address,type,platform,remark,owner_user_id,requested_user_id) VALUES (?,?,?,?,?,?,NULL)');
-        $st->bind_param('sssssi',$fields['name'],$ip,$fields['type'],$fields['platform'],$fields['remark'],$userId);
-        $st->execute();$id=(int)$db->insert_id;$st->close();
-        $st=$db->prepare('UPDATE client_sessions SET monitor_id=? WHERE id=? AND user_id=?');
-        $st->bind_param('iii',$id,$session['id'],$userId);$st->execute();$st->close();
-        echo json_encode(['success'=>true,'monitor_id'=>$id,'pending_approval'=>false]);exit;
+        http_response_code(403);
+        echo json_encode(['error'=>'New monitors must be added and assigned by an administrator in the web portal.']);exit;
     }
     if($action==='logout'){
         $st=$db->prepare('UPDATE client_sessions SET revoked_at=NOW() WHERE id=? AND user_id=?');
