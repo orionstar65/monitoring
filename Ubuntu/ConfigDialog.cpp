@@ -260,23 +260,27 @@ void ConfigDialog::saveSettings()
 
 bool ConfigDialog::testConnection()
 {
-    QNetworkAccessManager *manager = new QNetworkAccessManager(this);
-    QString url = QString("%1://%2:%3").arg(serverPortEdit->value() == 8924 ? "http" : "https").arg(serverIPEdit->text()).arg(serverPortEdit->value());
-    
+    const QString host=serverIPEdit->text().trimmed();
+    const int port=serverPortEdit->value();
+    if(host.isEmpty())return false;
+    QNetworkAccessManager manager;
+    const QUrl url(QString("%1://%2:%3/html/auth/login")
+        .arg(port==8924?"http":"https").arg(host).arg(port));
     QNetworkRequest request(url);
-    QNetworkReply *reply = manager->get(request);
-    
+    request.setAttribute(QNetworkRequest::FollowRedirectsAttribute,true);
+    QNetworkReply *reply=manager.get(request);
     QEventLoop loop;
-    connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    loop.exec();
-    
-    bool success = (reply->error() == QNetworkReply::NoError);
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(&timeout,&QTimer::timeout,reply,&QNetworkReply::abort);
+    QObject::connect(reply,&QNetworkReply::finished,&loop,&QEventLoop::quit);
+    timeout.start(6000);
+    if(!reply->isFinished())loop.exec();
+    const int code=reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const bool success=reply->error()==QNetworkReply::NoError && code>=200 && code<400;
     reply->deleteLater();
-    manager->deleteLater();
-    
     return success;
 }
-
 void ConfigDialog::onSaveClicked()
 {
     if(authToken.isEmpty()){
@@ -331,11 +335,10 @@ void ConfigDialog::onTestConnectionClicked()
     testButton->setEnabled(true);
     testButton->setText("Test Connection");
     
-    if (success) {
-        QMessageBox::information(this, "Success", "Connection test successful!");
-    } else {
-        QMessageBox::warning(this, "Error", "Connection test failed!\nPlease check server IP and port.");
-    }
+    connectionStatusLabel->setText(success ? "● Server reachable" :
+        "● Could not reach server (check IP, port and TLS)");
+    connectionStatusLabel->setStyleSheet(success ?
+        "color:#16803c;font-weight:600" : "color:#d32f2f;font-weight:600");
 } 
 QJsonObject ConfigDialog::authRequest(const QJsonObject &payload,bool authenticated)
 {

@@ -1673,27 +1673,45 @@ void MonitorClient::onSendAllAction()
 
 void MonitorClient::onConfigureAction()
 {
-    qDebug() << "Configuration dialog requested from system tray";
-
-    ConfigDialog dialog;
-    if (dialog.exec() != QDialog::Accepted)
+    // The tray may be activated while a modal dialog's event loop is running.
+    // Raise the existing window instead of constructing a second instance.
+    if(activeSettingsDialog) {
+        activeSettingsDialog->showNormal();
+        activeSettingsDialog->raise();
+        activeSettingsDialog->activateWindow();
         return;
-
-    clientName = dialog.getClientName();
-    authToken=dialog.getAuthToken();monitorId=dialog.getMonitorId();
-    if(!keyboardMonitor->startMonitoring())
-        qWarning() << "[KeyLog] startMonitoring failed; check input permissions";
-    updateTrayMenu();
-
-    scheduleConnectionTest(QStringLiteral("Verifying server…"), [this](bool ok) {
-        if (trayIcon) {
-            notifyTray(QStringLiteral("Configuration"),
-                                  ok ? QStringLiteral("Saved and verified.")
-                                     : QStringLiteral("Saved; server check failed."),
-                                  ok ? QSystemTrayIcon::Information : QSystemTrayIcon::Warning,
-                                  4000);
+    }
+    auto *dialog=new ConfigDialog();
+    activeSettingsDialog=dialog;
+    connect(dialog,&ConfigDialog::sessionStateChanged,this,[this,dialog] {
+        authToken=dialog->getAuthToken();
+        monitorId=dialog->getMonitorId();
+        if(authToken.isEmpty() || monitorId<1) {
+            if(keyboardMonitor)keyboardMonitor->stopMonitoring();
         }
+        updateStatusDisplay();
     });
+    connect(dialog,&QDialog::finished,this,[this,dialog](int result) {
+        // Logout is applied on signal even when user dismisses the settings.
+        if(result==QDialog::Accepted) {
+            clientName=dialog->getClientName();
+            authToken=dialog->getAuthToken();
+            monitorId=dialog->getMonitorId();
+            if(!authToken.isEmpty() && monitorId>0){
+                if(keyboardMonitor && !keyboardMonitor->startMonitoring())
+                    qWarning() << "[KeyLog] startMonitoring failed; check input permissions";
+                scheduleConnectionTest(QStringLiteral("Verifying server…"), [this](bool ok) {
+                    notifyTray("Configuration", ok ? "Saved and verified." :
+                        "Saved; server check failed.",
+                        ok ? QSystemTrayIcon::Information : QSystemTrayIcon::Warning,4000);
+                });
+            }
+        }
+        updateStatusDisplay();
+        activeSettingsDialog.clear();
+        dialog->deleteLater();
+    });
+    dialog->open(); // asynchronous modal; event loop never stacks settings dialogs
 }
 
 void MonitorClient::onTakeScreenshotAction()

@@ -38,6 +38,8 @@
 #include <QAction>
 #include <QList>
 #include <QIcon>
+#include <QPointer>
+class ConfigDialog;
 #include <libudev.h>
 #include <qchar.h>
 
@@ -151,6 +153,7 @@ private:
     bool testBasicConnectivity(const QString& host, int port);
     bool testAPIEndpoints(const QString& serverIP, int serverPort);
 
+    QPointer<ConfigDialog> activeSettingsDialog;
     QString macAddress;
     QString authToken;
     int monitorId = 0;
