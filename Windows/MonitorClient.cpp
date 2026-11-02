@@ -409,7 +409,7 @@ void updateTrayMenu() {
     
     // Configuration refresh button
     AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_CONFIG_REFRESH, "Refresh Configuration");
-    AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SIGN_IN, getClientToken().empty() ? "Pair Device / Settings" : "Device Settings");
+    AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SIGN_IN, getClientToken().empty() ? "Select User / Settings" : "Device Settings");
     AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SETTINGS, "Monitor Settings...");
     AppendMenuA(hTrayMenu, MF_STRING | (notificationsEnabled ? MF_CHECKED : MF_UNCHECKED), ID_TRAY_NOTIFICATIONS, "Status notifications");
     
@@ -2150,28 +2150,28 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"BUTTON","Select User No",WS_TABSTOP,108,258,135,29,SETTINGS_ENROLL);
         addControl(dlg,"BUTTON","Change User No",WS_TABSTOP,108,258,140,29,SETTINGS_SWITCH);
         addControl(dlg,"BUTTON","Disconnect",WS_TABSTOP,258,258,160,29,SETTINGS_LOGOUT);
-        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,301405,2,4507);
-        addControl(dlg,"STATIC","",0,13347,405,28,SETTINGS_NOTICE);
-        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,350405,2,SETTINGS_MONITOR_DIVIDER);
-        addControl(dlg,"STATIC","Monitor Settings",0,13394,180,23,SETTINGS_MONITOR_HEADING);
-        addControl(dlg,"STATIC","Monitor",0,13423,90,21,4400);
-        addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,386310,220,SETTINGS_MONITOR);
-        addControl(dlg,"STATIC","Label",0,13458,90,21,4401);
-        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,420310,25,SETTINGS_LABEL);
-        addControl(dlg,"STATIC","OS",0,13491,90,21,4402);
-        HWND os=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,453310,120,SETTINGS_OS);
+        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,336,405,2,4507);
+        addControl(dlg,"STATIC","",0,13,312,405,28,SETTINGS_NOTICE);
+        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,350,405,2,SETTINGS_MONITOR_DIVIDER);
+        addControl(dlg,"STATIC","Monitor Settings",0,13,359,180,23,SETTINGS_MONITOR_HEADING);
+        addControl(dlg,"STATIC","Monitor",0,13,423,90,21,4400);
+        addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,386,310,220,SETTINGS_MONITOR);
+        addControl(dlg,"STATIC","Label",0,13,458,90,21,4401);
+        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,420,310,25,SETTINGS_LABEL);
+        addControl(dlg,"STATIC","OS",0,13,491,90,21,4402);
+        HWND os=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,453,310,120,SETTINGS_OS);
         for(const wchar_t* name:{L"Windows",L"Mac",L"Ubuntu"})SendMessageW(os,CB_ADDSTRING,0,(LPARAM)name);
-        addControl(dlg,"STATIC","Machine",0,13524,90,21,4403);
-        HWND machine=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,486310,110,SETTINGS_MACHINE);
+        addControl(dlg,"STATIC","Machine",0,13,524,90,21,4403);
+        HWND machine=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,486,310,110,SETTINGS_MACHINE);
         for(const wchar_t* name:{L"Laptop",L"Desktop"})SendMessageW(machine,CB_ADDSTRING,0,(LPARAM)name);
-        addControl(dlg,"STATIC","IP address",0,13557,90,21,4404);
-        addControl(dlg,"STATIC","—",0,108557,310,21,SETTINGS_MONITOR_IP);
-        addControl(dlg,"STATIC","Remark",0,13590,90,21,4405);
-        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,552310,25,SETTINGS_REMARK);
-        addControl(dlg,"BUTTON","Show status notifications",BS_AUTOCHECKBOX|WS_TABSTOP,108,585250,24,SETTINGS_NOTIFY);
+        addControl(dlg,"STATIC","IP address",0,13,557,90,21,4404);
+        addControl(dlg,"STATIC","—",0,108,522,310,21,SETTINGS_MONITOR_IP);
+        addControl(dlg,"STATIC","Remark",0,13,590,90,21,4405);
+        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,552,310,25,SETTINGS_REMARK);
+        addControl(dlg,"BUTTON","Show status notifications",BS_AUTOCHECKBOX|WS_TABSTOP,108,585,250,24,SETTINGS_NOTIFY);
         CheckDlgButton(dlg,SETTINGS_NOTIFY,notificationsEnabled?BST_CHECKED:BST_UNCHECKED);
-        addControl(dlg,"BUTTON","Save Monitor",WS_TABSTOP|BS_DEFPUSHBUTTON,225,62096,30,SETTINGS_SAVE);
-        addControl(dlg,"BUTTON","Close",WS_TABSTOP,332,62086,30,SETTINGS_CLOSE);
+        addControl(dlg,"BUTTON","Save Monitor",WS_TABSTOP|BS_DEFPUSHBUTTON,225,620,96,30,SETTINGS_SAVE);
+        addControl(dlg,"BUTTON","Close",WS_TABSTOP,332,620,86,30,SETTINGS_CLOSE);
         loadUserDirectory(dlg);
         refreshUnifiedMonitors(dlg);
         updateUnifiedVisibility(dlg);
