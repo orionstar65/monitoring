@@ -83,11 +83,15 @@ class Users extends Base {
             $role = $_POST['role'] ?? ROLE_USER;
             if(!in_array($role,['admin','user','viewer'],true))$role='viewer';
             $password = $_POST['password'] ?? '';
+            $userNo=trim((string)($_POST['user_no']??''));
+            // User No is a unique, administrator-managed numeric identifier.
+            $validUserNo=preg_match('/^[1-9][0-9]{0,14}$/D',$userNo)===1;
+
             
-            if (!preg_match('/^[A-Za-z0-9_.-]{3,50}$/',$username)
+            if (!$validUserNo || !preg_match('/^[A-Za-z0-9_.-]{3,50}$/',$username)
                 || strlen($name)<2 || strlen($name)>150
                 || ($email!=='' && !filter_var($email,FILTER_VALIDATE_EMAIL))) {
-                $error = 'Enter a valid name, username and optional email.';
+                $error = 'Enter a valid User No (1-15 digits), name, username and optional email.';
             } else {
                 // Check if username already exists for another user
                 $existing = $this->db->fetch(
@@ -95,12 +99,14 @@ class Users extends Base {
                     ['username' => $username, 'id' => $id]
                 );
                 
-                if ($existing || ($email!=='' && $this->db->fetch(
+                $duplicateNo=$this->db->fetch('SELECT id FROM users WHERE user_no=:no AND id!=:id',['no'=>$userNo,'id'=>$id]);
+                if ($existing || $duplicateNo || ($email!=='' && $this->db->fetch(
                         'SELECT id FROM users WHERE email=:email AND id!=:id',
                         ['email'=>$email,'id'=>$id]))) {
-                    $error = 'Username or email already exists';
+                    $error = 'User No, username or email already exists';
                 } else {
                     $data = [
+                        'user_no'=>$userNo,
                         'name'=>$name,
                         'username' => $username,
                         'email' => $email!==''?$email:null,
@@ -123,7 +129,16 @@ class Users extends Base {
                             return;
                         }
                     }
-                    $result = $this->db->update('users', $data, 'id = :id', ['id' => $id]);
+                    try {
+                        $result = $this->db->update('users', $data, 'id = :id', ['id' => $id]);
+                    } catch (PDOException $e) {
+                        if($e->getCode()==='23000') {
+                            $error='User No, username or email already exists';
+                            $this->view('users/edit',['user'=>array_merge($user,['user_no'=>$userNo]),'error'=>$error]);
+                            return;
+                        }
+                        throw $e;
+                    }
                     
                     // Check if data actually changed by comparing with original user data
                     $dataChanged = false;
