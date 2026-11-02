@@ -1,3 +1,7 @@
+> **Current setup:** [DUAL_PROTOCOL_SETUP.md](DUAL_PROTOCOL_SETUP.md)
+> configures **HTTP 8924** and **HTTPS 8925**, plus optional database repair.
+> Always use the updated scripts from `main`.
+
 > **Updated November 2026:** The old HTTP-only server instructions below are retained for
 > historical reference. New monitoring clients and the PHP dashboard require HTTPS.
 > After installing the Apache backend, run `sudo bash Backend/setup_https.sh --host YOUR_IP`

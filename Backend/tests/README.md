@@ -10,3 +10,18 @@
 6. Verify re-signing, expired token (seven days), disconnected server, offline client, and a new monitor pending admin approval on Windows, macOS, and Ubuntu separately.
 
 These scripts intentionally do not run Actions or mutate live data. They are **not** substitutes for platform builds, integration testing, or a security audit. Do not treat installed v1.x binaries as updated: rebuild installers from source.
+
+## Dual-protocol tests
+
+After setup, verify from a trusted LAN device:
+
+```bash
+curl -I http://SERVER_IP:8924/html/auth/login
+curl --cacert /path/to/monitoring-lan-root.crt \
+  -I https://SERVER_IP:8925/html/auth/login
+bash Backend/tests/manual_smoke.sh http://SERVER_IP:8924
+bash Backend/tests/manual_smoke.sh https://SERVER_IP:8925
+```
+
+Never use insecure `-k` to mask certificate problems. The HTTPS smoke test
+requires a trusted certificate on the test machine.

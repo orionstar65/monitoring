@@ -1,3 +1,9 @@
+> **Current server configuration:** For both HTTP and HTTPS, use
+> [DUAL_PROTOCOL_SETUP.md](DUAL_PROTOCOL_SETUP.md). It configures HTTP on
+> **8924** (restricted LAN) and HTTPS on **8925**. The single-port
+> `setup_https.sh` instructions below are for legacy installations only;
+> do not run it after enabling the dual-port configuration.
+
 # Enable HTTPS on the monitoring server
 
 This project runs an Ubuntu/Debian Apache backend on **port 8924**. The updated

@@ -10,7 +10,7 @@ Before deployment: take a tested database and screenshot backup. Rotate any data
 3. Create a least-privileged MySQL user (SELECT/INSERT/UPDATE/DELETE on monitoring_db).
    Configure `MONITOR_DB_USER`, `MONITOR_DB_PASSWORD`, `MONITOR_DB_NAME` and `MONITOR_SLACK_WEBHOOK` outside Git, available to PHP.
 4. Deploy backend and all client versions together: old clients receive 401 until they sign in.
-5. Set up trusted HTTPS, deny direct access to /html/data and /html/exports, and ensure PHP sees Authorization headers.
+5. Configure HTTP 8924 (LAN only) and HTTPS 8925 using [DUAL_PROTOCOL_SETUP.md](DUAL_PROTOCOL_SETUP.md). Deny direct access to /html/data and /html/exports, and ensure PHP sees Authorization headers.
 6. Users register at /html/auth/signup. Admin edits a monitor, assigns an account, and saves.
 7. Desktop client signs in, chooses an assigned monitor, then posts with Bearer token. New monitor requests require admin mapping before they can be selected.
 8. Check 401 without login, 403 for unassigned monitor, CSRF on dashboard mutations, screenshot access, last-activity status, expiry (7 days), exports and Slack.
@@ -20,7 +20,7 @@ Before deployment: take a tested database and screenshot backup. Rotate any data
 
 ## TLS and PHP environment checklist
 
-All sign-in and telemetry requests now require HTTPS. Use a trusted hostname and certificate with a matching SAN, e.g. `monitor.example.com` on port 443. Configure the server's **webroot** to be the Backend folder and serve `/html/` through its existing front controller; do not publish backups, SQL, or secrets.
+HTTPS remains recommended. HTTP sign-in/telemetry is opt-in, restricted to private LAN clients, and served only by the HTTP 8924 virtual host when MONITOR_ALLOW_HTTP=1. Use a trusted hostname and certificate with a matching SAN, e.g. `monitor.example.com` on port 443. Configure the server's **webroot** to be the Backend folder and serve `/html/` through its existing front controller; do not publish backups, SQL, or secrets.
 
 If TLS terminates at an *isolated and trusted reverse proxy*, set `MONITOR_TRUST_PROXY_HTTPS=1` in the **PHP server process environment**, and configure the proxy to overwrite `X-Forwarded-Proto: https`. The internal web server must not be directly reachable by untrusted clients in that mode. Without this setting the backend requires HTTPS at Apache itself. Do not use self-signed certificates without installing a properly trusted CA on all three clients.
 
@@ -32,8 +32,8 @@ find Backend -name '*.php' -print0 | xargs -0 -n1 php -l
 # An unauthenticated request over HTTPS must be 401.
 curl -i https://monitor.example.com/eventhandler.php \
   -H 'Content-Type: application/json' -d '{"Event":"Tic"}'
-# A direct HTTP request must be 426.
-curl -i http://monitor.example.com/eventhandler.php -d '{"Event":"Tic"}'
+# HTTP 8924 on the trusted LAN is also authenticated (401 without a token).
+curl -i http://monitor.example.com:8924/eventhandler.php -d '{"Event":"Tic"}'
 # Sensitive data must not be directly accessible (403/404).
 curl -i https://monitor.example.com/html/data/
 curl -i https://monitor.example.com/html/exports/
