@@ -128,21 +128,16 @@ try {
     if($action==='request_monitor'){
         $fields=clientMonitorFields($data);
         if(isset($fields['error'])){http_response_code(400);echo json_encode(['error'=>$fields['error']]);exit;}
-        $name=$fields['name'];
-        if(preg_match('/[<>\\x00-\\x1f]/',$name)){
-            http_response_code(400);echo json_encode(['error'=>'Invalid monitor name']);exit;
-        }
-        if(strlen($name)<2||strlen($name)>100){http_response_code(400);echo json_encode(['error'=>'Name must be 2–100 characters']);exit;}
-        $st=$db->prepare('SELECT COUNT(*) AS pending FROM tbl_monitor_ips WHERE requested_user_id=? AND owner_user_id IS NULL');
-        $st->bind_param('i',$userId);$st->execute();
-        $pending=(int)$st->get_result()->fetch_assoc()['pending'];$st->close();
-        if($pending>=5){
-            http_response_code(429);echo json_encode(['error'=>'You already have five pending monitor requests. Contact your administrator.']);exit;
-        }
+        $st=$db->prepare('SELECT COUNT(*) AS total FROM tbl_monitor_ips WHERE owner_user_id=?');
+        $st->bind_param('i',$userId);$st->execute();$count=(int)$st->get_result()->fetch_assoc()['total'];$st->close();
+        if($count>=100){http_response_code(429);echo json_encode(['error'=>'Monitor registration limit reached']);exit;}
         $ip=$_SERVER['REMOTE_ADDR']??'';
-        $st=$db->prepare('INSERT INTO tbl_monitor_ips (name,ip_address,type,platform,remark,requested_user_id) VALUES (?,?,?,?,?,?)');
-        $st->bind_param('sssssi',$name,$ip,$fields['type'],$fields['platform'],$fields['remark'],$userId);$st->execute();
-        echo json_encode(['success'=>true,'monitor_id'=>$db->insert_id,'pending_approval'=>true]);exit;
+        $st=$db->prepare('INSERT INTO tbl_monitor_ips (name,ip_address,type,platform,remark,owner_user_id,requested_user_id) VALUES (?,?,?,?,?,?,NULL)');
+        $st->bind_param('sssssi',$fields['name'],$ip,$fields['type'],$fields['platform'],$fields['remark'],$userId);
+        $st->execute();$id=(int)$db->insert_id;$st->close();
+        $st=$db->prepare('UPDATE client_sessions SET monitor_id=? WHERE id=? AND user_id=?');
+        $st->bind_param('iii',$id,$session['id'],$userId);$st->execute();$st->close();
+        echo json_encode(['success'=>true,'monitor_id'=>$id,'pending_approval'=>false]);exit;
     }
     if($action==='logout'){
         $st=$db->prepare('UPDATE client_sessions SET revoked_at=NOW() WHERE id=? AND user_id=?');

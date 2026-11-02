@@ -7,7 +7,7 @@ class Merge extends Base {
     
     public function __construct() {
         parent::__construct();
-        $this->requireAdmin();
+        // Merge operations are restricted to the authenticated user's monitors.
         
         // Initialize DatabaseService
         $mysqli = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
@@ -19,6 +19,14 @@ class Merge extends Base {
         }
     }
     
+    private function allowedMonitor(int $id): bool {
+        if($id<1)return false;
+        return (bool)$this->db->fetch(
+            $this->isAdmin() ? 'SELECT id FROM tbl_monitor_ips WHERE id=:id'
+                : 'SELECT id FROM tbl_monitor_ips WHERE id=:id AND owner_user_id=:uid',
+            $this->isAdmin()?['id'=>$id]:['id'=>$id,'uid'=>$this->user['id']]
+        );
+    }
     public function index() {
         $this->view('merge/index');
     }
@@ -28,7 +36,9 @@ class Merge extends Base {
      */
     public function api_list() {
         $monitors = $this->db->fetchAll(
-            "SELECT id, ip_address, username, mac_address, name, type, updated_at FROM tbl_monitor_ips ORDER BY ip_address"
+            "SELECT m.id,m.ip_address,u.name AS username,m.mac_address,m.name,m.type,m.updated_at FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id "
+            .($this->isAdmin() ? "ORDER BY m.ip_address" : "WHERE m.owner_user_id=:uid ORDER BY m.ip_address"),
+            $this->isAdmin()?[]:['uid'=>$this->user['id']]
         );
         
         // Add status information
@@ -79,11 +89,19 @@ class Merge extends Base {
             return;
         }
         
+        if(!$this->allowedMonitor($monitor_id)){
+            http_response_code(403);$this->json(['success'=>false,'error'=>'Monitor not assigned to your account']);
+        }
         // If source_ips is a string, convert to array
         if (is_string($source_ips)) {
             $source_ips = !empty($source_ips) ? explode(',', $source_ips) : [];
         }
         
+        if(!$this->isAdmin()){
+            $allowedIPs=array_column($this->db->fetchAll('SELECT ip_address FROM tbl_monitor_ips WHERE owner_user_id=:uid',
+                ['uid'=>$this->user['id']]),'ip_address');
+            $source_ips=array_values(array_intersect($source_ips,$allowedIPs));
+        }
         // Perform filename fix
         $result = $this->dbService->fixMismatchedFilenames($monitor_id, $source_ips);
         
@@ -121,6 +139,9 @@ class Merge extends Base {
             return;
         }
         
+        if(!$this->allowedMonitor($source_id)||!$this->allowedMonitor($target_id)){
+            http_response_code(403);$this->json(['success'=>false,'error'=>'Both monitors must belong to your account']);
+        }
         // Perform merge
         $result = $this->dbService->mergeMonitorLogs($source_id, $target_id);
         
