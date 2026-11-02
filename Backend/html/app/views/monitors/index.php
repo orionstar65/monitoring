@@ -10,7 +10,7 @@ ob_start(); ?>
 </div>
 <div class="row g-3 mb-4">
  <div class="col-sm-4"><div class="card p-3"><div class="text-muted small">Monitors</div><div class="fs-3 fw-bold"><?= count($monitors) ?></div></div></div>
- <div class="col-sm-4"><div class="card p-3"><div class="text-muted small">Active</div><div class="fs-3 fw-bold text-success"><?= count(array_filter($monitors,static fn($m)=>$m['dynamic_status']==='active')) ?></div></div></div>
+ <div class="col-sm-4"><div class="card p-3"><div class="text-muted small">Active</div><div class="fs-3 fw-bold text-success"><?= count(array_filter($monitors,static fn($m)=>$m['dynamic_status']==='online')) ?></div></div></div>
  <div class="col-sm-4"><div class="card p-3"><div class="text-muted small">Users</div><div class="fs-3 fw-bold"><?= (int)$distinct_username_count ?></div></div></div>
 </div>
 <div class="card shadow-sm"><div class="card-body"><div class="table-responsive">
@@ -24,7 +24,7 @@ ob_start(); ?>
  <td><code><?= $escape($m['ip_address']) ?></code></td>
  <td><?= $escape(ucfirst(strtolower($m['type']??'desktop'))) ?></td>
  <td><?= $escape($m['platform']??'—') ?></td>
- <td><span class="badge <?= $m['dynamic_status']==='active'?'bg-success':'bg-secondary' ?>"><?= $escape($m['status_text']) ?></span></td>
+ <td><span class="badge <?= $m['dynamic_status']==='online'?'bg-success':($m['dynamic_status']==='inactive'?'bg-warning text-dark':'bg-secondary') ?>"><?= $escape($m['status_text']) ?></span></td>
  <td data-order="<?= $escape($m['last_monitor_tic']??'') ?>"><?= $m['last_monitor_tic']?$escape($m['last_monitor_tic']):'Never' ?></td>
  <td><?= $escape($m['remark']??'') ?></td>
  <td class="text-nowrap">

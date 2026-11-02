@@ -12,7 +12,7 @@ class Sync extends Base {
         
         // Get monitor statistics from database
         $total_monitors = $this->db->fetch("SELECT COUNT(*) as count FROM tbl_monitor_ips")['count'];
-        $active_monitors = $this->db->fetch("SELECT COUNT(*) as count FROM tbl_monitor_ips WHERE monitor_status = 1")['count'];
+        $active_monitors = $this->db->fetch("SELECT COUNT(*) as count FROM tbl_monitor_ips WHERE last_monitor_tic >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)")['count'];
         
         $this->view('sync/index', [
             'total_monitors' => $total_monitors,
@@ -39,7 +39,7 @@ class Sync extends Base {
         $this->requireAdmin();
         
         $total_monitors = $this->db->fetch("SELECT COUNT(*) as count FROM tbl_monitor_ips")['count'];
-        $active_monitors = $this->db->fetch("SELECT COUNT(*) as count FROM tbl_monitor_ips WHERE monitor_status = 1")['count'];
+        $active_monitors = $this->db->fetch("SELECT COUNT(*) as count FROM tbl_monitor_ips WHERE last_monitor_tic >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)")['count'];
         
         $this->json([
             'total_monitors' => $total_monitors,
