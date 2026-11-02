@@ -9,8 +9,8 @@ ob_start();
         <form method="POST" action="<?php echo BASE_URL; ?>users/edit/<?php echo $user['id']; ?>">
             <div class="mb-3">
                 <label class="form-label">User No
-                <input class="form-control font-monospace" value="<?= htmlspecialchars($user['user_no']??'',ENT_QUOTES,'UTF-8') ?>" readonly></label>
-                <div class="form-text">Automatically assigned, immutable user identifier used by desktop applications.</div>
+                <input class="form-control font-monospace" type="text" inputmode="numeric" pattern="[1-9][0-9]{0,14}" maxlength="15" name="user_no" required value="<?= htmlspecialchars($user['user_no']??'',ENT_QUOTES,'UTF-8') ?>"></label>
+                <div class="form-text">Unique numeric User No. Administrators can update it; desktop selectors will use the new number.</div>
             </div>
             <div class="mb-3"><label class="form-label">Full name<input class="form-control" name="name" maxlength="150" value="<?= htmlspecialchars($user['name']??'',ENT_QUOTES,'UTF-8') ?>" required></label></div>
             <div class="row">
