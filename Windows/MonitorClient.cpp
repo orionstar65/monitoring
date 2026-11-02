@@ -2120,11 +2120,11 @@ static void updateUnifiedVisibility(HWND dlg) {
         SetWindowPos(GetDlgItem(dlg,SETTINGS_SAVE),nullptr,225,620,0,0,SWP_NOZORDER|SWP_NOSIZE);
         SetWindowPos(GetDlgItem(dlg,SETTINGS_CLOSE),nullptr,332,620,0,0,SWP_NOZORDER|SWP_NOSIZE);
     }else{
-        SetWindowPos(GetDlgItem(dlg,SETTINGS_NOTIFY),nullptr,108,332,0,0,SWP_NOZORDER|SWP_NOSIZE);
-        SetWindowPos(GetDlgItem(dlg,SETTINGS_SAVE),nullptr,225,367,0,0,SWP_NOZORDER|SWP_NOSIZE);
-        SetWindowPos(GetDlgItem(dlg,SETTINGS_CLOSE),nullptr,332,367,0,0,SWP_NOZORDER|SWP_NOSIZE);
+        SetWindowPos(GetDlgItem(dlg,SETTINGS_NOTIFY),nullptr,108,350,0,0,SWP_NOZORDER|SWP_NOSIZE);
+        SetWindowPos(GetDlgItem(dlg,SETTINGS_SAVE),nullptr,225,385,0,0,SWP_NOZORDER|SWP_NOSIZE);
+        SetWindowPos(GetDlgItem(dlg,SETTINGS_CLOSE),nullptr,332,385,0,0,SWP_NOZORDER|SWP_NOSIZE);
     }
-    SetWindowPos(dlg,nullptr,0,0,465,enrolled?710:465,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
+    SetWindowPos(dlg,nullptr,0,0,465,enrolled?710:485,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
 }
 static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp) {
     switch(msg) {
