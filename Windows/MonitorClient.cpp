@@ -2125,20 +2125,33 @@ static void updateUnifiedVisibility(HWND dlg) {
     setDlgUtf8Text(dlg,SETTINGS_CONNECTION,
         connectionStatus.serverConnected&&enrolled?"● Connected and active":"● Offline / Not configured");
     ShowWindow(GetDlgItem(dlg,SETTINGS_NOTIFY),SW_SHOW);
-    for(int id:monitorControls){
-        HWND child=GetDlgItem(dlg,id);
-        if(!child)continue;
-    }
-    if(enrolled){
-        SetWindowPos(GetDlgItem(dlg,SETTINGS_NOTIFY),nullptr,108,572,0,0,SWP_NOZORDER|SWP_NOSIZE);
-        SetWindowPos(GetDlgItem(dlg,SETTINGS_SAVE),nullptr,225,607,0,0,SWP_NOZORDER|SWP_NOSIZE);
-        SetWindowPos(GetDlgItem(dlg,SETTINGS_CLOSE),nullptr,332,607,0,0,SWP_NOZORDER|SWP_NOSIZE);
-    }else{
-        SetWindowPos(GetDlgItem(dlg,SETTINGS_NOTIFY),nullptr,108,351,0,0,SWP_NOZORDER|SWP_NOSIZE);
-        SetWindowPos(GetDlgItem(dlg,SETTINGS_SAVE),nullptr,225,389,0,0,SWP_NOZORDER|SWP_NOSIZE);
-        SetWindowPos(GetDlgItem(dlg,SETTINGS_CLOSE),nullptr,332,389,0,0,SWP_NOZORDER|SWP_NOSIZE);
-    }
-    SetWindowPos(dlg,nullptr,0,0,465,enrolled?685:480,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
+    // Compute each position from its original layout, not the last displayed
+    // state: opening / switching / disconnecting must never accumulate offsets.
+    const int offset=hasNotice?0:58;
+    struct Position { int id,x,y; };
+    const Position monitorLayout[]={
+        {SETTINGS_MONITOR_DIVIDER,13,336},{SETTINGS_MONITOR_HEADING,13,346},
+        {4400,13,375},{SETTINGS_MONITOR,108,373},
+        {4401,13,410},{SETTINGS_LABEL,108,407},
+        {4402,13,443},{SETTINGS_OS,108,440},
+        {4403,13,476},{SETTINGS_MACHINE,108,473},
+        {4404,13,509},{SETTINGS_MONITOR_IP,108,509},
+        {4405,13,542},{SETTINGS_REMARK,108,539}
+    };
+    for(const auto& item:monitorLayout)
+        SetWindowPos(GetDlgItem(dlg,item.id),nullptr,item.x,item.y-offset,0,0,
+                     SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
+    const int notifyY=enrolled?572-offset:(hasNotice?351:285);
+    const int buttonsY=enrolled?607-offset:(hasNotice?389:321);
+    SetWindowPos(GetDlgItem(dlg,SETTINGS_NOTIFY),nullptr,108,notifyY,0,0,
+                 SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
+    SetWindowPos(GetDlgItem(dlg,SETTINGS_SAVE),nullptr,225,buttonsY,0,0,
+                 SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
+    SetWindowPos(GetDlgItem(dlg,SETTINGS_CLOSE),nullptr,332,buttonsY,0,0,
+                 SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
+    SetWindowPos(dlg,nullptr,0,0,465,
+                 enrolled?(hasNotice?685:627):(hasNotice?480:410),
+                 SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
 }
 static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp) {
     switch(msg) {
