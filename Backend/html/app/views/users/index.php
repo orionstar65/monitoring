@@ -17,11 +17,11 @@ ob_start();
 <div class="card shadow-sm"><div class="card-body">
  <div class="table-responsive">
  <table id="users-table" class="table table-hover align-middle advanced-table" style="width:100%">
- <thead><tr><th>User (UserNo / Full Name / IP)</th><th>Email address</th><th>Role</th><th>Created</th><th>Last activity</th><th data-dt-order="disable">Actions</th></tr></thead>
+ <thead><tr><th>User</th><th>Email address</th><th>Role</th><th>Created</th><th>Last activity</th><th data-dt-order="disable">Actions</th></tr></thead>
  <tbody>
  <?php foreach($users as $user): ?>
  <tr>
-  <td class="fw-semibold"><?= $escape($user['user_no'].' / '.($user['name']??'').' / '.($user['ip_address']??'—')) ?></td>
+  <td class="fw-semibold"><?= $escape($user['user_no'].'/'.($user['name']??'').'/'.($user['ip_address']??'—')) ?></td>
   <td><?= ($user['email']??'')!=='' ? $escape($user['email']) : '<span class="text-muted">—</span>' ?></td>
   <td><span class="badge <?= $user['role']==='admin'?'bg-primary':'bg-secondary' ?>"><?= $escape(ucfirst($user['role'])) ?></span></td>
   <td data-order="<?= $escape($user['created_at']) ?>"><?= $escape($user['created_at']) ?></td>
