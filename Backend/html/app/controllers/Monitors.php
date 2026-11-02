@@ -12,8 +12,8 @@ class Monitors extends Base {
     
     public function index() {
         $monitors = $this->isAdmin()
-          ? $this->db->fetchAll("SELECT m.*,u.name AS owner_name FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id ORDER BY m.id")
-          : $this->db->fetchAll("SELECT m.*,u.name AS owner_name FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id WHERE m.owner_user_id=:uid ORDER BY m.id", ['uid'=>$this->user['id']]);
+          ? $this->db->fetchAll("SELECT m.*,u.name AS owner_name,u.user_no AS owner_user_no FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id ORDER BY m.id")
+          : $this->db->fetchAll("SELECT m.*,u.name AS owner_name,u.user_no AS owner_user_no FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id WHERE m.owner_user_id=:uid ORDER BY m.id", ['uid'=>$this->user['id']]);
         
         // Add dynamic status calculation for each monitor
         foreach ($monitors as &$monitor) {
@@ -77,7 +77,7 @@ class Monitors extends Base {
                 $existing = false;
                 $error = null;
                 if (!$existing) {
-                    // No username uniqueness check needed - multiple monitors can have same username
+                    // A user can own multiple monitors.
                     if (empty($error)) {
                         try {
                             $monitorId = $this->db->insert('tbl_monitor_ips', [
@@ -145,9 +145,9 @@ class Monitors extends Base {
             } elseif (!empty($platform) && !in_array($platform, ['Windows', 'Mac', 'Ubuntu'])) {
                 $error = 'Invalid platform selected';
             } else {
-                // No username uniqueness check needed - multiple monitors can have same username
+                // A user can own multiple monitors.
                 if (empty($error)) {
-                    // Update username, slack_id, platform and type fields (but NOT updated_at - that's only for monitoring events)
+                    // Update ownership and monitor settings (leave last-event timestamps unchanged).
                     $update_data = [
                         'type' => $type,
                         'remark' => $remark,
