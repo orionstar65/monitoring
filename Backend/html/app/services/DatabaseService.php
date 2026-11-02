@@ -6,6 +6,8 @@
  */
 
 class DatabaseService {
+    private $authenticatedMonitorId = null;
+    public function setAuthenticatedMonitorId(int $id): void { $this->authenticatedMonitorId=$id; }
     private $mysqli;
     
     public function __construct($mysqli) {
@@ -93,6 +95,7 @@ class DatabaseService {
      * @return int|null Monitor ID (primary key) or null if not found
      */
     public function getMonitorId($ip_address = null, $mac_address = null) {
+        if ($this->authenticatedMonitorId !== null) return $this->authenticatedMonitorId;
         $monitor_id = null;
         
         // Priority 1: Try MAC address from parameter first (if provided)
@@ -589,6 +592,12 @@ class DatabaseService {
      * @return bool Success status
      */
     public function updateMonitorActivity($ip_address, $activity_type = 'monitor', $mac_address = null) {
+        if ($this->authenticatedMonitorId !== null) {
+            $field = ($activity_type === 'browser') ? 'last_browser_tic' : 'last_monitor_tic';
+            $stmt = $this->mysqli->prepare("UPDATE tbl_monitor_ips SET {$field}=NOW(),updated_at=NOW(),ip_address=? WHERE id=?");
+            $stmt->bind_param('si',$ip_address,$this->authenticatedMonitorId);
+            $ok=$stmt->execute();$stmt->close();return $ok;
+        }
         // Get monitor ID using MAC address (if provided) or IP address
         $monitor_id = $this->getMonitorId($ip_address, $mac_address);
         
@@ -1148,7 +1157,7 @@ class DatabaseService {
             $statusInfo = $this->calculateClientStatus($client['updated_at'] ?? null);
             
             // Only include clients that are actually "offline" according to UI logic
-            if ($statusInfo['status'] === 'offline') {
+            if ($statusInfo['time_diff'] >= max(1,(int)$threshold_minutes)*60) {
                 // Use slack_id if available, otherwise fall back to username
                 $group_key = !empty($client['slack_id']) ? $client['slack_id'] : ($client['username'] ?? 'Unknown');
                 $client['status'] = $statusInfo['status'];

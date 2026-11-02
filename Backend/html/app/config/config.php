@@ -1,19 +1,19 @@
 <?php
 // Database configuration
 define('DB_HOST', 'localhost');
-define('DB_USER', 'root');
-define('DB_PASS', 'acc0924');
-define('DB_NAME', 'monitoring_db');
+define('DB_USER', getenv('MONITOR_DB_USER') ?: 'monitoring_app');
+define('DB_PASS', getenv('MONITOR_DB_PASSWORD') ?: '');
+define('DB_NAME', getenv('MONITOR_DB_NAME') ?: 'monitoring_db');
 
 // Application configuration
 define('APP_NAME', 'ACC-Monitor');
 define('APP_VERSION', '1.0.0');
-define('BASE_URL', 'http://192.168.2.241:8924/html/');
-// define('BASE_URL', 'http://192.168.2.241:8924/html/');
+define('BASE_URL', getenv('MONITOR_BASE_URL') ?: '/html/');
+// define('BASE_URL', getenv('MONITOR_BASE_URL') ?: '/html/');
 
 // Debug mode
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
 
 // Session configuration
 define('SESSION_TIMEOUT', 3600); // 1 hour

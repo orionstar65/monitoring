@@ -151,7 +151,7 @@ BACKEND_DIR="${BACKEND_DIR:-$SCRIPT_DIR}"
 INSTALL_DIR="${INSTALL_DIR:-$(dirname "$BACKEND_DIR")}"
 GIT_URL="${GIT_URL:-http://192.168.1.245:5000/orionstar65/monitor.git}"
 SERVER_IP="${SERVER_IP:-$(hostname -I | awk '{print $1}')}"
-DB_ROOT_PASS="${DB_ROOT_PASS:-acc0924}"
+DB_ROOT_PASS="${DB_ROOT_PASS:?Provide DB_ROOT_PASS through a secure environment variable}"
 
 echo "=== ACC-Monitor Ubuntu setup ==="
 echo "Install dir : $INSTALL_DIR"

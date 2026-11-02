@@ -5,12 +5,13 @@
  * Uses DatabaseService class for all database operations
  */
 
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
 error_reporting(E_ALL);
 
 // Include configuration and database service
 require_once 'config.inc.php';
+require_once __DIR__.'/services/ClientIdentity.php';
 require_once 'html/app/services/DatabaseService.php';
 
 // Set content type to JSON
@@ -33,6 +34,8 @@ if ($mysqli->connect_error) {
 
 // Initialize database service
 $dbService = new DatabaseService($mysqli);
+$monitorId=requireClientMonitor($mysqli);
+$dbService->setAuthenticatedMonitorId($monitorId);
 
 // Get JSON input
 $input = file_get_contents('php://input');
@@ -55,7 +58,8 @@ $username = $data['Username'] ?? '';
 $clientIP = $_SERVER['REMOTE_ADDR'] ?? '';
 
 // Create or update monitor record
-$dbService->createOrUpdateMonitor($clientIP, $macAddress, $username, $version);
+// Monitor identity comes from the authenticated session, never MAC/IP.
+$dbService->updateMonitorActivity($clientIP, 'monitor');
 
 // Handle different event types
 $response = ['status' => 'success', 'message' => 'Event processed successfully'];

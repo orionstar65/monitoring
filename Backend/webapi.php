@@ -7,6 +7,7 @@
 
 // Include configuration and database service
 require_once 'config.inc.php';
+require_once __DIR__.'/services/ClientIdentity.php';
 require_once 'html/app/services/DatabaseService.php';
 
 // Start timing for API request logging
@@ -35,6 +36,8 @@ if ($mysqli->connect_error) {
 
 // Initialize database service
 $dbService = new DatabaseService($mysqli);
+$monitorId=requireClientMonitor($mysqli);
+$dbService->setAuthenticatedMonitorId($monitorId);
 
 // Note: Do NOT require a monitor record to exist before processing uploads.
 // For uploads we resolve monitor_id inside uploadCacheScreenWithMetadata() using MAC/IP (MAC-first).
@@ -75,6 +78,7 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
         }
     }
     
+    if (!DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $ctime)) { http_response_code(400); return false; }
     // Create date-based subdirectory (no time-based subdirectories)
     $date_dir = date('Y-m-d', strtotime($ctime));
     $screens_date_path = $monitor_paths['screens'] . $date_dir . '/';
@@ -99,6 +103,15 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
         return false;
     }
     
+    // Reject oversized, malformed, and non-JPEG content before writing into the web tree.
+    $imageInfo = @getimagesize($imagefile_tmp);
+    if (($_FILES['imagefile']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
+       || ($_FILES['imagefile']['size'] ?? 0) < 1 || ($_FILES['imagefile']['size'] ?? 0) > 8*1024*1024
+       || !$imageInfo || $imageInfo[2] !== IMAGETYPE_JPEG || $imageInfo[0]>8192 || $imageInfo[1]>8192) {
+        http_response_code(400); return false;
+    }
+    $img_name = $monitor_id . '_' . $datetime . '_' . bin2hex(random_bytes(8)) . '.jpg';
+    $file_location = $screens_date_path . $img_name;
     // Move uploaded file
     if (move_uploaded_file($imagefile_tmp, $file_location)) {
         // Get file information
@@ -107,25 +120,8 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
         $imagewidth = $image_info[0] ?? 0;
         $imageheight = $image_info[1] ?? 0;
         
-        // Determine file extension from uploaded file
-        $original_name = $_FILES['imagefile']['name'] ?? '';
-        $file_ext = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
-        if (empty($file_ext)) {
-            $file_ext = 'jpg'; // Default fallback
-        }
-        
-        // Update filename with correct extension (using monitor_id, not IP)
-        $img_name = $monitor_id . '_' . $datetime . '.' . $file_ext;
-        $file_location = $screens_date_path . $img_name;
-        
-        // Rename the file if extension changed
-        if ($file_ext !== 'jpg') {
-            $old_location = $screens_date_path . $monitor_id . '_' . $datetime . '.jpg';
-            if (file_exists($old_location)) {
-                rename($old_location, $file_location);
-            }
-        }
-        
+        $file_ext = 'jpg';
+
         // Create thumbnail
         $thumb_file_location = $thumbnails_date_path . $img_name;
         createThumbnail($file_location, $thumb_file_location, 200, 150);

@@ -5,7 +5,7 @@
  */
 
 // Slack webhook URL - Replace with your actual webhook URL
-define('SLACK_WEBHOOK_URL', 'https://hooks.slack.com/services/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');
+define('SLACK_WEBHOOK_URL', getenv('MONITOR_SLACK_WEBHOOK') ?: '');
 
 // Status check settings
 define('SLACK_CHECK_INTERVAL_MINUTES', 60);  // How often to check status (minutes)

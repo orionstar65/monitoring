@@ -1,9 +1,15 @@
 <?php
 class JConfig {
+    public function __construct() {
+        $this->dbuser = getenv('MONITOR_DB_USER') ?: 'monitoring_app';
+        $this->dbpassword = getenv('MONITOR_DB_PASSWORD') ?: '';
+        $this->dbname = getenv('MONITOR_DB_NAME') ?: 'monitoring_db';
+        if (!$this->dbpassword) throw new RuntimeException('MONITOR_DB_PASSWORD is missing');
+    }
     public $dbhost = 'localhost';
-    public $dbuser = 'root';
-    public $dbpassword = 'acc0924';
-    public $dbname = 'monitoring_db';
+    public $dbuser;
+    public $dbpassword;
+    public $dbname;
     
     // Directory paths for storing data
     public $screens_dir_path = './html/data/screens/';
