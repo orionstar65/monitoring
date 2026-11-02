@@ -1,5 +1,17 @@
 <?php
 /** Authentication for telemetry, bound to an admin-assigned monitor ID. */
+function requireSecureRequest(): void {
+    // HTTPS must be end-to-end or terminated by a trusted, isolated reverse proxy.
+    $direct = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+    $proxy = getenv('MONITOR_TRUST_PROXY_HTTPS') === '1'
+        && strtolower(trim($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+    if (!$direct && !$proxy) {
+        http_response_code(426);
+        header('Content-Type: application/json');
+        echo json_encode(['error'=>'HTTPS is required']);
+        exit;
+    }
+}
 function clientIdentityDatabase(): mysqli {
     require_once __DIR__ . '/../config.inc.php';
     $config=new JConfig();

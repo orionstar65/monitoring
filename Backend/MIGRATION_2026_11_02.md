@@ -17,3 +17,34 @@ Before deployment: take a tested database and screenshot backup. Rotate any data
 9. Periodically purge expired client_sessions and login_attempts; establish a retention schedule and user consent process.
 
 **Do not treat committed secrets as private simply because this repository is private. Rotate them and consider repository-history rewriting after coordination.**
+
+## TLS and PHP environment checklist
+
+All sign-in and telemetry requests now require HTTPS. Use a trusted hostname and certificate with a matching SAN, e.g. `monitor.example.com` on port 443. Configure the server's **webroot** to be the Backend folder and serve `/html/` through its existing front controller; do not publish backups, SQL, or secrets.
+
+If TLS terminates at an *isolated and trusted reverse proxy*, set `MONITOR_TRUST_PROXY_HTTPS=1` in the **PHP server process environment**, and configure the proxy to overwrite `X-Forwarded-Proto: https`. The internal web server must not be directly reachable by untrusted clients in that mode. Without this setting the backend requires HTTPS at Apache itself. Do not use self-signed certificates without installing a properly trusted CA on all three clients.
+
+Test the server after deployment using:
+```bash
+# From repo root. Lint all PHP files (requires php CLI).
+find Backend -name '*.php' -print0 | xargs -0 -n1 php -l
+
+# An unauthenticated request over HTTPS must be 401.
+curl -i https://monitor.example.com/eventhandler.php \
+  -H 'Content-Type: application/json' -d '{"Event":"Tic"}'
+# A direct HTTP request must be 426.
+curl -i http://monitor.example.com/eventhandler.php -d '{"Event":"Tic"}'
+# Sensitive data must not be directly accessible (403/404).
+curl -i https://monitor.example.com/html/data/
+curl -i https://monitor.example.com/html/exports/
+```
+
+When bootstrapping a fresh database, first execute `database_setup.sql` **only on a newly created empty DB**; then run the migration. Create an initial admin without a default password:
+```bash
+MONITOR_ADMIN_NAME='Administrator' MONITOR_ADMIN_USERNAME='admin' \
+MONITOR_ADMIN_EMAIL='admin@example.com' MONITOR_ADMIN_PASSWORD='<random-12+-char-password>' \
+php Backend/create_admin.php
+```
+The command also needs the `MONITOR_DB_*` variables in the CLI environment. Do not paste actual passwords into shared logs or tickets. Unset the password from your shell after use.
+
+Rebuild new native installers from these source directories: Windows/`build.bat` (Windows with MSYS2), Mac/`xcodebuild -project MonitorClient.xcodeproj -scheme MonitorClient -configuration Release build`, Ubuntu/`build.sh` (Qt/C++ toolchain). These are source changes, not new precompiled packages. Validate each client manually: signin, monitor select, heartbeat, screenshot, and 401 behavior before wide rollout. Existing Release binaries still contain legacy, unauthenticated client behavior.

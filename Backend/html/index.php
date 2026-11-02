@@ -1,5 +1,13 @@
 <?php
-session_set_cookie_params(['httponly'=>true,'secure'=>!empty($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off','samesite'=>'Lax']);
+$directHttps = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+$trustedProxyHttps = getenv('MONITOR_TRUST_PROXY_HTTPS') === '1'
+  && strtolower(trim($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+if (!$directHttps && !$trustedProxyHttps) {
+    http_response_code(426);
+    header('Content-Type: text/plain; charset=utf-8');
+    exit('HTTPS required. Configure a trusted TLS certificate before signing in.');
+}
+session_set_cookie_params(['httponly'=>true,'secure'=>true,'samesite'=>'Lax']);
 ini_set('session.use_strict_mode','1');
 session_start();
 if(!isset($_SESSION['csrf_token'])) $_SESSION['csrf_token']=bin2hex(random_bytes(32));

@@ -8,6 +8,7 @@
 // Include configuration and database service
 require_once 'config.inc.php';
 require_once __DIR__.'/services/ClientIdentity.php';
+requireSecureRequest();
 require_once 'html/app/services/DatabaseService.php';
 
 // Start timing for API request logging

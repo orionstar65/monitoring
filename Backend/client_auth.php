@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/services/ClientIdentity.php';
+requireSecureRequest();
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
 if(($_SERVER['REQUEST_METHOD']??'')!=='POST'){http_response_code(405);echo json_encode(['error'=>'POST required']);exit;}
