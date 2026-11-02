@@ -39,7 +39,8 @@ try {
         http_response_code(503);
         echo json_encode(['error'=>'User list disabled. Ask admin to set MONITOR_ENABLE_USER_NO_ENROLL=1 on trusted LAN/VPN.']);exit;
     }
-    // Restricted to explicitly enabled, trusted deployments: return each eligible\n    // user's number, display name and the IP of their first assigned monitor.
+    // Restricted to explicitly enabled, trusted deployments: return each eligible
+    // user's number, display name and the IP of their first assigned monitor.
     if($action==='directory'){
         $st=$db->prepare("SELECT u.user_no,u.name,
                (SELECT m.ip_address FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id ORDER BY m.id LIMIT 1) AS ip_address
