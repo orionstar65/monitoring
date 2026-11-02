@@ -195,7 +195,9 @@ void ConfigDialog::updateAccountUI()
     logoutButton->setVisible(signedIn);
     accountStatusLabel->setVisible(signedIn);
     monitorGroup->setVisible(signedIn);
-    saveButton->setEnabled(signedIn);
+    // The unsigned user can save server IP/port before authenticating.
+    saveButton->setEnabled(true);
+    saveButton->setText(signedIn ? "Save" : "Save Server");
     if(signedIn){
         connectionStatusLabel->setText(monitorId > 0
             ? "● Signed in · monitor #" + QString::number(monitorId)
@@ -304,7 +306,9 @@ void ConfigDialog::onSaveClicked()
         return;
     }
     if(authToken.isEmpty()){
-        QMessageBox::warning(this,"Sign in required","Use the Sign In or Sign Up tab first.");
+        saveSettings();
+        connectionStatusLabel->setText("● Server settings saved · sign in to continue");
+        connectionStatusLabel->setStyleSheet("color:#c07b16;font-weight:600");
         return;
     }
     const int id=monitorSelector->currentData().toInt();
