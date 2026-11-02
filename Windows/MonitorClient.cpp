@@ -2012,12 +2012,12 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"STATIC",
             connectionStatus.serverConnected && selectedMonitorId.load()>0 && !getClientToken().empty()
               ? "Status: Connected" : "Status: Offline / Sign in required",
-            0,108,285,210,18,0);
-        HWND logout=addControl(dlg,"BUTTON","Log Out",WS_TABSTOP,108,330,96,30,SETTINGS_LOGOUT);
+            0,108,294,310,20,0);
+        HWND logout=addControl(dlg,"BUTTON","Log Out",WS_TABSTOP,108,332,96,30,SETTINGS_LOGOUT);
         EnableWindow(logout,!getClientToken().empty());
         addControl(dlg,"BUTTON","Save",BS_DEFPUSHBUTTON|WS_TABSTOP,
-            214,294,104,30,SETTINGS_SAVE);
-        addControl(dlg,"BUTTON","Cancel",WS_TABSTOP,330,294,88,30,IDCANCEL);
+            214,332,104,30,SETTINGS_SAVE);
+        addControl(dlg,"BUTTON","Cancel",WS_TABSTOP,330,332,88,30,IDCANCEL);
         if(!getClientToken().empty()) {
             Json::Value req;req["action"]="monitors";
             Json::Value answer=callClientAuth(req);
@@ -2138,7 +2138,7 @@ bool showMonitorSettings() {
     BlankTemplate t={};
     t.dlg.style=DS_MODALFRAME|WS_POPUP|WS_CAPTION|WS_SYSMENU;
     t.dlg.dwExtendedStyle=0;t.dlg.cdit=0;
-    t.dlg.x=20;t.dlg.y=20;t.dlg.cx=285;t.dlg.cy=260;
+    t.dlg.x=20;t.dlg.y=20;t.dlg.cx=285;t.dlg.cy=295;
     bool success=DialogBoxIndirectParamA(GetModuleHandleA(NULL),&t.dlg,
         hMainWindow,settingsDialogProc,0)==IDOK;
     updateTrayIcon();
