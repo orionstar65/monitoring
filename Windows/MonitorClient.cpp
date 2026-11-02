@@ -1892,7 +1892,9 @@ enum {
     SETTINGS_TEST=4211,SETTINGS_CONNECTION=4212,SETTINGS_CLOSE=4213,
     SETTINGS_MONITOR_HEADING=4214,SETTINGS_MONITOR_DIVIDER=4215,
     SETTINGS_MONITOR_IP=4216,SETTINGS_USER_HEADING=4217,
-    AUTH_FULLNAME=4300,AUTH_FULLNAME_LABEL=4301
+    AUTH_FULLNAME=4300,AUTH_FULLNAME_LABEL=4301,
+    SETTINGS_USER_NO=4218, SETTINGS_PAIR_CODE=4219, SETTINGS_PAIR=4220,
+    SETTINGS_SWITCH=4221, SETTINGS_NOTICE=4222, SETTINGS_NEW_USER=4223
 };
 static HWND addControl(HWND parent,const char* cls,const char* label,DWORD style,
                        int x,int y,int width,int height,int id) {
@@ -1903,9 +1905,6 @@ static HWND addControl(HWND parent,const char* cls,const char* label,DWORD style
     if(control)SendMessageW(control,WM_SETFONT,
         reinterpret_cast<WPARAM>(GetStockObject(DEFAULT_GUI_FONT)),TRUE);
     return control;
-}
-static bool currentSignupTab(HWND dlg) {
-    return TabCtrl_GetCurSel(GetDlgItem(dlg,AUTH_TABS))==1;
 }
 // Exact 18-byte header plus three UTF-16 zero words, DWORD-aligned.
 struct alignas(DWORD) EmptyDialogTemplate {
@@ -2013,182 +2012,171 @@ static bool applyUnifiedServer(HWND dlg) {
     updateTrayIcon();
     return true;
 }
+
+static bool settingsAssignmentLocked=false;
+static void loadUserDirectory(HWND dlg) {
+    HWND selector=GetDlgItem(dlg,SETTINGS_USER_NO);
+    const std::string last=signedInUsername;
+    SendMessageW(selector,CB_RESETCONTENT,0,0);
+    Json::Value req;req["action"]="directory";
+    const Json::Value response=callClientAuth(req);
+    for(const auto& entry:response.get("users",Json::arrayValue)){
+        const std::string no=entry.get("user_no","").asString();
+        if(no.empty())continue;
+        const std::wstring text=utf8ToWide(no);
+        SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)text.c_str());
+    }
+    const std::wstring saved=utf8ToWide(last);
+    if(!saved.empty()) {
+        const int index=(int)SendMessageW(selector,CB_FINDSTRINGEXACT,(WPARAM)-1,(LPARAM)saved.c_str());
+        if(index>=0)SendMessageW(selector,CB_SETCURSEL,index,0);
+    }
+    if(SendMessageW(selector,CB_GETCURSEL,0,0)==CB_ERR)
+        SendMessageW(selector,CB_SETCURSEL,0,0);
+}
+static std::string selectedUserNo(HWND dlg) {
+    const HWND combo=GetDlgItem(dlg,SETTINGS_USER_NO);
+    const int ix=(int)SendMessageW(combo,CB_GETCURSEL,0,0);
+    if(ix==CB_ERR)return {};
+    wchar_t name[60]={};
+    SendMessageW(combo,CB_GETLBTEXT,ix,(LPARAM)name);
+    return wideToUtf8(name);
+}
 static void refreshUnifiedMonitors(HWND dlg) {
+    settingsMonitors=Json::arrayValue;
     HWND selector=GetDlgItem(dlg,SETTINGS_MONITOR);
     SendMessageW(selector,CB_RESETCONTENT,0,0);
-    settingsMonitors=Json::arrayValue;
     if(!getClientToken().empty()){
-        Json::Value req;req["action"]="monitors";
-        const Json::Value result=callClientAuth(req);
-        if(result.get("success",false).asBool())
-            settingsMonitors=result.get("monitors",Json::arrayValue);
-    }
-    int selected=-1;
-    for(const auto& device:settingsMonitors){
-        const int id=device.get("id",0).asInt();
-        const std::string item=device.get("name","Monitor").asString()+" | "+
-            device.get("platform","-").asString()+" | "+
-            device.get("type","desktop").asString()+" | "+
-            device.get("ip_address","-").asString();
-        const std::wstring wide=utf8ToWide(item);
-        const int position=(int)SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)wide.c_str());
-        SendMessageW(selector,CB_SETITEMDATA,position,id);
-        if(id==selectedMonitorId.load())selected=position;
-    }
-    const int add=(int)SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)L"Add New...");
-    SendMessageW(selector,CB_SETITEMDATA,add,0);
-    SendMessageW(selector,CB_SETCURSEL,selected<0?add:selected,0);
-    changeMonitorFields(dlg);
-    const int chosen=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
-    const int monitorId=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,chosen,0);
-    std::string selectedIP="New monitor";
-    for(const auto& item:settingsMonitors){
-        if(item.get("id",0).asInt()==monitorId){
-            selectedIP=item.get("ip_address","—").asString();break;
+        Json::Value request;request["action"]="restore";
+        const Json::Value answer=callClientAuth(request);
+        if(answer.get("success",false).asBool()){
+            settingsMonitors=answer.get("monitors",Json::arrayValue);
+            settingsAssignmentLocked=answer.get("assignment_locked",false).asBool();
+            signedInUsername=answer["user"].get("user_no","").asString();
+            selectedMonitorId.store(answer.get("monitor_id",0).asInt());
+            const std::wstring number=utf8ToWide(signedInUsername);
+            const HWND userCombo=GetDlgItem(dlg,SETTINGS_USER_NO);
+            const int ix=(int)SendMessageW(userCombo,CB_FINDSTRINGEXACT,(WPARAM)-1,(LPARAM)number.c_str());
+            if(ix>=0)SendMessageW(userCombo,CB_SETCURSEL,ix,0);
+        }else{
+            // Invalidated pairing: never keep trying to upload with its token.
+            const std::string oldTarget=credentialTarget();
+            CredDeleteA(oldTarget.c_str(),CRED_TYPE_GENERIC,0);
+            {std::lock_guard<std::mutex> guard(authMutex);clientToken.clear();}
+            selectedMonitorId.store(0);
+            settingsAssignmentLocked=false;
+            if(keyboardHook)removeKeyboardHook();
         }
     }
-    setDlgUtf8Text(dlg,SETTINGS_MONITOR_IP,selectedIP);
-}
-static void updateUnifiedAuthTab(HWND dlg) {
-    const bool signup=currentSignupTab(dlg);
-    for(int id:{AUTH_FULLNAME_LABEL,AUTH_FULLNAME,AUTH_CONFIRM_LABEL,AUTH_CONFIRM})
-        ShowWindow(GetDlgItem(dlg,id),signup?SW_SHOW:SW_HIDE);
-    setDlgUtf8Text(dlg,AUTH_SUBMIT,signup?"Sign Up":"Sign In");
-    SetWindowPos(GetDlgItem(dlg,AUTH_USER),nullptr,108,signup?268:248,310,25,SWP_NOZORDER);
-    SetWindowPos(GetDlgItem(dlg,4407),nullptr,13,signup?272:252,94,20,SWP_NOZORDER);
-    SetWindowPos(GetDlgItem(dlg,AUTH_PASS),nullptr,108,signup?302:285,310,25,SWP_NOZORDER);
-    SetWindowPos(GetDlgItem(dlg,4408),nullptr,13,signup?305:289,95,20,SWP_NOZORDER);
-    HWND focus=GetDlgItem(dlg,signup?AUTH_FULLNAME:AUTH_USER);
-    if(focus)SetFocus(focus);
+    int selected=-1;
+    for(const auto& m:settingsMonitors){
+        const int id=m.get("id",0).asInt();
+        const std::string label=m.get("name","Monitor").asString()+" | "+
+            m.get("platform","-").asString()+" | "+m.get("type","desktop").asString()+
+            " | "+m.get("ip_address","-").asString();
+        const std::wstring wide=utf8ToWide(label);
+        const int ix=(int)SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)wide.c_str());
+        SendMessageW(selector,CB_SETITEMDATA,ix,id);
+        if(id==selectedMonitorId.load())selected=ix;
+    }
+    SendMessageW(selector,CB_SETCURSEL,selected<0?0:selected,0);
+    changeMonitorFields(dlg);
+    const int index=(int)SendMessageW(selector,CB_GETCURSEL,0,0);
+    const int id=index<0?0:(int)SendMessageW(selector,CB_GETITEMDATA,index,0);
+    std::string ip="—";
+    for(const auto& m:settingsMonitors)
+        if(m.get("id",0).asInt()==id){ip=m.get("ip_address","—").asString();break;}
+    setDlgUtf8Text(dlg,SETTINGS_MONITOR_IP,ip);
 }
 static void updateUnifiedVisibility(HWND dlg) {
-    const bool signedIn=!getClientToken().empty();
-    const int monitorIds[]={
+    const bool enrolled=!getClientToken().empty()&&selectedMonitorId.load()>0;
+    const int monitorControls[] = {
         SETTINGS_MONITOR_HEADING,SETTINGS_MONITOR_DIVIDER,SETTINGS_MONITOR,
         SETTINGS_LABEL,SETTINGS_OS,SETTINGS_MACHINE,SETTINGS_MONITOR_IP,
-        SETTINGS_REMARK,SETTINGS_SAVE,
-        4400,4401,4402,4403,4404,4405
+        SETTINGS_REMARK,4400,4401,4402,4403,4404,4405
     };
-    for(int id:monitorIds) {
+    for(int id:monitorControls)ShowWindow(GetDlgItem(dlg,id),enrolled?SW_SHOW:SW_HIDE);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_PAIR_CODE),enrolled?SW_HIDE:SW_SHOW);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_PAIR),enrolled?SW_HIDE:SW_SHOW);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_NEW_USER),enrolled?SW_HIDE:SW_SHOW);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_SWITCH),enrolled?SW_SHOW:SW_HIDE);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),enrolled?SW_SHOW:SW_HIDE);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_USER_NO),!enrolled||!settingsAssignmentLocked);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_SWITCH),!settingsAssignmentLocked);
+    setDlgUtf8Text(dlg,SETTINGS_NOTICE,
+       !enrolled?"Select User No and enter the one-time pairing code from your administrator."
+       :settingsAssignmentLocked?
+         "User assignment is locked. Ask your administrator to edit this monitor."
+         :"This device is paired. You may change User No while unlocked.");
+    setDlgUtf8Text(dlg,SETTINGS_SAVE,enrolled?"Save Monitor":"Save Server");
+    setDlgUtf8Text(dlg,SETTINGS_CONNECTION,
+        connectionStatus.serverConnected&&enrolled?"● Connected and active":"● Offline / Not configured");
+    ShowWindow(GetDlgItem(dlg,SETTINGS_NOTIFY),SW_SHOW);
+    for(int id:monitorControls){
         HWND child=GetDlgItem(dlg,id);
         if(!child)continue;
-        ShowWindow(child,signedIn?SW_SHOW:SW_HIDE);
     }
-    // Notification preference is a global setting, not a monitor-only setting.
-    ShowWindow(GetDlgItem(dlg,SETTINGS_NOTIFY),SW_SHOW);
-    const int authControlIds[] = {
-        AUTH_TABS, AUTH_USER, AUTH_PASS, AUTH_CONFIRM, AUTH_FULLNAME,
-        AUTH_CONFIRM_LABEL, AUTH_FULLNAME_LABEL, AUTH_SUBMIT, 4407, 4408
-    };
-    for (int id : authControlIds)
-        ShowWindow(GetDlgItem(dlg,id),signedIn?SW_HIDE:SW_SHOW);
-    if(!signedIn)updateUnifiedAuthTab(dlg);
-    ShowWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),signedIn?SW_SHOW:SW_HIDE);
-    ShowWindow(GetDlgItem(dlg,SETTINGS_USER),signedIn?SW_SHOW:SW_HIDE);
-    setDlgUtf8Text(dlg,SETTINGS_USER,signedIn?"Signed in: "+signedInUsername:"");
-    // The connection status is always visible (notifications control affects toasts only).
-    setDlgUtf8Text(dlg,SETTINGS_CONNECTION,
-        connectionStatus.serverConnected&&signedIn&&selectedMonitorId.load()>0
-            ? "● Connected and active" : "● Offline / Not configured");
-    // Collapse the account inputs after signing in; pull monitor settings up.
-    const int offset=signedIn?137:0;
-    const int idsAndY[][2]={
-        {SETTINGS_MONITOR_HEADING,395},{SETTINGS_MONITOR_DIVIDER,384},
-        {SETTINGS_MONITOR,422},{SETTINGS_LABEL,455},{SETTINGS_OS,488},
-        {SETTINGS_MACHINE,521},{SETTINGS_MONITOR_IP,554},
-        {SETTINGS_REMARK,586},{SETTINGS_NOTIFY,617},{SETTINGS_SAVE,657},
-        {4400,422},{4401,455},{4402,488},{4403,521},{4404,554},{4405,586}
-    };
-    for(const auto& element:idsAndY) {
-        HWND child=GetDlgItem(dlg,element[0]);if(!child)continue;
-        RECT rect{};GetWindowRect(child,&rect);
-        POINT origin={rect.left,rect.top};ScreenToClient(dlg,&origin);
-        SetWindowPos(child,nullptr,origin.x,element[1]-offset,0,0,
-                     SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
+    if(enrolled){
+        SetWindowPos(GetDlgItem(dlg,SETTINGS_NOTIFY),nullptr,108,620,0,0,SWP_NOZORDER|SWP_NOSIZE);
+        SetWindowPos(GetDlgItem(dlg,SETTINGS_SAVE),nullptr,225,655,0,0,SWP_NOZORDER|SWP_NOSIZE);
+        SetWindowPos(GetDlgItem(dlg,SETTINGS_CLOSE),nullptr,332,655,0,0,SWP_NOZORDER|SWP_NOSIZE);
+    }else{
+        SetWindowPos(GetDlgItem(dlg,SETTINGS_NOTIFY),nullptr,108,370,0,0,SWP_NOZORDER|SWP_NOSIZE);
+        SetWindowPos(GetDlgItem(dlg,SETTINGS_SAVE),nullptr,225,405,0,0,SWP_NOZORDER|SWP_NOSIZE);
+        SetWindowPos(GetDlgItem(dlg,SETTINGS_CLOSE),nullptr,332,405,0,0,SWP_NOZORDER|SWP_NOSIZE);
     }
-    if(!signedIn){
-        HWND notify=GetDlgItem(dlg,SETTINGS_NOTIFY);
-        if(notify)SetWindowPos(notify,nullptr,108,394,0,0,
-            SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
-    }
-    HWND close=GetDlgItem(dlg,SETTINGS_CLOSE);
-    if(close)SetWindowPos(close,nullptr,331,signedIn?520:432,88,30,SWP_NOZORDER);
-    SetWindowPos(dlg,nullptr,0,0,474,signedIn?590:500,
-                 SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
+    SetWindowPos(dlg,nullptr,0,0,465,enrolled?745:495,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
 }
 static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp) {
-    switch(msg){
+    switch(msg) {
     case WM_INITDIALOG:{
         activeSettingsWindow=dlg;
-        setWindowUtf8Text(dlg,"MonitorClient v1.4 — Settings");
+        setWindowUtf8Text(dlg,"MonitorClient v1.5 — Settings");
         HWND logo=addControl(dlg,"STATIC","",SS_ICON,13,10,38,38,4500);
         SendMessageW(logo,STM_SETIMAGE,IMAGE_ICON,(LPARAM)LoadIconW(GetModuleHandleW(nullptr),MAKEINTRESOURCEW(1)));
         if(SendMessageW(logo,STM_GETIMAGE,IMAGE_ICON,0)==0)
             SendMessageW(logo,STM_SETIMAGE,IMAGE_ICON,(LPARAM)LoadIconW(nullptr,IDI_APPLICATION));
         addControl(dlg,"STATIC","MonitorClient",0,62,12,260,21,4501);
-        addControl(dlg,"STATIC","v1.4",0,62,33,90,19,4502);
-        addControl(dlg,"STATIC","Server Settings",0,13,57,150,22,4503);
+        addControl(dlg,"STATIC","v1.5",0,62,33,90,19,4502);
+        addControl(dlg,"STATIC","Server Settings",0,13,57,180,22,4503);
         addControl(dlg,"STATIC","Server IP",0,13,85,91,20,4504);
-        addControl(dlg,"EDIT",serverIP.c_str(),WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,
-                  108,82,310,25,SETTINGS_IP);
+        addControl(dlg,"EDIT",serverIP.c_str(),WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,82,310,25,SETTINGS_IP);
         addControl(dlg,"STATIC","Port",0,13,118,91,20,4505);
-        addControl(dlg,"EDIT",serverPort.c_str(),WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,
-                  108,115,310,25,SETTINGS_PORT);
+        addControl(dlg,"EDIT",serverPort.c_str(),WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,115,310,25,SETTINGS_PORT);
         addControl(dlg,"BUTTON","Test Connection",WS_TABSTOP,108,148,132,27,SETTINGS_TEST);
-        addControl(dlg,"STATIC","● Offline / Not configured",0,246,152,172,21,SETTINGS_CONNECTION);
+        addControl(dlg,"STATIC","● Not tested",0,245,152,173,21,SETTINGS_CONNECTION);
         addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,181,405,2,4506);
-        addControl(dlg,"STATIC","User Settings",0,13,190,150,21,SETTINGS_USER_HEADING);
-        addControl(dlg,"STATIC","",0,108,216,204,23,SETTINGS_USER);
-        addControl(dlg,"BUTTON","Log Out",WS_TABSTOP,322,216,96,27,SETTINGS_LOGOUT);
-        HWND tabs=addControl(dlg,WC_TABCONTROLA,"",WS_TABSTOP,108,215,310,27,AUTH_TABS);
-        TCITEMW item{};item.mask=TCIF_TEXT;
-        item.pszText=const_cast<wchar_t*>(L"Sign In");
-        SendMessageW(tabs,TCM_INSERTITEMW,0,reinterpret_cast<LPARAM>(&item));
-        item.pszText=const_cast<wchar_t*>(L"Sign Up");
-        SendMessageW(tabs,TCM_INSERTITEMW,1,reinterpret_cast<LPARAM>(&item));
-        addControl(dlg,"STATIC","Full Name",0,13,239,91,20,AUTH_FULLNAME_LABEL);
-        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,
-                   108,236,310,25,AUTH_FULLNAME);
-        addControl(dlg,"STATIC","Username / Email",0,13,272,94,20,4407);
-        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,
-                   108,268,310,25,AUTH_USER);
-        addControl(dlg,"STATIC","Password",0,13,305,95,20,4408);
-        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_PASSWORD|ES_AUTOHSCROLL,
-                   108,302,310,25,AUTH_PASS);
-        addControl(dlg,"STATIC","Confirm",0,13,338,91,20,AUTH_CONFIRM_LABEL);
-        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_PASSWORD|ES_AUTOHSCROLL,
-                   108,335,310,25,AUTH_CONFIRM);
-        addControl(dlg,"BUTTON","Sign In",WS_TABSTOP|BS_DEFPUSHBUTTON,
-                   322,363,96,29,AUTH_SUBMIT);
-        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,384,405,2,SETTINGS_MONITOR_DIVIDER);
-        addControl(dlg,"STATIC","Monitor Settings",0,13,395,180,23,SETTINGS_MONITOR_HEADING);
-        addControl(dlg,"STATIC","Monitor",0,13,422,90,21,4400);
-        addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,
-                   108,422,310,180,SETTINGS_MONITOR);
-        addControl(dlg,"STATIC","Label",0,13,455,90,21,4401);
-        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,
-                   108,455,310,25,SETTINGS_LABEL);
-        addControl(dlg,"STATIC","OS",0,13,488,90,21,4402);
-        HWND os=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,
-                   108,488,310,110,SETTINGS_OS);
-        for(const wchar_t* label:{L"Windows",L"Mac",L"Ubuntu"})
-            SendMessageW(os,CB_ADDSTRING,0,(LPARAM)label);
-        addControl(dlg,"STATIC","Machine",0,13,521,90,21,4403);
-        HWND machine=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,
-                   108,521,310,90,SETTINGS_MACHINE);
-        for(const wchar_t* label:{L"Laptop",L"Desktop"})
-            SendMessageW(machine,CB_ADDSTRING,0,(LPARAM)label);
-        addControl(dlg,"STATIC","IP address",0,13,554,90,21,4404);
-        addControl(dlg,"STATIC","—",0,108,554,310,21,SETTINGS_MONITOR_IP);
-        addControl(dlg,"STATIC","Remark",0,13,586,90,21,4405);
-        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,
-                   108,586,310,25,SETTINGS_REMARK);
-        addControl(dlg,"BUTTON","Show status notifications",BS_AUTOCHECKBOX|WS_TABSTOP,
-                   108,617,250,24,SETTINGS_NOTIFY);
+        addControl(dlg,"STATIC","User Selection",0,13,190,190,21,SETTINGS_USER_HEADING);
+        addControl(dlg,"STATIC","User No",0,13,223,90,20,SETTINGS_USER);
+        addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,220,310,250,SETTINGS_USER_NO);
+        addControl(dlg,"STATIC","Pairing code",0,13,261,91,20,SETTINGS_NEW_USER);
+        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,258,310,25,SETTINGS_PAIR_CODE);
+        addControl(dlg,"BUTTON","Pair Device",WS_TABSTOP,108,293,130,29,SETTINGS_PAIR);
+        addControl(dlg,"BUTTON","Change User No",WS_TABSTOP,108,293,140,29,SETTINGS_SWITCH);
+        addControl(dlg,"BUTTON","Disconnect Device",WS_TABSTOP,258,293,160,29,SETTINGS_LOGOUT);
+        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,336,405,2,4507);
+        addControl(dlg,"STATIC","",0,13,347,405,28,SETTINGS_NOTICE);
+        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,385,405,2,SETTINGS_MONITOR_DIVIDER);
+        addControl(dlg,"STATIC","Monitor Settings",0,13,394,180,23,SETTINGS_MONITOR_HEADING);
+        addControl(dlg,"STATIC","Monitor",0,13,423,90,21,4400);
+        addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,421,310,220,SETTINGS_MONITOR);
+        addControl(dlg,"STATIC","Label",0,13,458,90,21,4401);
+        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,455,310,25,SETTINGS_LABEL);
+        addControl(dlg,"STATIC","OS",0,13,491,90,21,4402);
+        HWND os=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,488,310,120,SETTINGS_OS);
+        for(const wchar_t* name:{L"Windows",L"Mac",L"Ubuntu"})SendMessageW(os,CB_ADDSTRING,0,(LPARAM)name);
+        addControl(dlg,"STATIC","Machine",0,13,524,90,21,4403);
+        HWND machine=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,521,310,110,SETTINGS_MACHINE);
+        for(const wchar_t* name:{L"Laptop",L"Desktop"})SendMessageW(machine,CB_ADDSTRING,0,(LPARAM)name);
+        addControl(dlg,"STATIC","IP address",0,13,557,90,21,4404);
+        addControl(dlg,"STATIC","—",0,108,557,310,21,SETTINGS_MONITOR_IP);
+        addControl(dlg,"STATIC","Remark",0,13,590,90,21,4405);
+        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,587,310,25,SETTINGS_REMARK);
+        addControl(dlg,"BUTTON","Show status notifications",BS_AUTOCHECKBOX|WS_TABSTOP,108,620,250,24,SETTINGS_NOTIFY);
         CheckDlgButton(dlg,SETTINGS_NOTIFY,notificationsEnabled?BST_CHECKED:BST_UNCHECKED);
-        addControl(dlg,"BUTTON","Save",WS_TABSTOP|BS_DEFPUSHBUTTON,
-                   222,657,96,30,SETTINGS_SAVE);
-        addControl(dlg,"BUTTON","Close",WS_TABSTOP,331,657,88,30,SETTINGS_CLOSE);
+        addControl(dlg,"BUTTON","Save Monitor",WS_TABSTOP|BS_DEFPUSHBUTTON,225,655,96,30,SETTINGS_SAVE);
+        addControl(dlg,"BUTTON","Close",WS_TABSTOP,332,655,86,30,SETTINGS_CLOSE);
+        loadUserDirectory(dlg);
         refreshUnifiedMonitors(dlg);
         updateUnifiedVisibility(dlg);
         return TRUE;
@@ -2196,148 +2184,125 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
     case WM_DESTROY:
         if(activeSettingsWindow==dlg)activeSettingsWindow=nullptr;
         return TRUE;
-    case WM_NOTIFY:
-        if(((NMHDR*)lp)->idFrom==AUTH_TABS && ((NMHDR*)lp)->code==TCN_SELCHANGE){
-            updateUnifiedAuthTab(dlg);
-            return TRUE;
-        }
-        return FALSE;
     case WM_APP+0x143:
         EnableWindow(GetDlgItem(dlg,SETTINGS_TEST),TRUE);
-        setDlgUtf8Text(dlg,SETTINGS_CONNECTION,wp?"● Server reachable":"● Could not reach server");
+        setDlgUtf8Text(dlg,SETTINGS_CONNECTION,wp?"● Server reachable":"● Server unavailable");
         return TRUE;
     case WM_COMMAND:{
         const int id=LOWORD(wp);
-        if(id==IDCANCEL||id==SETTINGS_CLOSE){
+        if(id==SETTINGS_CLOSE||id==IDCANCEL){
             notificationsEnabled=IsDlgButtonChecked(dlg,SETTINGS_NOTIFY)==BST_CHECKED;
             saveClientSetting("Client","notifications",notificationsEnabled?"1":"0");
-            EndDialog(dlg,IDCANCEL);
-            return TRUE;
+            EndDialog(dlg,IDCANCEL);return TRUE;
         }
         if(id==SETTINGS_TEST){
             const std::string host=editText(dlg,SETTINGS_IP),port=editText(dlg,SETTINGS_PORT);
-            if(host.empty()||host.find_first_of(" /\\\r\n\t")!=std::string::npos||
-               port.empty()||port.find_first_not_of("0123456789")!=std::string::npos||
-               port.size()>5||std::atoi(port.c_str())<1||std::atoi(port.c_str())>65535){
-                showUtf8Message(dlg,"Enter a server address and numeric port.","Test Connection",MB_OK|MB_ICONWARNING);
+            if(host.empty()||port.empty()||port.find_first_not_of("0123456789")!=std::string::npos){
+                showUtf8Message(dlg,"Enter a server IP and numeric port.","Test Connection",MB_OK|MB_ICONWARNING);
                 return TRUE;
             }
             EnableWindow(GetDlgItem(dlg,SETTINGS_TEST),FALSE);
             setDlgUtf8Text(dlg,SETTINGS_CONNECTION,"● Testing...");
-            std::thread([dlg,host,port](){
+            std::thread([dlg,host,port]{
                 const bool ok=testServerAddress(host,port);
                 if(IsWindow(dlg))PostMessageW(dlg,WM_APP+0x143,ok?1:0,0);
             }).detach();
             return TRUE;
         }
-        if(id==SETTINGS_MONITOR && HIWORD(wp)==CBN_SELCHANGE){
+        if(id==SETTINGS_MONITOR&&HIWORD(wp)==CBN_SELCHANGE){
             changeMonitorFields(dlg);
-            const int idx=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
-            const int monId=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,idx,0);
-            std::string ip="New monitor";
-            for(const auto& m:settingsMonitors)if(m.get("id",0).asInt()==monId){
-                ip=m.get("ip_address","—").asString();break;
-            }
+            const int ix=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
+            const int chosen=ix<0?0:(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,ix,0);
+            std::string ip="—";
+            for(const auto& item:settingsMonitors)
+                if(item.get("id",0).asInt()==chosen){ip=item.get("ip_address","—").asString();break;}
             setDlgUtf8Text(dlg,SETTINGS_MONITOR_IP,ip);
             return TRUE;
         }
+        if(id==SETTINGS_PAIR){
+            if(!applyUnifiedServer(dlg)){updateUnifiedVisibility(dlg);return TRUE;}
+            Json::Value request;request["action"]="enroll";
+            request["user_no"]=selectedUserNo(dlg);
+            request["pairing_code"]=editText(dlg,SETTINGS_PAIR_CODE);
+            const Json::Value response=callClientAuth(request);
+            if(!response.get("success",false).asBool()){
+                showUtf8Message(dlg,response.get("error","Pairing failed. Ask administrator for a new code.").asString(),
+                    "Pair Device",MB_OK|MB_ICONWARNING);
+                return TRUE;
+            }
+            const std::string token=response.get("token","").asString();
+            const int monId=response.get("monitor_id",0).asInt();
+            if(token.size()!=64||monId<1){
+                showUtf8Message(dlg,"Server returned invalid pairing details.","Pair Device",MB_OK|MB_ICONERROR);return TRUE;
+            }
+            {std::lock_guard<std::mutex> lock(authMutex);clientToken=token;}
+            selectedMonitorId.store(monId);
+            signedInUsername=selectedUserNo(dlg);
+            rememberClientToken(token);
+            setDlgUtf8Text(dlg,SETTINGS_PAIR_CODE,"");
+            refreshUnifiedMonitors(dlg);
+            updateUnifiedVisibility(dlg);
+            if(!keyboardHook)setupKeyboardHook();
+            if(!usbMonitoringActive)setupUSBMONITORING();
+            updateTrayIcon();
+            return TRUE;
+        }
+        if(id==SETTINGS_SWITCH){
+            if(!applyUnifiedServer(dlg)){updateUnifiedVisibility(dlg);return TRUE;}
+            Json::Value request;request["action"]="switch_user";request["user_no"]=selectedUserNo(dlg);
+            const Json::Value result=callClientAuth(request);
+            if(!result.get("success",false).asBool()){
+                showUtf8Message(dlg,result.get("error","Ask your administrator to edit this monitor.").asString(),
+                    "User No",MB_OK|MB_ICONWARNING);
+                refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);return TRUE;
+            }
+            const std::string token=result.get("token","").asString();
+            if(token.size()!=64)return TRUE;
+            {std::lock_guard<std::mutex> lock(authMutex);clientToken=token;}
+            rememberClientToken(token);
+            refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);
+            updateTrayIcon();return TRUE;
+        }
         if(id==SETTINGS_LOGOUT){
             if(!getClientToken().empty()){
-                Json::Value logout;logout["action"]="logout";callClientAuth(logout);
+                Json::Value req;req["action"]="logout";callClientAuth(req);
             }
             const std::string target=credentialTarget();
             CredDeleteA(target.c_str(),CRED_TYPE_GENERIC,0);
             {std::lock_guard<std::mutex> lock(authMutex);clientToken.clear();}
             selectedMonitorId.store(0);
             signedInUsername.clear();
+            settingsAssignmentLocked=false;
             if(keyboardHook)removeKeyboardHook();
             connectionStatus.serverConnected=false;
-            updateTrayIcon();
-            updateUnifiedVisibility(dlg);
-            return TRUE;
-        }
-        if(id==AUTH_SUBMIT){
-            if(!applyUnifiedServer(dlg)){
-                updateUnifiedVisibility(dlg);
-                return TRUE;
-            }
-            Json::Value request;
-            const std::string name=editText(dlg,AUTH_USER),pass=editText(dlg,AUTH_PASS);
-            if(currentSignupTab(dlg)){
-                const std::string confirm=editText(dlg,AUTH_CONFIRM);
-                if(pass!=confirm){showUtf8Message(dlg,"Passwords do not match.","Sign Up",MB_OK|MB_ICONWARNING);return TRUE;}
-                request["action"]="signup";
-                request["username"]=name;
-                request["full_name"]=editText(dlg,AUTH_FULLNAME);
-                request["password"]=pass;
-                request["confirm_password"]=confirm;
-                const Json::Value answer=callClientAuth(request);
-                setDlgUtf8Text(dlg,AUTH_PASS,"");setDlgUtf8Text(dlg,AUTH_CONFIRM,"");
-                if(answer.get("success",false).asBool()){
-                    showUtf8Message(dlg,"Account created. Sign in to continue.","Sign Up",MB_OK|MB_ICONINFORMATION);
-                    TabCtrl_SetCurSel(GetDlgItem(dlg,AUTH_TABS),0);updateUnifiedAuthTab(dlg);
-                }else{
-                    showUtf8Message(dlg,answer.get("code","").asString()=="username_exists"
-                       ?"Username exists. Please sign in instead."
-                       :answer.get("error","Registration failed.").asString(),
-                       "Sign Up",MB_OK|MB_ICONWARNING);
-                }
-                return TRUE;
-            }
-            request["action"]="login";request["identifier"]=name;request["password"]=pass;
-            const Json::Value answer=callClientAuth(request);
-            setDlgUtf8Text(dlg,AUTH_PASS,"");
-            if(!answer.get("success",false).asBool()){
-                showUtf8Message(dlg,answer.get("error",
-                  "Sign in failed. Ask the administrator to reset your password.").asString(),
-                  "Sign In",MB_OK|MB_ICONWARNING);
-                return TRUE;
-            }
-            const std::string token=answer.get("token","").asString();
-            if(token.size()!=64)return TRUE;
-            {std::lock_guard<std::mutex> lock(authMutex);clientToken=token;}
-            signedInUsername=answer["user"].get("username",name).asString();
-            selectedMonitorId.store(0);
-            rememberClientToken(token);
-            refreshUnifiedMonitors(dlg);
-            updateUnifiedVisibility(dlg);
-            updateTrayIcon();
-            return TRUE;
+            refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);
+            updateTrayIcon();return TRUE;
         }
         if(id==SETTINGS_SAVE){
             if(!applyUnifiedServer(dlg)){updateUnifiedVisibility(dlg);return TRUE;}
             notificationsEnabled=IsDlgButtonChecked(dlg,SETTINGS_NOTIFY)==BST_CHECKED;
             saveClientSetting("Client","notifications",notificationsEnabled?"1":"0");
             if(getClientToken().empty()){updateUnifiedVisibility(dlg);return TRUE;}
-            const int idx=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
-            const int monitorId=idx>=0?(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,idx,0):0;
-            Json::Value req;
-            req["action"]=monitorId>0?"save_monitor":"request_monitor";
-            req["monitor_id"]=monitorId;
-            req["label"]=editText(dlg,SETTINGS_LABEL);
-            req["remark"]=editText(dlg,SETTINGS_REMARK);
+            const int ix=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
+            const int chosen=ix<0?0:(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,ix,0);
+            if(chosen!=selectedMonitorId.load()||chosen<1){
+                showUtf8Message(dlg,"This device is paired to another monitor. Ask administrator for a pairing code.",
+                    "Monitor Settings",MB_OK|MB_ICONWARNING);
+                return TRUE;
+            }
+            Json::Value req;req["action"]="save_monitor";req["monitor_id"]=chosen;
+            req["label"]=editText(dlg,SETTINGS_LABEL);req["remark"]=editText(dlg,SETTINGS_REMARK);
             const int osi=(int)SendDlgItemMessageW(dlg,SETTINGS_OS,CB_GETCURSEL,0,0);
             const int type=(int)SendDlgItemMessageW(dlg,SETTINGS_MACHINE,CB_GETCURSEL,0,0);
             req["os"]=osi==1?"Mac":osi==2?"Ubuntu":"Windows";
             req["machine"]=type==1?"desktop":"laptop";
-            const Json::Value saved=callClientAuth(req);
-            if(!saved.get("success",false).asBool()){
-                showUtf8Message(dlg,saved.get("error","Could not save monitor settings.").asString(),
-                    "Monitor Settings",MB_OK|MB_ICONERROR);
-                return TRUE;
+            const Json::Value result=callClientAuth(req);
+            if(!result.get("success",false).asBool()){
+                showUtf8Message(dlg,result.get("error","Could not save monitor.").asString(),
+                    "Monitor Settings",MB_OK|MB_ICONERROR);return TRUE;
             }
-            const int chosen=monitorId>0?monitorId:saved.get("monitor_id",0).asInt();
-            if(chosen<1)return TRUE;
-            Json::Value select;select["action"]="select";select["monitor_id"]=chosen;
-            if(!callClientAuth(select).get("success",false).asBool())return TRUE;
-            selectedMonitorId.store(chosen);
-            if(!keyboardHook)setupKeyboardHook();
-            if(!usbMonitoringActive)setupUSBMONITORING();
-            refreshUnifiedMonitors(dlg);
-            updateUnifiedVisibility(dlg);
-            updateTrayIcon();
-            EndDialog(dlg,IDOK);
-            return TRUE;
+            refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);
+            EndDialog(dlg,IDOK);return TRUE;
         }
         break;
     }
@@ -2345,16 +2310,15 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
     return FALSE;
 }
 bool showMonitorSettings() {
-    if(activeSettingsWindow && IsWindow(activeSettingsWindow)){
+    if(activeSettingsWindow&&IsWindow(activeSettingsWindow)){
         ShowWindow(activeSettingsWindow,SW_RESTORE);
         SetForegroundWindow(activeSettingsWindow);
         BringWindowToTop(activeSettingsWindow);
         return true;
     }
-    const bool success=runDialog(settingsDialogProc,430)==IDOK;
-    updateTrayIcon();
-    updateTrayMenu();
-    return success;
+    const bool accepted=runDialog(settingsDialogProc,450)==IDOK;
+    updateTrayIcon();updateTrayMenu();
+    return accepted;
 }
 
 // Main function
