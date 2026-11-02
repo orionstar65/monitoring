@@ -326,6 +326,7 @@ void ConfigDialog::updateUI(){
     monitorGroup->setVisible(enrolled);
     pairButton->setVisible(!enrolled);
     logoutButton->setVisible(enrolled);
+    logoutButton->setEnabled(enrolled&&!assignmentLocked);
     switchButton->setVisible(enrolled);
     userSelector->setEnabled(!enrolled||!assignmentLocked);
     switchButton->setEnabled(enrolled&&!assignmentLocked);
@@ -371,6 +372,10 @@ void ConfigDialog::onSwitchClicked(){
     emit sessionStateChanged();
 }
 void ConfigDialog::onLogoutClicked(){
+    if(assignmentLocked){
+        QMessageBox::warning(this,"Assignment locked","Ask your administrator to edit this monitor.");
+        return;
+    }
     QSettings previous(settingsPath(),QSettings::IniFormat);
     const QString oldHost=previous.value("Server/ip","192.168.1.45").toString();
     const int oldPort=previous.value("Server/port",8924).toInt();
