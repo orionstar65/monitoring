@@ -41,9 +41,16 @@ try {
     }
     // Public directory reveals user numbers only. No names, email or monitor data.
     if($action==='directory'){
-        $st=$db->prepare("SELECT user_no FROM users WHERE role IN ('user','viewer') AND user_no IS NOT NULL ORDER BY user_no LIMIT 10000");
+        $st=$db->prepare("SELECT u.user_no,u.name,
+               (SELECT m.ip_address FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id ORDER BY m.id LIMIT 1) AS ip_address
+               FROM users u WHERE u.role IN ('user','viewer') AND u.user_no IS NOT NULL
+               ORDER BY u.user_no LIMIT 10000");
         $st->execute();$rows=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
-        echo json_encode(['success'=>true,'users'=>array_map(static fn($u)=>['user_no'=>(string)$u['user_no']],$rows)]);exit;
+        echo json_encode(['success'=>true,'users'=>array_map(static fn($u)=>[
+            'user_no'=>(string)$u['user_no'],
+            'full_name'=>(string)$u['name'],
+            'ip_address'=>(string)($u['ip_address']??'—')
+        ],$rows)]);exit;
     }
     // User No selection registers a monitor-bound device session. The server issues
     // a monitor-bound session; the client cannot choose another user's monitor.
@@ -111,7 +118,7 @@ try {
         }catch(Throwable $failure){$db->rollback();throw $failure;}
     }
     if($action==='restore'){
-        $st=$db->prepare('SELECT id,name,username,user_no FROM users WHERE id=?');
+        $st=$db->prepare('SELECT id,name,user_no FROM users WHERE id=?');
         $st->bind_param('i',$userId);$st->execute();$user=$st->get_result()->fetch_assoc();$st->close();
         $st=$db->prepare('SELECT id,name,ip_address,platform,type,remark,assignment_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY name,id');
         $st->bind_param('i',$userId);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
