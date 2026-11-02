@@ -212,6 +212,12 @@ private final class MonitorPickerCoordinator: NSObject {
 }
 
 
+private final class MonitorSettingsDocumentView: NSView {
+    // NSScrollView's unflipped document starts at its bottom, leaving a large
+    // blank strip above the first control. Pin settings content to the top.
+    override var isFlipped: Bool { true }
+}
+
 private final class UnifiedWindowActions: NSObject, NSWindowDelegate {
     weak var window: NSWindow?
     var handler: ((String) -> Void)?
@@ -2702,22 +2708,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
-        let document = NSView()
+        let document = MonitorSettingsDocumentView()
         document.translatesAutoresizingMaskIntoConstraints = false
         scroll.documentView = document
         window.contentView = scroll
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .centerX
-        stack.spacing = 14
+        stack.spacing = 10
         stack.translatesAutoresizingMaskIntoConstraints = false
         document.addSubview(stack)
         NSLayoutConstraint.activate([
             document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
-            stack.topAnchor.constraint(equalTo: document.topAnchor, constant: 16),
+            stack.topAnchor.constraint(equalTo: document.topAnchor, constant: 8),
             stack.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 20),
             stack.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -20),
-            document.bottomAnchor.constraint(equalTo: stack.bottomAnchor, constant: 20)
+            document.bottomAnchor.constraint(equalTo: stack.bottomAnchor, constant: 12)
         ])
         func text(_ value: String, bold: Bool = false) -> NSTextField {
             let field = NSTextField(labelWithString: value)
@@ -2728,7 +2734,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let field = NSTextField()
             field.placeholderString = placeholder
             field.stringValue = value
-            field.widthAnchor.constraint(equalToConstant: 290).isActive = true
+            field.widthAnchor.constraint(equalToConstant: 330).isActive = true
             return field
         }
         func section(_ title: String) -> NSStackView {
@@ -2742,7 +2748,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
         func line(_ title: String, _ control: NSView) -> NSStackView {
             let caption = text(title)
-            caption.widthAnchor.constraint(equalToConstant: 140).isActive = true
+            caption.widthAnchor.constraint(equalToConstant: 100).isActive = true
             let row = NSStackView(views: [caption, control])
             row.orientation = .horizontal
             row.alignment = .centerY
@@ -2796,11 +2802,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         userPane.spacing = 8
         userPane.widthAnchor.constraint(equalToConstant: 450).isActive = true
         let users = NSPopUpButton()
-        users.widthAnchor.constraint(equalToConstant: 290).isActive = true
+        users.widthAnchor.constraint(equalToConstant: 330).isActive = true
         let userRow = line("User:", users)
         userPane.addArrangedSubview(userRow)
         let unpair = action("Disconnect", "disconnect")
         userPane.addArrangedSubview(line("", unpair))
+        let directoryStatus = text("")
+        directoryStatus.textColor = .systemRed
+        directoryStatus.lineBreakMode = .byWordWrapping
+        directoryStatus.maximumNumberOfLines = 3
+        directoryStatus.widthAnchor.constraint(equalToConstant: 440).isActive = true
+        directoryStatus.isHidden = true
+        userPane.addArrangedSubview(directoryStatus)
         let notice = text("")
         notice.textColor = .secondaryLabelColor
         notice.lineBreakMode = .byWordWrapping
@@ -2812,16 +2825,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         let monitorPane = section("Monitor Settings")
         let picker = NSPopUpButton()
-        picker.widthAnchor.constraint(equalToConstant: 290).isActive = true
+        picker.widthAnchor.constraint(equalToConstant: 330).isActive = true
         let label = entry("Label")
         let remark = entry("Remark")
         let monitorIP = text("—")
         let os = NSPopUpButton()
         os.addItems(withTitles: ["Windows", "Mac", "Ubuntu"])
-        os.widthAnchor.constraint(equalToConstant: 290).isActive = true
+        os.widthAnchor.constraint(equalToConstant: 330).isActive = true
         let machine = NSPopUpButton()
         machine.addItems(withTitles: ["Laptop", "Desktop"])
-        machine.widthAnchor.constraint(equalToConstant: 290).isActive = true
+        machine.widthAnchor.constraint(equalToConstant: 330).isActive = true
         monitorPane.addArrangedSubview(line("Monitor", picker))
         monitorPane.addArrangedSubview(line("Label", label))
         monitorPane.addArrangedSubview(line("OS", os))
@@ -2856,6 +2869,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         var availableMonitors: [[String: Any]] = []
         var locked = false
+        var directoryError: String? = nil
         func updateMonitorFields() {
             let id = picker.selectedItem?.representedObject as? Int ?? 0
             guard let monitor = availableMonitors.first(where: { ($0["id"] as? Int) == id }) else {
@@ -2909,6 +2923,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
         func updateState() {
             users.toolTip = users.selectedItem?.title
+            directoryStatus.stringValue = directoryError ?? ""
+            directoryStatus.isHidden = directoryError == nil
             let enrolled = !self.clientToken.isEmpty && self.selectedMonitorId > 0
             monitorPane.isHidden = !enrolled
             unpair.isHidden = !enrolled
@@ -2953,13 +2969,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             alert.runModal()
         }
         func refreshUserDirectory() {
-            let previousNo = (users.selectedItem?.representedObject as? String)
-                ?? self.storage.string(forKey: "user_no") ?? ""
-            let directory = self.clientAuthRequest(["action":"directory"])
+            // Unauthenticated clients must explicitly choose a user. Do not
+            // visually preselect an identity that has no valid session.
+            let previousNo = self.clientToken.isEmpty ? "" :
+                (self.storage.string(forKey: "user_no") ?? "")
+            let response = self.clientAuthRequest(["action":"directory"])
+            let records = response?["users"] as? [[String: Any]] ?? []
+            if response?["success"] as? Bool != true {
+                directoryError = response?["error"] as? String ??
+                    "Cannot load users. Verify the server URL, TLS and enrollment configuration."
+            } else if records.isEmpty {
+                directoryError = "No users available. Add a User or Viewer in the web portal."
+            } else {
+                directoryError = nil
+            }
             users.removeAllItems()
             users.addItem(withTitle: "Select a user…")
             users.lastItem?.representedObject = ""
-            for record in directory?["users"] as? [[String: Any]] ?? [] {
+            for record in records {
                 let number = String(describing: record["user_no"] ?? "")
                 guard !number.isEmpty else { continue }
                 let name = record["full_name"] as? String ?? ""
@@ -2974,6 +3001,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             } else {
                 users.selectItem(at: 0)
             }
+            updateState()
         }
         coordinator.handler = { [weak self] command in
             guard let self = self else { return }
@@ -3098,6 +3126,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         refreshUserDirectory()
         refreshMonitors()
         updateState()
+        window.contentView?.layoutSubtreeIfNeeded()
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: 0))
+        scroll.reflectScrolledClipView(scroll.contentView)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         NSApp.runModal(for: window)
