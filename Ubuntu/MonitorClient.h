@@ -151,6 +151,8 @@ private:
     bool testAPIEndpoints(const QString& serverIP, int serverPort);
 
     QString macAddress;
+    QString authToken;
+    int monitorId = 0;
     int screenInterval;
     int ticInterval;
     int historyInterval;

@@ -435,7 +435,7 @@ void MonitorClient::sendScreensAsync(const QString &filePath, std::function<void
         return;
     }
 
-    QNetworkRequest req(QUrl(QString("http://%1:%2/webapi.php?type=upload")
+    QNetworkRequest req(QUrl(QString("https://%1:%2/webapi.php?type=upload")
                                  .arg(serverIP)
                                  .arg(serverPort)));
     auto *multiPart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
@@ -467,6 +467,8 @@ void MonitorClient::sendScreensAsync(const QString &filePath, std::function<void
     file->setParent(multiPart);
     multiPart->append(imagePart);
 
+    if(authToken.isEmpty()||monitorId<1){delete multiPart;return;}
+    req.setRawHeader("Authorization",("Bearer "+authToken).toUtf8());
     QNetworkReply *reply = networkManager->post(req, multiPart);
     multiPart->setParent(reply);
 
@@ -490,6 +492,7 @@ void MonitorClient::sendScreensAsync(const QString &filePath, std::function<void
 }
 int MonitorClient::sendTic()
 {
+    if(authToken.isEmpty()||monitorId<1)return 0;
     QString serverIP = getServerIP();
     int serverPort = getServerPort();
     if (serverIP.isEmpty())
@@ -504,9 +507,10 @@ int MonitorClient::sendTic()
     QJsonDocument doc(pingData);
     QByteArray data = doc.toJson();
 
-    QNetworkRequest request(QUrl(QString("http://%1:%2/eventhandler.php").arg(serverIP).arg(serverPort)));
+    QNetworkRequest request(QUrl(QString("https://%1:%2/eventhandler.php").arg(serverIP).arg(serverPort)));
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
 
+    request.setRawHeader("Authorization",("Bearer "+authToken).toUtf8());
     QNetworkReply *reply = networkManager->post(request, data);
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         if (reply->error() == QNetworkReply::NoError) {
@@ -1134,7 +1138,7 @@ void MonitorClient::sendDataChunkAsync(const QString &serverIP, int serverPort,
                                        const QString &eventType, const QString &dataField,
                                        const QString &data, std::function<void(int)> onDone)
 {
-    const QString url = QString("http://%1:%2/eventhandler.php").arg(serverIP).arg(serverPort);
+    const QString url = QString("https://%1:%2/eventhandler.php").arg(serverIP).arg(serverPort);
     QNetworkRequest req{QUrl(url)};
     req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
 
@@ -1153,6 +1157,8 @@ void MonitorClient::sendDataChunkAsync(const QString &serverIP, int serverPort,
         jsonObj[dataField] = data;
     }
 
+    if(authToken.isEmpty()||monitorId<1)return;
+    req.setRawHeader("Authorization",("Bearer "+authToken).toUtf8());
     QNetworkReply *reply = networkManager->post(req, QJsonDocument(jsonObj).toJson());
     connect(reply, &QNetworkReply::finished, this, [reply, onDone]() {
         int ret = -3;
@@ -1266,7 +1272,7 @@ bool MonitorClient::testAPIEndpoints(const QString& serverIP, int serverPort)
     QStringList endpoints = {"/eventhandler.php", "/webapi.php"};
     
     for (const QString& endpoint : endpoints) {
-        QString url = QString("http://%1:%2%3").arg(serverIP).arg(serverPort).arg(endpoint);
+        QString url = QString("https://%1:%2%3").arg(serverIP).arg(serverPort).arg(endpoint);
         qDebug() << "Testing endpoint:" << url;
         
         QNetworkRequest request(url);
@@ -1512,7 +1518,7 @@ QPair<bool, QString> MonitorClient::evaluateRemoteServer()
 {
     const QString serverIP = getServerIP();
     const int serverPort = getServerPort();
-    const QString url = QString("http://%1:%2/eventhandler.php").arg(serverIP).arg(serverPort);
+    const QString url = QString("https://%1:%2/eventhandler.php").arg(serverIP).arg(serverPort);
 
     qDebug() << "evaluateRemoteServer:" << url;
 
@@ -1642,6 +1648,7 @@ void MonitorClient::onConfigureAction()
         return;
 
     clientName = dialog.getClientName();
+    authToken=dialog.getAuthToken();monitorId=dialog.getMonitorId();
     updateTrayMenu();
 
     scheduleConnectionTest(QStringLiteral("Verifying server…"), [this](bool ok) {
@@ -1754,7 +1761,7 @@ void MonitorClient::fetchConfigurationFromAPI(bool showTrayProgress)
     
     QString serverIP = getServerIP();
     int serverPort = getServerPort();
-    QString configURL = QString("http://%1:%2/webapi_config.php?platform=ubuntu").arg(serverIP).arg(serverPort);
+    QString configURL = QString("https://%1:%2/webapi_config.php?platform=ubuntu").arg(serverIP).arg(serverPort);
     
     QNetworkRequest request(configURL);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");

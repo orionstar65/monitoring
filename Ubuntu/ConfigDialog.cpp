@@ -6,6 +6,11 @@
 #include <QApplication>
 #include <QStandardPaths>
 #include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QEventLoop>
+#include <QInputDialog>
 
 ConfigDialog::ConfigDialog(QWidget *parent)
     : QDialog(parent)
@@ -54,6 +59,18 @@ ConfigDialog::ConfigDialog(QWidget *parent)
 
     mainLayout->addWidget(serverGroup);
 
+    QGroupBox *authGroup=new QGroupBox("Sign in and select an assigned monitor");
+    QVBoxLayout *authLayout=new QVBoxLayout(authGroup);
+    loginEdit=new QLineEdit();loginEdit->setPlaceholderText("Email or username");
+    passwordEdit=new QLineEdit();passwordEdit->setEchoMode(QLineEdit::Password);passwordEdit->setPlaceholderText("Password");
+    monitorSelector=new QComboBox();monitorSelector->addItem("Sign in to load your monitors",0);
+    signInButton=new QPushButton("Sign in");
+    requestMonitorButton=new QPushButton("Request new monitor (admin approval)");
+    authLayout->addWidget(loginEdit);authLayout->addWidget(passwordEdit);
+    authLayout->addWidget(signInButton);authLayout->addWidget(monitorSelector);authLayout->addWidget(requestMonitorButton);
+    mainLayout->addWidget(authGroup);
+    connect(signInButton,&QPushButton::clicked,this,&ConfigDialog::onSignInClicked);
+    connect(requestMonitorButton,&QPushButton::clicked,this,&ConfigDialog::onRequestMonitorClicked);
     // Buttons
     QHBoxLayout *buttonLayout = new QHBoxLayout();
     saveButton = new QPushButton("Save");
@@ -149,6 +166,15 @@ void ConfigDialog::onSaveClicked()
         return;
     }
     
+    if (authToken.isEmpty() || monitorSelector->currentData().toInt()<1) {
+        QMessageBox::warning(this,"Sign in required","Sign in and select a monitor assigned to you.");return;
+    }
+    const int selected=monitorSelector->currentData().toInt();
+    QJsonObject response=authRequest(QJsonObject{{"action","select"},{"monitor_id",selected}},true);
+    if (!response.value("success").toBool()) {
+        QMessageBox::warning(this,"Monitor not assigned",response.value("error").toString("Selection failed"));return;
+    }
+    monitorId=selected;
     saveSettings();
     accept();
 }
@@ -174,3 +200,42 @@ void ConfigDialog::onTestConnectionClicked()
         QMessageBox::warning(this, "Error", "Connection test failed!\nPlease check server IP and port.");
     }
 } 
+QJsonObject ConfigDialog::authRequest(const QJsonObject &payload,bool authenticated)
+{
+    QNetworkAccessManager manager;
+    QNetworkRequest req(QUrl(QString("https://%1:%2/client_auth.php").arg(serverIPEdit->text()).arg(serverPortEdit->value())));
+    req.setHeader(QNetworkRequest::ContentTypeHeader,"application/json");
+    if(authenticated && !authToken.isEmpty())req.setRawHeader("Authorization",("Bearer "+authToken).toUtf8());
+    QNetworkReply *reply=manager.post(req,QJsonDocument(payload).toJson());
+    QEventLoop loop;QObject::connect(reply,&QNetworkReply::finished,&loop,&QEventLoop::quit);
+    loop.exec();
+    QJsonObject response=QJsonDocument::fromJson(reply->readAll()).object();
+    if(reply->error()!=QNetworkReply::NoError && !response.contains("error"))response["error"]=reply->errorString();
+    reply->deleteLater();return response;
+}
+void ConfigDialog::onSignInClicked()
+{
+    authToken.clear();monitorId=0;
+    QJsonObject response=authRequest(QJsonObject{{"action","login"},{"identifier",loginEdit->text().trimmed()},{"password",passwordEdit->text()}});
+    passwordEdit->clear();
+    if(!response.value("success").toBool()){
+        QMessageBox::warning(this,"Sign in failed",response.value("error").toString("Check server and credentials."));return;
+    }
+    authToken=response.value("token").toString();
+    monitorSelector->clear();
+    for(auto item:response.value("monitors").toArray()){
+        auto monitor=item.toObject();
+        monitorSelector->addItem(QString("%1 (#%2)").arg(monitor.value("name").toString()).arg(monitor.value("id").toInt()),
+                                 monitor.value("id").toInt());
+    }
+    if(monitorSelector->count()==0)monitorSelector->addItem("No assigned monitors — request one or contact admin",0);
+}
+void ConfigDialog::onRequestMonitorClicked()
+{
+    if(authToken.isEmpty()){QMessageBox::information(this,"Sign in first","Please sign in before requesting a monitor.");return;}
+    bool ok=false;const QString name=QInputDialog::getText(this,"Request monitor","Device name:",QLineEdit::Normal,QString(),&ok);
+    if(!ok||name.trimmed().isEmpty())return;
+    QJsonObject response=authRequest(QJsonObject{{"action","request_monitor"},{"name",name.trimmed()}},true);
+    QMessageBox::information(this,"Monitor request",response.value("success").toBool()
+        ?"Request submitted. Your admin must assign it before selection.":response.value("error").toString("Request failed"));
+}
