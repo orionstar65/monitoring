@@ -1850,7 +1850,7 @@ enum {
     SETTINGS_USER=4200,SETTINGS_IP=4201,SETTINGS_PORT=4202,
     SETTINGS_MONITOR=4203,SETTINGS_LABEL=4204,SETTINGS_OS=4205,
     SETTINGS_MACHINE=4206,SETTINGS_REMARK=4207,
-    SETTINGS_NOTIFY=4208,SETTINGS_SAVE=4209
+    SETTINGS_NOTIFY=4208,SETTINGS_SAVE=4209,SETTINGS_LOGOUT=4210
 };
 static HWND addControl(HWND parent,const char* cls,const char* label,DWORD style,
                        int x,int y,int width,int height,int id) {
@@ -2009,6 +2009,12 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"BUTTON","Show status notifications",BS_AUTOCHECKBOX|WS_TABSTOP,
             108,259,250,24,SETTINGS_NOTIFY);
         CheckDlgButton(dlg,SETTINGS_NOTIFY,notificationsEnabled?BST_CHECKED:BST_UNCHECKED);
+        addControl(dlg,"STATIC",
+            connectionStatus.serverConnected && selectedMonitorId.load()>0 && !getClientToken().empty()
+              ? "Status: Connected" : "Status: Offline / Sign in required",
+            0,108,285,210,18,0);
+        HWND logout=addControl(dlg,"BUTTON","Log Out",WS_TABSTOP,108,330,96,30,SETTINGS_LOGOUT);
+        EnableWindow(logout,!getClientToken().empty());
         addControl(dlg,"BUTTON","Save",BS_DEFPUSHBUTTON|WS_TABSTOP,
             214,294,104,30,SETTINGS_SAVE);
         addControl(dlg,"BUTTON","Cancel",WS_TABSTOP,330,294,88,30,IDCANCEL);
@@ -2020,7 +2026,10 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         int sel=-1,count=0;
         for(const auto &device:settingsMonitors) {
             int id=device.get("id",0).asInt();
-            std::string label=device.get("name","Monitor").asString()+" (#"+std::to_string(id)+")";
+            std::string label=device.get("name","Monitor").asString()
+                +" | "+device.get("platform","-").asString()
+                +" | "+device.get("type","desktop").asString()
+                +" | "+device.get("ip_address","-").asString();
             int pos=(int)SendMessageA(selector,CB_ADDSTRING,0,(LPARAM)label.c_str());
             SendMessageA(selector,CB_SETITEMDATA,pos,id);
             if(id==selectedMonitorId.load())sel=pos;
@@ -2036,6 +2045,20 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         if(LOWORD(wp)==IDCANCEL){EndDialog(dlg,IDCANCEL);return TRUE;}
         if(LOWORD(wp)==SETTINGS_MONITOR && HIWORD(wp)==CBN_SELCHANGE){
             changeMonitorFields(dlg);return TRUE;
+        }
+        if(LOWORD(wp)==SETTINGS_LOGOUT){
+            Json::Value logout;logout["action"]="logout";
+            if(!getClientToken().empty())callClientAuth(logout);
+            const std::string target=credentialTarget();
+            CredDeleteA(target.c_str(),CRED_TYPE_GENERIC,0);
+            {std::lock_guard<std::mutex> lock(authMutex);clientToken.clear();}
+            selectedMonitorId.store(0);
+            signedInUsername.clear();
+            if(keyboardHook)removeKeyboardHook();
+            updateTrayIcon();
+            EndDialog(dlg,IDCANCEL);
+            PostMessageA(hMainWindow,WM_COMMAND,MAKEWPARAM(ID_TRAY_SIGN_IN,0),0);
+            return TRUE;
         }
         if(LOWORD(wp)==SETTINGS_SAVE){
             std::string name=editText(dlg,SETTINGS_USER);
