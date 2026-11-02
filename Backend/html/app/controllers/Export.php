@@ -156,7 +156,7 @@ class Export extends Base {
             }
             
             // Get device info
-            $device = $this->db->fetchAll("SELECT * FROM tbl_monitor_ips WHERE id = :device_id", [':device_id' => $device_id]);
+            $device = $this->db->fetchAll("SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:device_id", [':device_id' => $device_id]);
             if (empty($device)) {
                 throw new Exception('Device not found');
             }
