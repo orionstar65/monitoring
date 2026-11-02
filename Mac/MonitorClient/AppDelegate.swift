@@ -211,6 +211,35 @@ private final class MonitorPickerCoordinator: NSObject {
     }
 }
 
+
+// Owns the account window's keyboard focus and Sign In / Sign Up tabs.
+private final class AccountModalActions: NSObject, NSTabViewDelegate, NSWindowDelegate {
+    weak var window: NSWindow?
+    weak var signInUsername: NSTextField?
+    weak var signUpFullName: NSTextField?
+    weak var primaryButton: NSButton?
+
+    @objc func submit(_ sender: Any?) {
+        NSApp.stopModal(withCode: .OK)
+        window?.orderOut(nil)
+    }
+
+    @objc func cancel(_ sender: Any?) {
+        NSApp.stopModal(withCode: .cancel)
+        window?.orderOut(nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        NSApp.stopModal(withCode: .cancel)
+    }
+
+    func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        let isSignUp = (tabViewItem?.identifier as? String) == "signup"
+        primaryButton?.title = isSignUp ? "Sign Up" : "Sign In"
+        window?.makeFirstResponder(isSignUp ? signUpFullName : signInUsername)
+    }
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     
     var storage: UserDefaults!
@@ -323,10 +352,40 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         else { showClientNotification("Monitor setup required", "Choose an assigned monitor in Settings.") }
         updateTrayStatusDot()
     }
+    // The app icon carries a small 7.5pt red/green status dot at bottom-right.
+    // No separate emoji or enlarged status indicator is rendered in the menu bar.
+    private func makeTrayIcon(active: Bool) -> NSImage {
+        let image = NSImage(size: NSSize(width: 22, height: 22), flipped: false) { _ in
+            let base = NSApp.applicationIconImage
+            base?.draw(in: NSRect(x: 2, y: 2, width: 18, height: 18),
+                       from: .zero, operation: .sourceOver, fraction: 1)
+            let badge = NSBezierPath(ovalIn: NSRect(x: 14.5, y: 0.5, width: 7.5, height: 7.5))
+            (active ? NSColor.systemGreen : NSColor.systemRed).setFill()
+            badge.fill()
+            NSColor.white.setStroke()
+            badge.lineWidth = 1.1
+            badge.stroke()
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
+    private lazy var onlineTrayIcon = makeTrayIcon(active: true)
+    private lazy var offlineTrayIcon = makeTrayIcon(active: false)
+
     private func updateTrayStatusDot() {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in self?.updateTrayStatusDot() }
+            return
+        }
         let active = !clientToken.isEmpty && selectedMonitorId > 0 && isServerConnected
-        statusBarItem?.button?.title = active ? "🗒️🟢" : "🗒️🔴"
-        statusBarItem?.button?.toolTip = active ? "MonitorClient v1.4 · Active" : "MonitorClient v1.4 · Offline, unsigned-in or unconfigured"
+        statusBarItem?.button?.image = active ? onlineTrayIcon : offlineTrayIcon
+        statusBarItem?.button?.title = ""
+        statusBarItem?.button?.imagePosition = .imageOnly
+        statusBarItem?.button?.toolTip = active
+            ? "MonitorClient v1.4 · Active"
+            : "MonitorClient v1.4 · Offline, not signed in or unconfigured"
     }
     var eventTap: CFMachPort?
     var keyLogs: [KeyLog]!
@@ -4019,8 +4078,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
         if let button = statusBarItem?.button {
-            button.title = "🗒️🔴"
-            button.font = NSFont.systemFont(ofSize: 14)
+            button.title = ""
+            button.image = offlineTrayIcon
+            button.imagePosition = .imageOnly
             
             // Add click action for status bar icon
             button.action = #selector(statusBarIconClicked)
@@ -4039,6 +4099,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         
         // Set the menu
         statusBarItem?.menu = statusMenu
+        updateTrayStatusDot()
         
         // Start status update timer (optimized interval)
         statusUpdateTimer = Timer.scheduledTimer(timeInterval: 10.0, target: self, selector: #selector(updateStatusMenu), userInfo: nil, repeats: true)
