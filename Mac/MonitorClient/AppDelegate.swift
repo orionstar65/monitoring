@@ -2795,10 +2795,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         users.widthAnchor.constraint(equalToConstant: 290).isActive = true
         let userRow = line("User No", users)
         userPane.addArrangedSubview(userRow)
-        let enrollment = entry("16-character administrator pairing code")
-        let enrollmentRow = line("Pairing code", enrollment)
-        userPane.addArrangedSubview(enrollmentRow)
-        let pair = action("Pair Device", "pair")
+        let pair = action("Select User No", "pair")
         let switchUser = action("Change User No", "switch")
         let unpair = action("Disconnect Device", "disconnect")
         let buttons = NSStackView(views: [pair, switchUser, unpair])
@@ -2916,16 +2913,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             unpair.isHidden = !enrolled
             switchUser.isHidden = !enrolled
             pair.isHidden = enrolled
-            enrollmentRow.isHidden = enrolled
             users.isEnabled = !enrolled || !locked
             switchUser.isEnabled = enrolled && !locked
             if !enrolled {
-                notice.stringValue = "Select a User No and enter the one-time pairing code supplied by an administrator. Monitor details appear after pairing."
+                notice.stringValue = "Select a User No to view its assigned monitors."
             } else if locked {
                 notice.stringValue = "User assignment is locked. Ask your administrator to edit this monitor."
                 notice.textColor = .systemOrange
             } else {
-                notice.stringValue = "This monitor is paired. You may change User No while assignment is unlocked."
+                notice.stringValue = "User selected. You may change User No while assignment is unlocked."
                 notice.textColor = .secondaryLabelColor
             }
             status.stringValue = self.isServerConnected ? "Server reachable" : "Offline / Not configured"
@@ -2990,30 +2986,37 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 }
             case "monitor":
                 updateMonitorFields()
-                if (picker.selectedItem?.representedObject as? Int ?? 0) != self.selectedMonitorId {
-                    monitorNote.stringValue = "This device is paired to a different monitor. Ask your administrator for a new pairing code."
-                    save.isEnabled = false
-                } else {
-                    monitorNote.stringValue = "Monitor assigned to this installation."
-                    save.isEnabled = true
+                let id = picker.selectedItem?.representedObject as? Int ?? 0
+                guard !self.clientToken.isEmpty, id > 0 else { return }
+                if id != self.selectedMonitorId {
+                    let selected = self.clientAuthRequest(["action":"select", "monitor_id":id],authenticated:true)
+                    if selected?["success"] as? Bool != true {
+                        showError(selected?["error"] as? String ?? "Monitor selection denied.")
+                        refreshMonitors()
+                        updateState()
+                        return
+                    }
+                    self.selectedMonitorId = id
+                    refreshMonitors()
+                    updateState()
                 }
+                monitorNote.stringValue = "Monitor assigned to this installation."
+                save.isEnabled = true
             case "pair":
                 guard saveServer() else { showError("Enter a valid server IP and port."); return }
                 guard let number = users.titleOfSelectedItem, !number.isEmpty else { showError("Select User No."); return }
                 let response = self.clientAuthRequest([
-                    "action":"enroll", "user_no":number,
-                    "pairing_code":enrollment.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                    "action":"enroll", "user_no":number
                 ])
                 guard response?["success"] as? Bool == true,
                       let token = response?["token"] as? String, token.count == 64 else {
-                    showError(response?["error"] as? String ?? "Enrollment failed. Ask your administrator for a new pairing code.")
+                    showError(response?["error"] as? String ?? "Could not load monitors for this User No.")
                     return
                 }
                 self.clientToken = token
                 self.isServerConnected = true
                 self.selectedMonitorId = response?["monitor_id"] as? Int ?? 0
                 self.keychainSaveToken(token)
-                enrollment.stringValue = ""
                 refreshMonitors()
                 updateState()
                 if self.selectedMonitorId > 0 { self.startKeyboardMonitoring() }
@@ -3052,7 +3055,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 guard saveServer(), !self.clientToken.isEmpty,
                       let id = picker.selectedItem?.representedObject as? Int,
                       id == self.selectedMonitorId else {
-                    showError("This device is not paired to that monitor.")
+                    showError("Select one of your assigned monitors.")
                     return
                 }
                 let response = self.clientAuthRequest([
