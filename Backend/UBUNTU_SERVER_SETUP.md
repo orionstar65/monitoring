@@ -64,23 +64,19 @@ sudo systemctl restart apache2
 
 ## 3. Database
 
-Default credentials (in `config.inc.php`):
+The application reads its database settings from environment variables
+`MONITOR_DB_HOST`, `MONITOR_DB_USER`, `MONITOR_DB_PASSWORD`, and
+`MONITOR_DB_NAME`. Use an application-specific MySQL account with minimum
+required permissions. There are no safe hardcoded default credentials.
 
-- User: `root`
-- Password: `acc0924`
-- Database: `monitoring_db`
+**Existing server:** back up the database and run the identity migration as
+documented in [MIGRATION_2026_11_02.md](MIGRATION_2026_11_02.md). Do not run
+the original `database_setup.sql` on a live installation because it recreates
+the database.
 
-Import schema:
-
-```bash
-sudo mysql < /var/monitor/Backend/database_setup.sql
-```
-
-On Ubuntu, MySQL root may use socket auth. Set password if needed:
-
-```bash
-sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'acc0924'; FLUSH PRIVILEGES;"
-```
+**New server:** create an empty database, apply the initial schema and then
+the identity migration. Create an administrator using `Backend/create_admin.php`
+with environment-provided credentials and no known default password.
 
 ## 4. One-command setup
 
@@ -119,7 +115,7 @@ sudo BACKEND_PORT=9000 bash setup_ubuntu_server.sh
 Edit `html/app/config/config.php` and set your server IP:
 
 ```php
-define('BASE_URL', 'http://YOUR_SERVER_IP:8924/html/');
+define('BASE_URL', getenv('MONITOR_BASE_URL') ?: '/html/');
 ```
 
 ## 6. Local network access (firewall)
@@ -159,9 +155,9 @@ Expected URLs:
 
 | Service | URL |
 |---------|-----|
-| Web dashboard | `http://YOUR_SERVER_IP:8924/html/` |
-| Client API | `http://YOUR_SERVER_IP:8924/webapi.php` |
-| Config API | `http://YOUR_SERVER_IP:8924/webapi_config.php` |
+| Web dashboard | `https://YOUR_SERVER_IP:8924/html/` |
+| Client API | `https://YOUR_SERVER_IP:8924/webapi.php` |
+| Config API | `https://YOUR_SERVER_IP:8924/webapi_config.php` |
 
 ## 9. Client configuration
 
@@ -178,5 +174,5 @@ port=8924
 |-------|-----|
 | Port 8924 not listening | Add `Listen 8924` to `ports.conf`, restart Apache |
 | 403/404 errors | Check `DocumentRoot` path and `www-data` permissions |
-| DB connection failed | Set MySQL root password, import `database_setup.sql` |
+| DB connection failed | Configure `MONITOR_DB_*` in PHP process environment, check migration and least-privilege MySQL account |
 | Cannot reach from other PCs | Open UFW for 8924 from `192.168.1.0/24` and `192.168.2.0/24` |
