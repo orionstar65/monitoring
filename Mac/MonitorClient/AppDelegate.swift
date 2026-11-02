@@ -2945,19 +2945,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         var monitors: [[String: Any]] = []
         func updateConnectionLabel() {
-            let ready = !clientToken.isEmpty && selectedMonitorId > 0 && isServerConnected
+            let ready = !self.clientToken.isEmpty && self.selectedMonitorId > 0 && self.isServerConnected
             connection.stringValue = ready ? "● Connected and active" : "● Offline / Not configured"
             connection.textColor = ready ? .systemGreen : .systemRed
-            updateTrayStatusDot()
+            self.updateTrayStatusDot()
         }
         func updateAccountVisibility() {
-            let signedIn = !clientToken.isEmpty
+            let signedIn = !self.clientToken.isEmpty
             tabs.isHidden = signedIn
             accountSubmit.isHidden = signedIn
             signedInLabel.isHidden = !signedIn
             logout.isHidden = !signedIn
             signedInLabel.stringValue = signedIn
-                ? "Signed in: " + (storage.string(forKey: "username") ?? "Account")
+                ? "Signed in: " + (self.storage.string(forKey: "username") ?? "Account")
                 : ""
             monitorSection.isHidden = !signedIn
             updateConnectionLabel()
@@ -2981,7 +2981,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             monitorIP.stringValue = m["ip_address"] as? String ?? "—"
         }
         func refreshMonitors() {
-            let data = clientAuthRequest(["action": "monitors"], authenticated: true)
+            let data = self.clientAuthRequest(["action": "monitors"], authenticated: true)
             monitors = data?["monitors"] as? [[String: Any]] ?? []
             picker.removeAllItems()
             for item in monitors {
@@ -2996,7 +2996,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             picker.addItem(withTitle: "Add New...")
             picker.lastItem?.representedObject = 0
             if let selected = picker.itemArray.first(where: {
-                ($0.representedObject as? Int ?? -1) == selectedMonitorId
+                ($0.representedObject as? Int ?? -1) == self.selectedMonitorId
             }) { picker.select(selected) }
             else { picker.selectItem(at: picker.numberOfItems - 1) }
             updateMonitorFields()
@@ -3010,29 +3010,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 alert.runModal()
                 return false
             }
-            if newIP != (storage.string(forKey: "server-ip") ?? "") ||
-               newPort != (storage.string(forKey: "server-port") ?? "8924") {
+            if newIP != (self.storage.string(forKey: "server-ip") ?? "") ||
+               newPort != (self.storage.string(forKey: "server-port") ?? "8924") {
                 // Explicitly revoke the old server session before changing hosts.
-                if !clientToken.isEmpty {
-                    _ = clientAuthRequest(["action": "logout"], authenticated: true)
+                if !self.clientToken.isEmpty {
+                    _ = self.clientAuthRequest(["action": "logout"], authenticated: true)
                 }
                 let oldTokenQuery: [String: Any] = [
                     kSecClass as String: kSecClassGenericPassword,
-                    kSecAttrService as String: keychainService,
-                    kSecAttrAccount as String: sessionAccount()
+                    kSecAttrService as String: self.keychainService,
+                    kSecAttrAccount as String: self.sessionAccount()
                 ]
                 SecItemDelete(oldTokenQuery as CFDictionary)
-                clientToken = ""
-                selectedMonitorId = 0
-                isServerConnected = false
-                if let tap = eventTap {
+                self.clientToken = ""
+                self.selectedMonitorId = 0
+                self.isServerConnected = false
+                if let tap = self.eventTap {
                     CGEvent.tapEnable(tap: tap, enable: false)
-                    eventTap = nil
+                    self.eventTap = nil
                 }
             }
-            storage.set(newIP, forKey: "server-ip")
-            storage.set(newPort, forKey: "server-port")
-            saveSettings(username: storage.string(forKey: "username") ?? "",
+            self.storage.set(newIP, forKey: "server-ip")
+            self.storage.set(newPort, forKey: "server-port")
+            self.saveSettings(username: self.storage.string(forKey: "username") ?? "",
                          serverIP: newIP, serverPort: newPort)
             updateAccountVisibility()
             return true
