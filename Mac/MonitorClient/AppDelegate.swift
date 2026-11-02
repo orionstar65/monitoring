@@ -2911,6 +2911,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let enrolled = !self.clientToken.isEmpty && self.selectedMonitorId > 0
             monitorPane.isHidden = !enrolled
             unpair.isHidden = !enrolled
+            unpair.isEnabled = enrolled && !locked
             switchUser.isHidden = !enrolled
             pair.isHidden = enrolled
             users.isEnabled = !enrolled || !locked
@@ -3039,6 +3040,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 refreshMonitors()
                 updateState()
             case "disconnect":
+                guard !locked else { showError("User assignment is locked. Ask your administrator to edit the monitor."); return }
                 _ = self.clientAuthRequest(["action":"logout"],authenticated:true)
                 let query: [String: Any] = [
                     kSecClass as String:kSecClassGenericPassword,
