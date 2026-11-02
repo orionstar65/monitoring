@@ -1,7 +1,7 @@
 {
 	"InstallScripts" : 
 	[
-		"D:/monitoring/windows/build/cmake_install.cmake"
+		"D:/Workspace/monitor/Windows/build/cmake_install.cmake"
 	],
 	"Parallel" : false
 }
