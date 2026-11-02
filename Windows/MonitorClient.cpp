@@ -2215,7 +2215,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"STATIC","User Settings",0,13,190,150,21,SETTINGS_USER_HEADING);
         addControl(dlg,"STATIC","",0,108,216,204,23,SETTINGS_USER);
         addControl(dlg,"BUTTON","Log Out",WS_TABSTOP,322,216,96,27,SETTINGS_LOGOUT);
-        HWND tabs=addControl(dlg,WC_TABCONTROLW,"",WS_TABSTOP,108,215,310,27,AUTH_TABS);
+        HWND tabs=addControl(dlg,WC_TABCONTROLA,"",WS_TABSTOP,108,215,310,27,AUTH_TABS);
         TCITEMW item{};item.mask=TCIF_TEXT;
         item.pszText=const_cast<wchar_t*>(L"Sign In");
         TabCtrl_InsertItemW(tabs,0,&item);
