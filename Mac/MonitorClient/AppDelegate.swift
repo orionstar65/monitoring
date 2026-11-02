@@ -242,6 +242,30 @@ private final class AccountModalActions: NSObject, NSTabViewDelegate, NSWindowDe
     }
 }
 
+
+// Keeps one native window open while account and monitor sections change.
+private final class UnifiedWindowActions: NSObject, NSWindowDelegate, NSTabViewDelegate {
+    weak var window: NSWindow?
+    weak var accountTabs: NSTabView?
+    weak var loginUsername: NSTextField?
+    weak var signupFullName: NSTextField?
+    weak var submitButton: NSButton?
+    var handler: ((String) -> Void)?
+
+    @objc func activate(_ sender: NSButton) {
+        handler?(sender.identifier?.rawValue ?? "")
+    }
+    @objc func selectMonitor(_ sender: NSPopUpButton) { handler?("monitor") }
+    func windowWillClose(_ notification: Notification) {
+        NSApp.stopModal(withCode: .cancel)
+    }
+    func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        let signup = (tabViewItem?.identifier as? String) == "signup"
+        submitButton?.title = signup ? "Create Account" : "Sign In"
+        window?.makeFirstResponder(signup ? signupFullName : loginUsername)
+    }
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     
     var storage: UserDefaults!
@@ -2707,282 +2731,419 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         return true
     }
 
-    private func openLoginDialog() {
-        // A dedicated native modal provides predictable focus and key-view loops;
-        // the old NSAlert accessory view did not reliably handle Tab/Shift-Tab.
-        let width: CGFloat = 460
-        let height: CGFloat = 500
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: width, height: height),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
+    private func openLoginDialog() { openUnifiedSettingsWindow() }
+    @objc private func openSettingsDialog() { openUnifiedSettingsWindow() }
+
+    // Server, User and Monitor Settings share a single compact, scrollable window.
+    private func openUnifiedSettingsWindow() {
+        let width: CGFloat = 510
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 670),
+            styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "MonitorClient"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
-        window.autorecalculatesKeyViewLoop = false
         window.center()
 
-        let root = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
-        window.contentView = root
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: width, height: 670))
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.drawsBackground = false
+        let document = NSView()
+        document.translatesAutoresizingMaskIntoConstraints = false
+        scroll.documentView = document
+        window.contentView = scroll
 
-        let logo = NSImageView(frame: NSRect(x: (width - 68) / 2, y: 386, width: 68, height: 68))
-        logo.image = NSApp.applicationIconImage
+        let content = NSStackView()
+        content.orientation = .vertical
+        content.alignment = .centerX
+        content.spacing = 12
+        content.translatesAutoresizingMaskIntoConstraints = false
+        document.addSubview(content)
+        NSLayoutConstraint.activate([
+            document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
+            content.topAnchor.constraint(equalTo: document.topAnchor, constant: 16),
+            content.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 20),
+            content.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -20),
+            document.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: 22)
+        ])
+
+        func text(_ value: String, size: CGFloat = 13, bold: Bool = false) -> NSTextField {
+            let field = NSTextField(labelWithString: value)
+            field.font = NSFont.systemFont(ofSize: size, weight: bold ? .semibold : .regular)
+            return field
+        }
+        func input(_ placeholder: String, value: String = "", secure: Bool = false) -> NSTextField {
+            let field: NSTextField = secure ? NSSecureTextField() : NSTextField()
+            field.placeholderString = placeholder
+            field.stringValue = value
+            field.controlSize = .regular
+            field.widthAnchor.constraint(equalToConstant: 305).isActive = true
+            return field
+        }
+        func row(_ title: String, _ element: NSView) -> NSStackView {
+            let caption = text(title)
+            caption.widthAnchor.constraint(equalToConstant: 130).isActive = true
+            let line = NSStackView(views: [caption, element])
+            line.orientation = .horizontal
+            line.alignment = .centerY
+            line.spacing = 10
+            return line
+        }
+        func section(_ title: String) -> NSStackView {
+            let panel = NSStackView()
+            panel.orientation = .vertical
+            panel.alignment = .leading
+            panel.spacing = 9
+            let heading = text(title, size: 15, bold: true)
+            panel.addArrangedSubview(heading)
+            panel.widthAnchor.constraint(equalToConstant: 450).isActive = true
+            return panel
+        }
+        func rule() {
+            let separator = NSBox()
+            separator.boxType = .separator
+            separator.widthAnchor.constraint(equalToConstant: 450).isActive = true
+            content.addArrangedSubview(separator)
+        }
+        func button(_ title: String, id: String) -> NSButton {
+            let control = NSButton(title: title, target: nil, action: nil)
+            control.identifier = NSUserInterfaceItemIdentifier(id)
+            control.bezelStyle = .rounded
+            return control
+        }
+
+        // Compact brand header: the app logo and version, no descriptions.
+        let brand = NSStackView()
+        brand.orientation = .vertical
+        brand.alignment = .centerX
+        brand.spacing = 3
+        let logo = NSImageView(image: NSApp.applicationIconImage)
         logo.imageScaling = .scaleProportionallyUpOrDown
-        logo.imageAlignment = .alignCenter
-        root.addSubview(logo)
-
-        let version = NSTextField(labelWithString: "v1.4")
-        version.frame = NSRect(x: 0, y: 359, width: width, height: 20)
-        version.alignment = .center
-        version.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        logo.widthAnchor.constraint(equalToConstant: 46).isActive = true
+        logo.heightAnchor.constraint(equalToConstant: 46).isActive = true
+        let version = text("MonitorClient  ·  v1.4", size: 12, bold: true)
         version.textColor = .secondaryLabelColor
-        root.addSubview(version)
+        brand.addArrangedSubview(logo)
+        brand.addArrangedSubview(version)
+        content.addArrangedSubview(brand)
+        rule()
 
-        let tabs = NSTabView(frame: NSRect(x: 35, y: 92, width: width - 70, height: 259))
-        root.addSubview(tabs)
+        // Section 1: server connection settings.
+        let server = section("Server Settings")
+        let ipField = input("Server IP", value: storage.string(forKey: "server-ip") ?? "")
+        let portField = input("Port", value: storage.string(forKey: "server-port") ?? "8924")
+        server.addArrangedSubview(row("Server IP", ipField))
+        server.addArrangedSubview(row("Port", portField))
+        let connection = text("", size: 12)
+        server.addArrangedSubview(row("Connection", connection))
+        content.addArrangedSubview(server)
+        rule()
 
+        // Section 2: user account (login/signup only when signed out).
+        let account = section("User Settings")
+        let signedInLabel = text("", size: 13)
+        account.addArrangedSubview(signedInLabel)
+        let tabs = NSTabView()
+        tabs.widthAnchor.constraint(equalToConstant: 450).isActive = true
+        tabs.heightAnchor.constraint(equalToConstant: 211).isActive = true
         let signIn = NSTabViewItem(identifier: "signin")
         signIn.label = "Sign In"
-        let signInView = NSView(frame: NSRect(x: 0, y: 0, width: 385, height: 211))
-        let username = NSTextField(frame: NSRect(x: 24, y: 138, width: 337, height: 29))
-        username.placeholderString = "Username or email"
-        let password = NSSecureTextField(frame: NSRect(x: 24, y: 91, width: 337, height: 29))
-        password.placeholderString = "Password"
-        signInView.addSubview(username)
-        signInView.addSubview(password)
+        let signInView = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: 166))
+        let loginUser = input("Username or email")
+        let loginPass = input("Password", secure: true)
+        loginUser.frame = NSRect(x: 65, y: 96, width: 305, height: 28)
+        loginPass.frame = NSRect(x: 65, y: 55, width: 305, height: 28)
+        signInView.addSubview(loginUser)
+        signInView.addSubview(loginPass)
         signIn.view = signInView
         tabs.addTabViewItem(signIn)
 
         let signUp = NSTabViewItem(identifier: "signup")
         signUp.label = "Sign Up"
-        let signUpView = NSView(frame: NSRect(x: 0, y: 0, width: 385, height: 211))
-        let fullName = NSTextField(frame: NSRect(x: 24, y: 150, width: 337, height: 29))
-        fullName.placeholderString = "Full Name"
-        let newUser = NSTextField(frame: NSRect(x: 24, y: 108, width: 337, height: 29))
-        newUser.placeholderString = "Username (3–50 characters)"
-        let newPass = NSSecureTextField(frame: NSRect(x: 24, y: 66, width: 337, height: 29))
-        newPass.placeholderString = "Password (12+ characters)"
-        let confirm = NSSecureTextField(frame: NSRect(x: 24, y: 24, width: 337, height: 29))
-        confirm.placeholderString = "Confirm password"
-        for field in [fullName, newUser, newPass, confirm] {
+        let signUpView = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: 166))
+        let fullName = input("Full Name")
+        let newUsername = input("Username")
+        let newPassword = input("Password (12+ characters)", secure: true)
+        let confirmPassword = input("Confirm password", secure: true)
+        for (field, y) in zip([fullName, newUsername, newPassword, confirmPassword],
+                              [125, 90, 55, 20]) {
+            field.frame = NSRect(x: 65, y: CGFloat(y), width: 305, height: 28)
             signUpView.addSubview(field)
         }
         signUp.view = signUpView
         tabs.addTabViewItem(signUp)
+        account.addArrangedSubview(tabs)
 
-        let submit = NSButton(title: "Sign In", target: nil, action: nil)
-        submit.frame = NSRect(x: 249, y: 38, width: 96, height: 31)
-        submit.bezelStyle = .rounded
-        submit.keyEquivalent = "\r"
-        root.addSubview(submit)
+        let accountSubmit = button("Sign In", id: "account-submit")
+        let logout = button("Log Out", id: "logout")
+        let actionsLine = NSStackView(views: [accountSubmit, logout])
+        actionsLine.spacing = 12
+        account.addArrangedSubview(actionsLine)
+        content.addArrangedSubview(account)
+        rule()
 
-        let cancel = NSButton(title: "Cancel", target: nil, action: nil)
-        cancel.frame = NSRect(x: 351, y: 38, width: 83, height: 31)
-        cancel.bezelStyle = .rounded
-        cancel.keyEquivalent = "\u{1b}"
-        root.addSubview(cancel)
+        // Section 3: monitor settings is hidden until authentication succeeds.
+        let monitorSection = section("Monitor Settings")
+        let picker = NSPopUpButton()
+        picker.widthAnchor.constraint(equalToConstant: 305).isActive = true
+        let label = input("Optional label")
+        let os = NSPopUpButton()
+        os.addItems(withTitles: ["Windows", "Mac", "Ubuntu"])
+        os.selectItem(withTitle: "Mac")
+        os.widthAnchor.constraint(equalToConstant: 305).isActive = true
+        let machine = NSPopUpButton()
+        machine.addItems(withTitles: ["Laptop", "Desktop"])
+        machine.widthAnchor.constraint(equalToConstant: 305).isActive = true
+        let monitorIP = text("—")
+        let remark = input("Optional remark")
+        monitorSection.addArrangedSubview(row("Monitor", picker))
+        monitorSection.addArrangedSubview(row("Label", label))
+        monitorSection.addArrangedSubview(row("OS", os))
+        monitorSection.addArrangedSubview(row("Machine", machine))
+        monitorSection.addArrangedSubview(row("IP", monitorIP))
+        monitorSection.addArrangedSubview(row("Remark", remark))
+        let save = button("Save", id: "save-monitor")
+        monitorSection.addArrangedSubview(save)
+        content.addArrangedSubview(monitorSection)
+        rule()
 
-        let actions = AccountModalActions()
-        actions.window = window
-        actions.signInUsername = username
-        actions.signUpFullName = fullName
-        actions.primaryButton = submit
-        submit.target = actions
-        submit.action = #selector(AccountModalActions.submit(_:))
-        cancel.target = actions
-        cancel.action = #selector(AccountModalActions.cancel(_:))
-        tabs.delegate = actions
-        window.delegate = actions
+        // The status label remains visible even when notifications are disabled.
+        let notifications = NSButton(checkboxWithTitle: "Show status notifications",
+                                     target: nil, action: nil)
+        notifications.state = notificationsEnabled ? .on : .off
+        content.addArrangedSubview(notifications)
+        let close = button("Close", id: "close")
+        content.addArrangedSubview(close)
 
-        // Explicit navigation supports Tab and Shift-Tab in either tab.
-        username.nextKeyView = password
-        password.nextKeyView = submit
-        fullName.nextKeyView = newUser
-        newUser.nextKeyView = newPass
-        newPass.nextKeyView = confirm
-        confirm.nextKeyView = submit
-        submit.nextKeyView = username
-        cancel.nextKeyView = username
-        window.initialFirstResponder = username
+        let coordinator = UnifiedWindowActions()
+        coordinator.window = window
+        coordinator.accountTabs = tabs
+        coordinator.loginUsername = loginUser
+        coordinator.signupFullName = fullName
+        coordinator.submitButton = accountSubmit
+        window.delegate = coordinator
+        tabs.delegate = coordinator
+        for control in [accountSubmit, logout, save, close] {
+            control.target = coordinator
+            control.action = #selector(UnifiedWindowActions.activate(_:))
+        }
+        picker.target = coordinator
+        picker.action = #selector(UnifiedWindowActions.selectMonitor(_:))
+
+        // Explicit navigation through both account tabs.
+        loginUser.nextKeyView = loginPass
+        loginPass.nextKeyView = accountSubmit
+        fullName.nextKeyView = newUsername
+        newUsername.nextKeyView = newPassword
+        newPassword.nextKeyView = confirmPassword
+        confirmPassword.nextKeyView = accountSubmit
+        window.initialFirstResponder = loginUser
         tabs.selectTabViewItem(signIn)
 
-        // Keep the same form and field contents after validation errors.
-        while true {
-            NSApp.activate(ignoringOtherApps: true)
-            window.makeKeyAndOrderFront(nil)
-            window.makeFirstResponder(tabs.selectedTabViewItem === signUp ? fullName : username)
-            guard NSApp.runModal(for: window) == .OK else {
-                showClientNotification("Sign-in required",
-                    "Monitoring is disabled until you sign in and choose a monitor.")
-                return
-            }
-
-            if tabs.selectedTabViewItem === signUp {
-                let name = fullName.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                let newUsername = newUser.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !name.isEmpty else {
-                    let alert = NSAlert()
-                    alert.messageText = "Full Name is required"
-                    alert.runModal()
-                    continue
-                }
-                guard newPass.stringValue == confirm.stringValue else {
-                    let alert = NSAlert()
-                    alert.messageText = "Passwords do not match"
-                    alert.runModal()
-                    continue
-                }
-                let result = clientAuthRequest([
-                    "action": "signup",
-                    "full_name": name,
-                    "username": newUsername,
-                    "password": newPass.stringValue,
-                    "confirm_password": confirm.stringValue
-                ])
-                newPass.stringValue = ""
-                confirm.stringValue = ""
-                let duplicate = result?["code"] as? String == "username_exists"
-                let success = result?["success"] as? Bool == true
-                let alert = NSAlert()
-                alert.messageText = success ? "Account created" :
-                    (duplicate ? "Username already exists" : "Sign Up")
-                alert.informativeText = success
-                    ? "Your account is ready. Sign in to continue."
-                    : duplicate
-                        ? "This username is already registered. Please sign in instead."
-                        : (result?["error"] as? String ?? "Unable to create account.")
-                alert.runModal()
-                if success || duplicate {
-                    username.stringValue = newUsername
-                    tabs.selectTabViewItem(signIn)
-                    password.stringValue = ""
-                }
-                continue
-            }
-
-            if signInAndSelectMonitor(identifier: username.stringValue, password: password.stringValue) {
-                password.stringValue = ""
-                openSettingsDialog()
-                return
-            }
-            password.stringValue = ""
-        }
-    }
-
-    @objc private func openSettingsDialog() {
-        if clientToken.isEmpty { openLoginDialog();return }
-        let account = NSAlert()
-        account.messageText = "MonitorClient v1.4 · Settings"
-        account.informativeText = "Select your assigned monitor, or request an additional monitor for admin approval."
-        let panel = NSView(frame: NSRect(x: 0, y: 0, width: 380, height: 295))
-
-        func label(_ title: String, _ y: CGFloat) {
-            let l = NSTextField(labelWithString: title)
-            l.frame = NSRect(x: 0, y: y, width: 112, height: 22)
-            panel.addSubview(l)
-        }
-        func field(_ value: String, _ y: CGFloat) -> NSTextField {
-            let v = NSTextField(frame: NSRect(x: 117, y: y, width: 255, height: 24))
-            v.stringValue = value;panel.addSubview(v);return v
-        }
-        label("Username",263)
-        let userField = field(storage.string(forKey: "username") ?? NSUserName(),263)
-        label("Server IP",235)
-        let ipField = field(storage.string(forKey: "server-ip") ?? "192.168.1.45",235)
-        label("Port",207)
-        let portField = field(storage.string(forKey: "server-port") ?? "8924",207)
-        label("Monitor",179)
-        let monitorPicker = NSPopUpButton(frame: NSRect(x:117,y:179,width:255,height:26))
-        let response = clientAuthRequest(["action":"monitors"],authenticated:true)
-        let monitors = response?["monitors"] as? [[String:Any]] ?? []
-        for monitor in monitors {
-            let id = monitor["id"] as? Int ?? 0
-            monitorPicker.addItem(withTitle: "\(monitor["name"] as? String ?? "Monitor") (#\(id))")
-            monitorPicker.lastItem?.representedObject = id
-        }
-        monitorPicker.addItem(withTitle:"Add New...")
-        monitorPicker.lastItem?.representedObject = 0
-        if selectedMonitorId > 0,
-           let i = monitorPicker.itemArray.firstIndex(where: { ($0.representedObject as? Int ?? -1) == selectedMonitorId }) {
-            monitorPicker.selectItem(at:i)
-        }
-        panel.addSubview(monitorPicker)
-        label("Label",148)
-        let labelField = field("",148);labelField.placeholderString = "Optional"
-        label("OS",119)
-        let osPicker = NSPopUpButton(frame:NSRect(x:117,y:119,width:255,height:26))
-        osPicker.addItems(withTitles:["Windows","Mac","Ubuntu"]);osPicker.selectItem(withTitle:"Mac");panel.addSubview(osPicker)
-        label("Machine",90)
-        let machinePicker = NSPopUpButton(frame:NSRect(x:117,y:90,width:255,height:26))
-        machinePicker.addItems(withTitles:["Laptop","Desktop"]);panel.addSubview(machinePicker)
-        label("Remark",61)
-        let remarkField = field("",61);remarkField.placeholderString = "Optional"
-        let notifyToggle = NSButton(checkboxWithTitle:"Show connection/status notifications",
-                                    target:nil,action:nil)
-        notifyToggle.frame = NSRect(x:117,y:22,width:260,height:25)
-        notifyToggle.state = notificationsEnabled ? .on : .off
-        panel.addSubview(notifyToggle)
-        let pickerCoordinator=MonitorPickerCoordinator(monitorPicker,labelField,
-                              remarkField,osPicker,machinePicker,monitors)
-        monitorPicker.target=pickerCoordinator
-        monitorPicker.action=#selector(MonitorPickerCoordinator.update)
-        pickerCoordinator.update()
-        account.accessoryView = panel
-        account.addButton(withTitle:"Save / Add")
-        account.addButton(withTitle:"Cancel")
-        guard account.runModal() == .alertFirstButtonReturn else { return }
-        let newIP = ipField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        let newPort = portField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !newIP.isEmpty, let portNumber = Int(newPort), portNumber > 0, portNumber <= 65535 else {
-            let invalid=NSAlert();invalid.messageText="Invalid server address or port";invalid.runModal();return
-        }
-        notificationsEnabled = notifyToggle.state == .on
-        if newIP != (storage.string(forKey:"server-ip") ?? "")
-          || newPort != (storage.string(forKey:"server-port") ?? "8924") {
-            storage.set(newIP,forKey:"server-ip")
-            storage.set(newPort,forKey:"server-port")
-            storage.set(userField.stringValue,forKey:"username")
-            saveSettings(username:userField.stringValue,serverIP:newIP,serverPort:newPort)
-            if let tap=eventTap { CGEvent.tapEnable(tap:tap,enable:false);eventTap=nil }
-            clientToken="";selectedMonitorId=0;isServerConnected=false
+        var monitors: [[String: Any]] = []
+        func updateConnectionLabel() {
+            let ready = !clientToken.isEmpty && selectedMonitorId > 0 && isServerConnected
+            connection.stringValue = ready ? "● Connected and active" : "● Offline / Not configured"
+            connection.textColor = ready ? .systemGreen : .systemRed
             updateTrayStatusDot()
-            let changed=NSAlert()
-            changed.messageText="Server changed"
-            changed.informativeText="Sign in again for the new server before selecting its monitor."
-            changed.runModal()
-            openLoginDialog()
-            return
         }
-        let id = monitorPicker.selectedItem?.representedObject as? Int ?? 0
-        let payload:[String:Any] = ["action":id>0 ? "save_monitor":"request_monitor",
-            "monitor_id":id, "label":labelField.stringValue,
-            "os":osPicker.titleOfSelectedItem ?? "Mac",
-            "machine":(machinePicker.titleOfSelectedItem ?? "Laptop").lowercased(),
-            "remark":remarkField.stringValue]
-        guard let saved = clientAuthRequest(payload,authenticated:true),
-              saved["success"] as? Bool == true else {
-            let err=NSAlert();err.messageText="Monitor settings not saved"
-            err.informativeText="Check your connection and monitor assignment."
-            err.runModal();return
+        func updateAccountVisibility() {
+            let signedIn = !clientToken.isEmpty
+            tabs.isHidden = signedIn
+            accountSubmit.isHidden = signedIn
+            signedInLabel.isHidden = !signedIn
+            logout.isHidden = !signedIn
+            signedInLabel.stringValue = signedIn
+                ? "Signed in: " + (storage.string(forKey: "username") ?? "Account")
+                : ""
+            monitorSection.isHidden = !signedIn
+            updateConnectionLabel()
         }
-        storage.set(userField.stringValue,forKey:"username")
-        storage.set(ipField.stringValue,forKey:"server-ip")
-        storage.set(portField.stringValue,forKey:"server-port")
-        saveSettings(username:userField.stringValue,serverIP:ipField.stringValue,serverPort:portField.stringValue)
-        if id==0 {
-            let pending=NSAlert();pending.messageText="Awaiting admin approval"
-            pending.informativeText="Your new monitor request was submitted. Ask the administrator to assign it before monitoring starts."
-            pending.runModal();updateTrayStatusDot();return
+        func updateMonitorFields() {
+            let id = picker.selectedItem?.representedObject as? Int ?? 0
+            save.title = id > 0 ? "Save" : "Add"
+            guard id > 0,
+                  let m = monitors.first(where: { ($0["id"] as? Int ?? -1) == id }) else {
+                label.stringValue = ""
+                remark.stringValue = ""
+                os.selectItem(withTitle: "Mac")
+                machine.selectItem(withTitle: "Laptop")
+                monitorIP.stringValue = "New monitor"
+                return
+            }
+            label.stringValue = m["name"] as? String ?? ""
+            remark.stringValue = m["remark"] as? String ?? ""
+            os.selectItem(withTitle: m["platform"] as? String ?? "Mac")
+            machine.selectItem(withTitle: ((m["type"] as? String) ?? "").lowercased() == "desktop" ? "Desktop" : "Laptop")
+            monitorIP.stringValue = m["ip_address"] as? String ?? "—"
         }
-        guard let selection=clientAuthRequest(["action":"select","monitor_id":id],authenticated:true),
-              selection["success"] as? Bool == true else { return }
-        selectedMonitorId=id
-        keychainSaveToken(clientToken)
-        startKeyboardMonitoring()
-        updateTrayStatusDot()
+        func refreshMonitors() {
+            let data = clientAuthRequest(["action": "monitors"], authenticated: true)
+            monitors = data?["monitors"] as? [[String: Any]] ?? []
+            picker.removeAllItems()
+            for item in monitors {
+                let id = item["id"] as? Int ?? 0
+                let name = item["name"] as? String ?? "Monitor"
+                let platform = item["platform"] as? String ?? "—"
+                let type = (item["type"] as? String ?? "Desktop").capitalized
+                let address = item["ip_address"] as? String ?? "—"
+                picker.addItem(withTitle: "\(name) · \(platform) · \(type) · \(address)")
+                picker.lastItem?.representedObject = id
+            }
+            picker.addItem(withTitle: "Add New...")
+            picker.lastItem?.representedObject = 0
+            if let selected = picker.itemArray.first(where: {
+                ($0.representedObject as? Int ?? -1) == selectedMonitorId
+            }) { picker.select(selected) }
+            else { picker.selectItem(at: picker.numberOfItems - 1) }
+            updateMonitorFields()
+        }
+        func saveServerSettings() -> Bool {
+            let newIP = ipField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let newPort = portField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !newIP.isEmpty, let port = Int(newPort), port > 0, port <= 65535 else {
+                let alert = NSAlert()
+                alert.messageText = "Enter a valid server IP and port"
+                alert.runModal()
+                return false
+            }
+            if newIP != (storage.string(forKey: "server-ip") ?? "") ||
+               newPort != (storage.string(forKey: "server-port") ?? "8924") {
+                // Explicitly revoke the old server session before changing hosts.
+                if !clientToken.isEmpty {
+                    _ = clientAuthRequest(["action": "logout"], authenticated: true)
+                }
+                let oldTokenQuery: [String: Any] = [
+                    kSecClass as String: kSecClassGenericPassword,
+                    kSecAttrService as String: keychainService,
+                    kSecAttrAccount as String: sessionAccount()
+                ]
+                SecItemDelete(oldTokenQuery as CFDictionary)
+                clientToken = ""
+                selectedMonitorId = 0
+                isServerConnected = false
+                if let tap = eventTap {
+                    CGEvent.tapEnable(tap: tap, enable: false)
+                    eventTap = nil
+                }
+            }
+            storage.set(newIP, forKey: "server-ip")
+            storage.set(newPort, forKey: "server-port")
+            saveSettings(username: storage.string(forKey: "username") ?? "",
+                         serverIP: newIP, serverPort: newPort)
+            updateAccountVisibility()
+            return true
+        }
+        coordinator.handler = { [weak self] action in
+            guard let self = self else { return }
+            switch action {
+            case "close":
+                self.notificationsEnabled = notifications.state == .on
+                NSApp.stopModal(withCode: .OK)
+                window.orderOut(nil)
+            case "logout":
+                if !self.clientToken.isEmpty {
+                    _ = self.clientAuthRequest(["action":"logout"],authenticated:true)
+                }
+                let query: [String:Any] = [
+                    kSecClass as String:kSecClassGenericPassword,
+                    kSecAttrService as String:self.keychainService,
+                    kSecAttrAccount as String:self.sessionAccount()
+                ]
+                SecItemDelete(query as CFDictionary)
+                if let tap=self.eventTap { CGEvent.tapEnable(tap:tap,enable:false);self.eventTap=nil }
+                self.clientToken = ""
+                self.selectedMonitorId = 0
+                self.isServerConnected = false
+                monitors.removeAll()
+                updateAccountVisibility()
+            case "account-submit":
+                guard saveServerSettings() else { return }
+                if tabs.selectedTabViewItem === signUp {
+                    let full = fullName.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !full.isEmpty && newPassword.stringValue == confirmPassword.stringValue else {
+                        let alert = NSAlert()
+                        alert.messageText = "Enter Full Name and matching passwords"
+                        alert.runModal()
+                        return
+                    }
+                    let result = self.clientAuthRequest([
+                        "action":"signup",
+                        "full_name":full,
+                        "username":newUsername.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
+                        "password":newPassword.stringValue,
+                        "confirm_password":confirmPassword.stringValue
+                    ])
+                    newPassword.stringValue = ""
+                    confirmPassword.stringValue = ""
+                    let existing = result?["code"] as? String == "username_exists"
+                    let success = result?["success"] as? Bool == true
+                    let alert = NSAlert()
+                    alert.messageText = success ? "Account created" : existing ? "Username exists" : "Sign Up"
+                    alert.informativeText = success || existing
+                        ? "Use Sign In with your username."
+                        : (result?["error"] as? String ?? "Unable to sign up.")
+                    alert.runModal()
+                    if success || existing {
+                        loginUser.stringValue = newUsername.stringValue
+                        tabs.selectTabViewItem(signIn)
+                    }
+                } else {
+                    if self.signInAndSelectMonitor(identifier:loginUser.stringValue,
+                                                  password:loginPass.stringValue) {
+                        loginPass.stringValue = ""
+                        refreshMonitors()
+                        updateAccountVisibility()
+                    }
+                }
+            case "monitor":
+                updateMonitorFields()
+            case "save-monitor":
+                guard saveServerSettings() else { return }
+                guard !self.clientToken.isEmpty else {
+                    let alert=NSAlert();alert.messageText="Sign in first";alert.runModal()
+                    return
+                }
+                let id = picker.selectedItem?.representedObject as? Int ?? 0
+                let payload: [String:Any] = [
+                    "action":id>0 ? "save_monitor" : "request_monitor",
+                    "monitor_id":id,
+                    "label":label.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
+                    "os":os.titleOfSelectedItem ?? "Mac",
+                    "machine":(machine.titleOfSelectedItem ?? "Laptop").lowercased(),
+                    "remark":remark.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                ]
+                guard let result=self.clientAuthRequest(payload,authenticated:true),
+                      result["success"] as? Bool == true else {
+                    let alert=NSAlert();alert.messageText="Monitor not saved"
+                    alert.informativeText="Check ownership and server connection."
+                    alert.runModal();return
+                }
+                let selectedID = id>0 ? id : (result["monitor_id"] as? Int ?? 0)
+                guard selectedID>0,
+                      let selection=self.clientAuthRequest([
+                        "action":"select","monitor_id":selectedID
+                      ],authenticated:true),
+                      selection["success"] as? Bool == true else { return }
+                self.selectedMonitorId=selectedID
+                self.notificationsEnabled = notifications.state == .on
+                self.startKeyboardMonitoring()
+                refreshMonitors()
+                updateAccountVisibility()
+                NSApp.stopModal(withCode: .OK)
+                window.orderOut(nil)
+            default:
+                break
+            }
+        }
+
+        if !clientToken.isEmpty { refreshMonitors() }
+        updateAccountVisibility()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeFirstResponder(clientToken.isEmpty ? loginUser : ipField)
+        NSApp.runModal(for: window)
     }
 
     private func checkAndLogPermissions() {
