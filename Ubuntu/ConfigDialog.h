@@ -55,6 +55,7 @@ private:
 
     QString authToken;
     QString activeUserNo;
+    QString directoryError;
     QJsonArray assignedMonitors;
     int monitorId=0;
     bool assignmentLocked=false;
