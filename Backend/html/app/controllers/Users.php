@@ -57,6 +57,7 @@ class Users extends Base {
                     ]);
                     
                     if ($userId) {
+                        $this->db->update('users',['user_no'=>(int)$userId+100000],'id=:id',['id'=>$userId]);
                         $this->redirect('users');
                     } else {
                         $error = 'Failed to create user';

@@ -19,6 +19,8 @@ try{
     $hash=password_hash($password,PASSWORD_DEFAULT);$role='admin';
     $st=$db->prepare('INSERT INTO users (name,username,email,password,role) VALUES (?,?,?,?,?)');
     $st->bind_param('sssss',$name,$login,$email,$hash,$role);
-    $st->execute();$st->close();
+    $st->execute();$newId=(int)$db->insert_id;$st->close();
+    $st=$db->prepare('UPDATE users SET user_no=? WHERE id=?');
+    $number=$newId+100000;$st->bind_param('ii',$number,$newId);$st->execute();$st->close();
     fwrite(STDOUT,"Admin created. Clear MONITOR_ADMIN_PASSWORD from environment.\n");
 }catch(Throwable $e){fwrite(STDERR,"Failed: ".$e->getMessage()."\n");exit(1);}

@@ -68,9 +68,10 @@ class Auth extends Base {
                         ['username'=>$username,'email'=>$email]);
                 if($existing)$error='Username or email already registered.';
                 else try{
-                    $this->db->insert('users',['name'=>$name,'username'=>$username,'email'=>$email!==''?$email:null,
+                    $newId=(int)$this->db->insert('users',['name'=>$name,'username'=>$username,'email'=>$email!==''?$email:null,
                         'password'=>password_hash($password,PASSWORD_DEFAULT),'role'=>'viewer',
                         'created_at'=>date('Y-m-d H:i:s')]);
+                    $this->db->update('users',['user_no'=>$newId+100000],'id=:id',['id'=>$newId]);
                     $_SESSION['success_message']='Account created. Please sign in.';
                     $this->redirect('auth/login');
                 }catch(PDOException $e){$error='Could not create account.';}
