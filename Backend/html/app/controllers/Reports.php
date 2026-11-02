@@ -267,63 +267,25 @@ class Reports extends Base {
      * Calculate captured hours based on screenshot activity
      */
     private function calculateCapturedHours($screenshot_times) {
-        if (empty($screenshot_times)) {
-            return 0;
+        // Observed coverage only: never invent an hour from a single screenshot.
+        // Sum adjacent capture intervals only when the gap is <= five minutes.
+        $days=[];
+        foreach($screenshot_times as $ts) {
+            $epoch=strtotime($ts);
+            if($epoch===false)continue;
+            $days[date('Y-m-d',$epoch)][]=$epoch;
         }
-        
-        // Group screenshots by day and estimate monitoring hours
-        $daily_activity = [];
-        foreach ($screenshot_times as $time) {
-            $day = date('Y-m-d', strtotime($time));
-            if (!isset($daily_activity[$day])) {
-                $daily_activity[$day] = [];
+        $seconds=0;
+        foreach($days as $times){
+            sort($times,SORT_NUMERIC);
+            for($i=1;$i<count($times);$i++){
+                $delta=$times[$i]-$times[$i-1];
+                if($delta>0 && $delta<=300)$seconds+=$delta;
             }
-            $daily_activity[$day][] = $time;
         }
-        
-        $total_captured_hours = 0;
-        
-        foreach ($daily_activity as $day => $times) {
-            if (empty($times)) continue;
-            
-            // Sort times for the day
-            sort($times);
-            
-            // Calculate monitoring duration for this day
-            $first_capture = strtotime($times[0]);
-            $last_capture = strtotime($times[count($times) - 1]);
-            
-            // Estimate monitoring hours based on screenshot frequency
-            // If screenshots are frequent (every few minutes), assume continuous monitoring
-            // If sparse, estimate based on gaps
-            $screenshot_count = count($times);
-            $time_span_hours = ($last_capture - $first_capture) / 3600;
-            
-            if ($screenshot_count > 1) {
-                // Estimate based on screenshot frequency
-                $avg_interval_minutes = $time_span_hours * 60 / ($screenshot_count - 1);
-                
-                if ($avg_interval_minutes <= 5) {
-                    // Very frequent screenshots - likely continuous monitoring
-                    $captured_hours = min($time_span_hours + 1, 24); // Add buffer for first/last screenshots
-                } elseif ($avg_interval_minutes <= 30) {
-                    // Regular monitoring with some gaps
-                    $captured_hours = $time_span_hours * 0.8; // 80% of time span
-                } else {
-                    // Sparse monitoring
-                    $captured_hours = $time_span_hours * 0.5; // 50% of time span
-                }
-            } else {
-                // Single screenshot - estimate 1 hour of monitoring
-                $captured_hours = 1;
-            }
-            
-            $total_captured_hours += min($captured_hours, 24); // Cap at 24 hours per day
-        }
-        
-        return $total_captured_hours;
+        return round($seconds/3600,2);
     }
-    
+
     /**
      * Calculate activity gaps (online but not monitored)
      * Proper logic: Calculate time when device was online (has activity) but not monitored (no screenshots)

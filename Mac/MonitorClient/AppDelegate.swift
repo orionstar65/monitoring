@@ -2484,6 +2484,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     }
 
     private func signInAndSelectMonitor(identifier: String, password: String) -> Bool {
+        if let tap = eventTap { CGEvent.tapEnable(tap: tap, enable: false); eventTap = nil }
         clientToken = ""
         selectedMonitorId = 0
         guard let response = clientAuthRequest(["action": "login", "identifier": identifier, "password": password]),
