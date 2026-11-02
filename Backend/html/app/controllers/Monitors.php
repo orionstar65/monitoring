@@ -181,10 +181,11 @@ class Monitors extends Base {
         if(!$monitor){http_response_code(404);exit('Monitor not found');}
         if(empty($monitor['owner_user_id'])){http_response_code(409);exit('Assign a user before generating pairing code');}
         $code=strtoupper(bin2hex(random_bytes(8)));
-        $this->db->update('tbl_monitor_ips',[
-            'pairing_code_hash'=>hash('sha256',$code),
-            'pairing_expires_at'=>date('Y-m-d H:i:s',time()+86400)
-        ],'id=:id',['id'=>$id]);
+        // Use the database clock for creation/expiry checks; PHP timezone may differ.
+        $this->db->query(
+            'UPDATE tbl_monitor_ips SET pairing_code_hash=:hash, pairing_expires_at=DATE_ADD(NOW(), INTERVAL 1 DAY) WHERE id=:id',
+            ['hash'=>hash('sha256',$code),'id'=>$id]
+        );
         $_SESSION['pairing_code_once']=['monitor_id'=>(int)$id,'code'=>$code];
         $this->redirect('monitors/edit/'.$id);
     }
