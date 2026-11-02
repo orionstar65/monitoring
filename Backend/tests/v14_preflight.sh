@@ -29,4 +29,5 @@ for file in Backend/client_auth.php \
             Backend/html/app/views/monitors/index.php; do
   test -s "$file" || { echo "Missing file: $file" >&2; exit 1; }
 done
+php Backend/tests/identity_guards_test.php
 echo "PASS: v1.4 source preflight. No database changes were made."
