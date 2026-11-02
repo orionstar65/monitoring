@@ -2796,7 +2796,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let userRow = line("User No", users)
         userPane.addArrangedSubview(userRow)
         let enrollment = entry("16-character administrator pairing code")
-        userPane.addArrangedSubview(line("Pairing code", enrollment))
+        let enrollmentRow = line("Pairing code", enrollment)
+        userPane.addArrangedSubview(enrollmentRow)
         let pair = action("Pair Device", "pair")
         let switchUser = action("Change User No", "switch")
         let unpair = action("Disconnect Device", "disconnect")
@@ -2915,7 +2916,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             unpair.isHidden = !enrolled
             switchUser.isHidden = !enrolled
             pair.isHidden = enrolled
-            enrollment.isHidden = enrolled
+            enrollmentRow.isHidden = enrolled
             users.isEnabled = !enrolled || !locked
             switchUser.isEnabled = enrolled && !locked
             if !enrolled {
@@ -3009,6 +3010,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     return
                 }
                 self.clientToken = token
+                self.isServerConnected = true
                 self.selectedMonitorId = response?["monitor_id"] as? Int ?? 0
                 self.keychainSaveToken(token)
                 enrollment.stringValue = ""
@@ -3029,6 +3031,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     return
                 }
                 self.clientToken = token
+                self.isServerConnected = true
                 self.keychainSaveToken(token)
                 refreshMonitors()
                 updateState()

