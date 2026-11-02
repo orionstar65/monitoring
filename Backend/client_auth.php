@@ -54,6 +54,12 @@ try {
             http_response_code(400);echo json_encode(['error'=>'Invalid monitor name']);exit;
         }
         if(strlen($name)<2||strlen($name)>100){http_response_code(400);echo json_encode(['error'=>'Name must be 2–100 characters']);exit;}
+        $st=$db->prepare('SELECT COUNT(*) AS pending FROM tbl_monitor_ips WHERE requested_user_id=? AND owner_user_id IS NULL');
+        $st->bind_param('i',$userId);$st->execute();
+        $pending=(int)$st->get_result()->fetch_assoc()['pending'];$st->close();
+        if($pending>=5){
+            http_response_code(429);echo json_encode(['error'=>'You already have five pending monitor requests. Contact your administrator.']);exit;
+        }
         $ip=$_SERVER['REMOTE_ADDR']??'';$type='desktop';
         $st=$db->prepare('INSERT INTO tbl_monitor_ips (name,ip_address,type,requested_user_id) VALUES (?,?,?,?)');
         $st->bind_param('sssi',$name,$ip,$type,$userId);$st->execute();
