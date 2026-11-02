@@ -54,6 +54,7 @@ private:
     bool testConnection();
 
     QString authToken;
+    QString activeUserNo;
     QJsonArray assignedMonitors;
     int monitorId=0;
     bool assignmentLocked=false;
@@ -65,6 +66,6 @@ private:
     QLabel *connectionStatusLabel=nullptr,*assignmentStatusLabel=nullptr,*monitorIPLabel=nullptr;
     QCheckBox *notificationsCheck=nullptr;
     QGroupBox *monitorGroup=nullptr;
-    QPushButton *testButton=nullptr,*pairButton=nullptr,*switchButton=nullptr,*logoutButton=nullptr,*saveButton=nullptr;
+    QPushButton *testButton=nullptr,*logoutButton=nullptr,*saveButton=nullptr;
 };
 #endif
