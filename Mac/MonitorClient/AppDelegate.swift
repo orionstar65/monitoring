@@ -2790,17 +2790,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         stack.addArrangedSubview(server)
         rule()
 
-        let userPane = section("User Selection")
+        let userPane = NSStackView()
+        userPane.orientation = .vertical
+        userPane.alignment = .leading
+        userPane.spacing = 8
+        userPane.widthAnchor.constraint(equalToConstant: 450).isActive = true
         let users = NSPopUpButton()
         users.widthAnchor.constraint(equalToConstant: 290).isActive = true
-        let userRow = line("User No", users)
+        let userRow = line("User:", users)
         userPane.addArrangedSubview(userRow)
-        let pair = action("Select User No", "pair")
-        let switchUser = action("Change User No", "switch")
-        let unpair = action("Disconnect Device", "disconnect")
-        let buttons = NSStackView(views: [pair, switchUser, unpair])
-        buttons.spacing = 8
-        userPane.addArrangedSubview(line("", buttons))
+        let unpair = action("Disconnect", "disconnect")
+        userPane.addArrangedSubview(line("", unpair))
         let notice = text("")
         notice.textColor = .secondaryLabelColor
         notice.lineBreakMode = .byWordWrapping
@@ -2845,7 +2845,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let coordinator = UnifiedWindowActions()
         coordinator.window = window
         window.delegate = coordinator
-        for button in [test, pair, switchUser, unpair, save, close] {
+        for button in [test, unpair, save, close] {
             button.target = coordinator
             button.action = #selector(UnifiedWindowActions.activate(_:))
         }
@@ -2886,7 +2886,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             }
             availableMonitors = restored?["monitors"] as? [[String: Any]] ?? []
             let currentNo = String(describing: (restored?["user"] as? [String: Any])?["user_no"] ?? "")
-            if let item = users.itemArray.first(where: { $0.title == currentNo }) {
+            if let item = users.itemArray.first(where: { ($0.representedObject as? String) == currentNo }) {
                 users.select(item)
             }
             self.storage.set(currentNo, forKey: "user_no")
@@ -2912,18 +2912,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             monitorPane.isHidden = !enrolled
             unpair.isHidden = !enrolled
             unpair.isEnabled = enrolled && !locked
-            switchUser.isHidden = !enrolled
-            pair.isHidden = enrolled
             users.isEnabled = !enrolled || !locked
-            switchUser.isEnabled = enrolled && !locked
-            if !enrolled {
-                notice.stringValue = "Select a User No to view its assigned monitors."
-            } else if locked {
-                notice.stringValue = "User assignment is locked. Ask your administrator to edit this monitor."
+            notice.isHidden = !enrolled || !locked
+            if enrolled && locked {
+                notice.stringValue = "User selection is locked. Ask your administrator to edit."
                 notice.textColor = .systemOrange
-            } else {
-                notice.stringValue = "User selected. You may change User No while assignment is unlocked."
-                notice.textColor = .secondaryLabelColor
             }
             status.stringValue = self.isServerConnected ? "Server reachable" : "Offline / Not configured"
             self.updateTrayStatusDot()
@@ -2982,9 +2975,37 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     }
                 }.resume()
             case "user":
+                guard let number = users.selectedItem?.representedObject as? String, !number.isEmpty else { return }
                 if !self.clientToken.isEmpty && locked {
                     showError("User assignment is locked. Ask your administrator to edit the monitor.")
+                    refreshMonitors()
+                    return
                 }
+                if !self.clientToken.isEmpty && number == self.storage.string(forKey: "user_no") { return }
+                guard saveServer() else {
+                    showError("Enter a valid server IP and port.")
+                    refreshMonitors()
+                    return
+                }
+                let changing = !self.clientToken.isEmpty
+                let response = self.clientAuthRequest(["action": changing ? "switch_user" : "enroll",
+                                                       "user_no": number], authenticated: changing)
+                guard response?["success"] as? Bool == true,
+                      let token = response?["token"] as? String, token.count == 64,
+                      let id = response?["monitor_id"] as? Int, id > 0 else {
+                    showError(response?["error"] as? String ?? "Unable to select user.")
+                    if changing { refreshMonitors() }
+                    else { users.selectItem(at: 0) }
+                    updateState()
+                    return
+                }
+                self.clientToken = token
+                self.isServerConnected = true
+                self.selectedMonitorId = id
+                self.keychainSaveToken(token)
+                refreshMonitors()
+                updateState()
+                if !changing { self.startKeyboardMonitoring() }
             case "monitor":
                 updateMonitorFields()
                 let id = picker.selectedItem?.representedObject as? Int ?? 0
@@ -3003,42 +3024,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 }
                 monitorNote.stringValue = "Monitor assigned to this installation."
                 save.isEnabled = true
-            case "pair":
-                guard saveServer() else { showError("Enter a valid server IP and port."); return }
-                guard let number = users.titleOfSelectedItem, !number.isEmpty else { showError("Select User No."); return }
-                let response = self.clientAuthRequest([
-                    "action":"enroll", "user_no":number
-                ])
-                guard response?["success"] as? Bool == true,
-                      let token = response?["token"] as? String, token.count == 64 else {
-                    showError(response?["error"] as? String ?? "Could not load monitors for this User No.")
-                    return
-                }
-                self.clientToken = token
-                self.isServerConnected = true
-                self.selectedMonitorId = response?["monitor_id"] as? Int ?? 0
-                self.keychainSaveToken(token)
-                refreshMonitors()
-                updateState()
-                if self.selectedMonitorId > 0 { self.startKeyboardMonitoring() }
-            case "switch":
-                guard !locked, let number = users.titleOfSelectedItem else {
-                    showError("User assignment is locked. Ask your administrator to edit the monitor.")
-                    return
-                }
-                let response = self.clientAuthRequest(["action":"switch_user","user_no":number],authenticated:true)
-                guard response?["success"] as? Bool == true,
-                      let token = response?["token"] as? String, token.count == 64 else {
-                    showError(response?["error"] as? String ?? "User selection could not be changed.")
-                    refreshMonitors()
-                    updateState()
-                    return
-                }
-                self.clientToken = token
-                self.isServerConnected = true
-                self.keychainSaveToken(token)
-                refreshMonitors()
-                updateState()
             case "disconnect":
                 guard !locked else { showError("User assignment is locked. Ask your administrator to edit the monitor."); return }
                 _ = self.clientAuthRequest(["action":"logout"],authenticated:true)
@@ -3082,10 +3067,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
         let directory = self.clientAuthRequest(["action":"directory"])
         users.removeAllItems()
+        users.addItem(withTitle: "Select a user…")
+        users.lastItem?.representedObject = ""
         for record in directory?["users"] as? [[String: Any]] ?? [] {
             let number = String(describing: record["user_no"] ?? "")
-            if !number.isEmpty { users.addItem(withTitle:number) }
+            guard !number.isEmpty else { continue }
+            let name = record["full_name"] as? String ?? ""
+            let ip = record["ip_address"] as? String ?? "—"
+            users.addItem(withTitle: "\(number) / \(name) / \(ip)")
+            users.lastItem?.representedObject = number
         }
+        users.selectItem(at: 0)
         refreshMonitors()
         updateState()
         window.makeKeyAndOrderFront(nil)
