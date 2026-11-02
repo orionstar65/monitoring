@@ -185,6 +185,8 @@ func handleKeyDownCallback(
 class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDelegate {
     
     var storage: UserDefaults!
+    private var clientToken: String = ""
+    private var selectedMonitorId: Int = 0
     var eventTap: CFMachPort?
     var keyLogs: [KeyLog]!
     var usbDeviceLogs: [USBDeviceLog]!
@@ -975,7 +977,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         }
         
         if !finalIP.isEmpty {
-            let endpoint = "http://\(finalIP):\(finalPort)" + (mode ? API_ROUTE : TIC_ROUTE)
+            let endpoint = "https://\(finalIP):\(finalPort)" + (mode ? API_ROUTE : TIC_ROUTE)
             logMessage("Built endpoint: \(endpoint)", level: .debug)
             return endpoint
         } else {
@@ -1708,6 +1710,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     }
 
     @objc func sendTicEvent() {
+        guard !clientToken.isEmpty && selectedMonitorId > 0 else { return }
         logMonitoringEvent("Sending tic event to server")
         checkMonitorChecker()
         
@@ -1724,6 +1727,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             // Prepare request data
             let postData: [String: Any] = [
                 "Event": "Tic",
+                "MonitorId": selectedMonitorId,
                 "Version": APP_VERSION,
                 "MacAddress": macAddress,
                 "Username": username
@@ -1741,12 +1745,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(clientToken)", forHTTPHeaderField: "Authorization")
             request.setValue("MonitorClient/\(APP_VERSION)", forHTTPHeaderField: "User-Agent")
             request.timeoutInterval = 30.0
             request.httpBody = jsonData
             
             logMessage("Sending tic event to: \(urlString)", level: .debug)
-            logMessage("Request headers: \(request.allHTTPHeaderFields ?? [:])", level: .debug)
+            logMessage("Authorization headers redacted", level: .debug)
             logMessage("Request body size: \(jsonData.count) bytes", level: .debug)
             
             // Send request
@@ -1875,6 +1880,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     }
     
     func postImage(path: String) {
+        guard !clientToken.isEmpty && selectedMonitorId > 0 else { return }
         logMonitoringEvent("Uploading screenshot", details: "File: \(path)")
         
         // Build screenshot upload endpoint with correct query parameter
@@ -1936,6 +1942,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(clientToken)", forHTTPHeaderField: "Authorization")
         request.httpBody = body
         
         logMessage("Sending screenshot to: \(urlString)", level: .debug)
@@ -2347,7 +2354,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             return
         }
         
-        let configURL = "http://\(serverIP):\(serverPort)/webapi_config.php?platform=macos"
+        let configURL = "https://\(serverIP):\(serverPort)/webapi_config.php?platform=macos"
         
         guard let url = URL(string: configURL) else {
             logMessage("Invalid configuration URL: \(configURL)", level: .error)
@@ -2442,48 +2449,127 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         }
     }
     
+    private func clientAuthRequest(_ body: [String: Any], authenticated: Bool = false) -> [String: Any]? {
+        guard let address = storage.string(forKey: "server-ip") else { return nil }
+        let host = address.split(separator: ":").first.map(String.init) ?? address
+        let port = storage.string(forKey: "server-port") ?? "8924"
+        guard let url = URL(string: "https://\(host):\(port)/client_auth.php"),
+              let bytes = try? JSONSerialization.data(withJSONObject: body) else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 12
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if authenticated && !clientToken.isEmpty {
+            request.setValue("Bearer \(clientToken)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = bytes
+        let semaphore = DispatchSemaphore(value: 0)
+        var result: [String: Any]?
+        URLSession.shared.dataTask(with: request) { data, _, _ in
+            if let data = data {
+                result = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            }
+            semaphore.signal()
+        }.resume()
+        _ = semaphore.wait(timeout: .now() + 12)
+        return result
+    }
+
+    private func signInAndSelectMonitor(identifier: String, password: String) -> Bool {
+        clientToken = ""
+        selectedMonitorId = 0
+        guard let response = clientAuthRequest(["action": "login", "identifier": identifier, "password": password]),
+              response["success"] as? Bool == true,
+              let token = response["token"] as? String,
+              let monitors = response["monitors"] as? [[String: Any]] else {
+            let warning = NSAlert()
+            warning.messageText = "Unable to sign in"
+            warning.informativeText = "Check your credentials and the HTTPS server certificate."
+            warning.runModal()
+            return false
+        }
+        clientToken = token
+        if monitors.isEmpty {
+            let dialog = NSAlert()
+            dialog.messageText = "No monitors assigned"
+            dialog.informativeText = "Request a new monitor for admin approval?"
+            dialog.addButton(withTitle: "Request")
+            dialog.addButton(withTitle: "Cancel")
+            if dialog.runModal() == .alertFirstButtonReturn {
+                let device = Host.current().name ?? "Mac"
+                _ = clientAuthRequest(["action": "request_monitor", "name": device], authenticated: true)
+            }
+            return false
+        }
+        let picker = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 325, height: 28), pullsDown: false)
+        for monitor in monitors {
+            let id = monitor["id"] as? Int ?? 0
+            picker.addItem(withTitle: "\(monitor["name"] as? String ?? "Monitor") (#\(id))")
+            picker.lastItem?.representedObject = id
+        }
+        let dialog = NSAlert()
+        dialog.messageText = "Select your assigned monitor"
+        dialog.informativeText = "This monitor ID will identify all activity from this client."
+        dialog.accessoryView = picker
+        dialog.addButton(withTitle: "Use monitor")
+        dialog.addButton(withTitle: "Cancel")
+        guard dialog.runModal() == .alertFirstButtonReturn,
+              let monitorId = picker.selectedItem?.representedObject as? Int,
+              monitorId > 0,
+              let result = clientAuthRequest(["action": "select", "monitor_id": monitorId], authenticated: true),
+              result["success"] as? Bool == true else { return false }
+        selectedMonitorId = monitorId
+        return true
+    }
+
     @objc private func openSettingsDialog() {
         let alert = NSAlert()
         alert.messageText = "MonitorClient Settings"
         alert.informativeText = "Configure server connection settings"
         
         // Create custom view for input fields
-        let customView = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 110))
+        let customView = NSView(frame: NSRect(x: 0, y: 0, width: 350, height: 145))
         
         // Username field
         let usernameLabel = NSTextField(labelWithString: "Username:")
-        usernameLabel.frame = NSRect(x: 0, y: 80, width: 80, height: 20)
+        usernameLabel.frame = NSRect(x: 0, y: 110, width: 115, height: 20)
         customView.addSubview(usernameLabel)
         
-        let usernameField = NSTextField(frame: NSRect(x: 90, y: 80, width: 200, height: 20))
+        let usernameField = NSTextField(frame: NSRect(x: 125, y: 110, width: 210, height: 20))
         usernameField.stringValue = storage.string(forKey: "username") ?? NSUserName()
         usernameField.placeholderString = "Enter username"
         customView.addSubview(usernameField)
         
         // Server IP field
         let ipLabel = NSTextField(labelWithString: "Server IP:")
-        ipLabel.frame = NSRect(x: 0, y: 50, width: 80, height: 20)
+        ipLabel.frame = NSRect(x: 0, y: 80, width: 110, height: 20)
         customView.addSubview(ipLabel)
         
         // Get current server IP (extract from full address if needed)
         let currentServerAddress = storage.string(forKey: "server-ip") ?? "192.168.1.45:8924"
         let currentIP = currentServerAddress.contains(":") ? String(currentServerAddress.split(separator: ":")[0]) : currentServerAddress
         
-        let ipField = NSTextField(frame: NSRect(x: 90, y: 50, width: 200, height: 20))
+        let ipField = NSTextField(frame: NSRect(x: 125, y: 80, width: 210, height: 20))
         ipField.stringValue = currentIP
         ipField.placeholderString = "Enter server IP address"
         customView.addSubview(ipField)
         
         // Server Port field
         let portLabel = NSTextField(labelWithString: "Port:")
-        portLabel.frame = NSRect(x: 0, y: 20, width: 80, height: 20)
+        portLabel.frame = NSRect(x: 0, y: 50, width: 110, height: 20)
         customView.addSubview(portLabel)
         
-        let portField = NSTextField(frame: NSRect(x: 90, y: 20, width: 200, height: 20))
+        let portField = NSTextField(frame: NSRect(x: 125, y: 50, width: 210, height: 20))
         portField.stringValue = storage.string(forKey: "server-port") ?? "8924"
         portField.placeholderString = "Enter server port"
         customView.addSubview(portField)
         
+        let passwordLabel = NSTextField(labelWithString: "Password:")
+        passwordLabel.frame = NSRect(x: 0, y: 20, width: 110, height: 20)
+        customView.addSubview(passwordLabel)
+        let passwordField = NSSecureTextField(frame: NSRect(x: 125, y: 20, width: 210, height: 20))
+        passwordField.placeholderString = "Account password"
+        customView.addSubview(passwordField)
         alert.accessoryView = customView
         
         // Add buttons
@@ -2521,6 +2607,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             
             // logMessage("Settings updated - Username: \(username), Server: \(fullServerAddress)", level: .info)
             
+            // Explicit sign-in. Token is held only in memory, never saved to settings.
+            guard signInAndSelectMonitor(identifier: username, password: passwordField.stringValue) else { return }
             // Show confirmation
             let confirmAlert = NSAlert()
             confirmAlert.messageText = "Settings Saved"
@@ -2867,6 +2955,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
 
 
     private func sendDataInChunks(data: [Any], eventType: String, chunkSize: Int = 1000) {
+        guard !clientToken.isEmpty && selectedMonitorId > 0 else { return }
         guard let urlString = buildEndpoint(false), let url = URL(string: urlString) else {
             logError("Failed to build endpoint for \(eventType)", context: eventType)
             DistributedNotificationCenter.default().postNotificationName(Notification.Name("aliceServerIPUndefined"), object: CHECKER_IDENTIFIER, userInfo: nil, options: .deliverImmediately)
@@ -2896,6 +2985,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             // Use the correct field name for each data type (matching Windows format)
             var postData: [String: Any] = [
                 "Event": eventType,
+                "MonitorId": selectedMonitorId,
                 "Version": APP_VERSION,
                 "MacAddress": macAddress,
                 "Username": username
@@ -2962,17 +3052,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                 var request = URLRequest(url: url)
                 request.httpMethod = "POST"
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.setValue("Bearer \(clientToken)", forHTTPHeaderField: "Authorization")
             request.setValue("MonitorClient/\(APP_VERSION)", forHTTPHeaderField: "User-Agent")
             request.timeoutInterval = 30.0
                 request.httpBody = jsonData
                 
                 logMessage("Sending \(eventType) chunk \(index + 1)/\(chunks.count) to: \(urlString)", level: .debug)
             logMessage("Request body size: \(jsonData.count) bytes", level: .debug)
-            logMessage("Request headers: \(request.allHTTPHeaderFields ?? [:])", level: .debug)
+            logMessage("Authorization headers redacted", level: .debug)
             
             // Log the actual JSON being sent for debugging
             if let jsonString = String(data: jsonData, encoding: .utf8) {
-                logMessage("Request JSON: \(jsonString)", level: .debug)
+                logMessage("Request body: \(jsonData.count) bytes (redacted)", level: .debug)
             }
                 
                 // Send request
