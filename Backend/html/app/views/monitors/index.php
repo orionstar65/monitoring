@@ -15,12 +15,13 @@ ob_start(); ?>
 </div>
 <div class="card shadow-sm"><div class="card-body"><div class="table-responsive">
 <table id="monitors-table" class="table table-hover align-middle advanced-table" style="width:100%">
-<thead><tr><th>ID</th><th>User (full name)</th><th>IP address</th><th>Machine</th><th>OS</th><th>Status</th><th>Last activity</th><th>Remark</th><th>Assignment</th><th data-dt-order="disable">Actions</th></tr></thead>
+<thead><tr><th>ID</th><th>User No</th><th>Full Name</th><th>IP Address</th><th>Machine</th><th>OS</th><th>Status</th><th>Last activity</th><th>Remark</th><th>Assignment</th><th data-dt-order="disable">Actions</th></tr></thead>
 <tbody>
 <?php foreach($monitors as $m): ?>
 <tr>
  <td><?= (int)$m['id'] ?></td>
- <td><?= $m['owner_name']!==null ? $escape(($m['owner_user_no']??'—').'/'.$m['owner_name'].'/'.($m['ip_address']??'—')) : '<span class="text-muted">Unassigned</span>' ?></td>
+ <td class="font-monospace"><?= $escape($m['owner_user_no']??'—') ?></td>
+ <td><?= $m['owner_name']!==null ? $escape($m['owner_name']) : '<span class="text-muted">Unassigned</span>' ?></td>
  <td><code><?= $escape($m['ip_address']) ?></code></td>
  <td><?= $escape(ucfirst(strtolower($m['type']??'desktop'))) ?></td>
  <td><?= $escape($m['platform']??'—') ?></td>
