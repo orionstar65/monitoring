@@ -2,7 +2,10 @@ cmake_minimum_required(VERSION 3.16)
 project(MonitorClient)
 
 # Ubuntu/Linux-specific build configuration
-set(CMAKE_BUILD_TYPE Debug)
+# Respect -DCMAKE_BUILD_TYPE from callers; prefer optimized releases by default.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
 set(CMAKE_SKIP_RPATH ON)
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--disable-new-dtags")
 set(CMAKE_BUILD_RPATH_USE_ORIGIN ON)

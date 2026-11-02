@@ -5,6 +5,14 @@
 -- This migration intentionally drops the monitor.username column.
 -- If any custom scripts / external integrations still refer to it, update them first.
 
+-- Stop before any schema changes if legacy monitor ownership remains unresolved.
+-- Duplicate primary-key insert deliberately aborts the migration when unowned rows exist.
+CREATE TEMPORARY TABLE v14_ownership_gate (id INT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+INSERT INTO v14_ownership_gate (id) VALUES (1);
+INSERT INTO v14_ownership_gate (id)
+SELECT 1 FROM tbl_monitor_ips WHERE owner_user_id IS NULL LIMIT 1;
+DROP TEMPORARY TABLE v14_ownership_gate;
+
 CREATE OR REPLACE VIEW recent_browser_history AS
 SELECT b.*,m.ip_address,owner.name AS monitor_username
 FROM browser_history_logs b

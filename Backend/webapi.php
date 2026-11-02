@@ -125,7 +125,10 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
 
         // Create thumbnail
         $thumb_file_location = $thumbnails_date_path . $img_name;
-        createThumbnail($file_location, $thumb_file_location, 200, 150);
+        if (!createThumbnail($file_location, $thumb_file_location, 200, 150)) {
+            // A missing thumbnail is optional: display the original image instead.
+            $thumb_file_location = null;
+        }
         
         // Store metadata in database
         $capture_datetime = date('Y-m-d H:i:s', strtotime($ctime));
@@ -159,6 +162,9 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
             ]);
             return true;
         } else {
+            // Do not accumulate orphan screenshots when metadata storage fails.
+            @unlink($file_location);
+            if ($thumb_file_location) @unlink($thumb_file_location);
             error_log("Failed to store screenshot metadata in database");
             return false;
         }
