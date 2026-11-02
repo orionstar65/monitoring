@@ -2129,13 +2129,13 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
     switch(msg) {
     case WM_INITDIALOG:{
         activeSettingsWindow=dlg;
-        setWindowUtf8Text(dlg,"MonitorClient v1.7 — Settings");
+        setWindowUtf8Text(dlg,"MonitorClient v1.5 — Settings");
         HWND logo=addControl(dlg,"STATIC","",SS_ICON,13,10,38,38,4500);
         SendMessageW(logo,STM_SETIMAGE,IMAGE_ICON,(LPARAM)LoadIconW(GetModuleHandleW(nullptr),MAKEINTRESOURCEW(1)));
         if(SendMessageW(logo,STM_GETIMAGE,IMAGE_ICON,0)==0)
             SendMessageW(logo,STM_SETIMAGE,IMAGE_ICON,(LPARAM)LoadIconW(nullptr,IDI_APPLICATION));
         addControl(dlg,"STATIC","MonitorClient",0,62,12,260,21,4501);
-        addControl(dlg,"STATIC","v1.7",0,62,33,90,19,4502);
+        addControl(dlg,"STATIC","v1.5",0,62,33,90,19,4502);
         addControl(dlg,"STATIC","Server Settings",0,13,57,180,22,4503);
         addControl(dlg,"STATIC","Server IP",0,13,85,91,20,4504);
         addControl(dlg,"EDIT",serverIP.c_str(),WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,82,310,25,SETTINGS_IP);
@@ -2774,8 +2774,8 @@ void updateTrayIcon() {
     if(!redTrayIcon)redTrayIcon=buildStatusIcon(RGB(227,45,45));
     nid.uFlags=NIF_ICON|NIF_MESSAGE|NIF_TIP;
     nid.hIcon=active?greenTrayIcon:redTrayIcon;
-    strcpy_s(nid.szTip,active?"MonitorClient v1.7 - Active":
-         "MonitorClient v1.7 - Offline / select a User No or monitor");
+    strcpy_s(nid.szTip,active?"MonitorClient v1.5 - Active":
+         "MonitorClient v1.5 - Offline / select a User No or monitor");
     Shell_NotifyIconA(NIM_MODIFY,&nid);
 }
 
