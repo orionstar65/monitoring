@@ -5,26 +5,18 @@
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QPushButton>
-#include <QVBoxLayout>
-#include <QHBoxLayout>
 #include <QLabel>
 #include <QGroupBox>
-#include <QSettings>
 #include <QComboBox>
-#include <QJsonObject>
-#include <QTabWidget>
 #include <QCheckBox>
 #include <QJsonArray>
-#include <QScrollArea>
+#include <QJsonObject>
 
-class ConfigDialog : public QDialog
-{
+class ConfigDialog : public QDialog {
     Q_OBJECT
-
 public:
-    ConfigDialog(QWidget *parent = nullptr);
-    ~ConfigDialog();
-
+    explicit ConfigDialog(QWidget *parent=nullptr);
+    ~ConfigDialog() override = default;
     QString getServerIP() const;
     int getServerPort() const;
     QString getClientName() const;
@@ -39,56 +31,40 @@ signals:
 
 private slots:
     void onSaveClicked();
-    void onSignInClicked();
+    void onPairClicked();
+    void onSwitchClicked();
     void onLogoutClicked();
-    void onRequestMonitorClicked();
-    void onSignUpClicked();
-    void onMonitorChanged(int index);
-    void onCancelClicked();
+    void onUserChanged(int);
+    void onMonitorChanged(int);
     void onTestConnectionClicked();
-
 private:
-    void updateAccountUI();
+    QJsonObject authRequest(const QJsonObject &payload,bool authenticated=false);
+    QString settingsPath() const;
     void loadSettings();
     void saveSettings();
-    bool testConnection();
-    QJsonObject authRequest(const QJsonObject &payload, bool authenticated = false);
-    void updateMonitorList(const QJsonArray &monitors);
-    QString settingsPath() const;
-    void loadRememberedSession();
-    void rememberToken(const QString &value);
+    bool saveServerIfChanged();
+    void clearStoredToken(const QString &host,int port);
     QString readRememberedToken() const;
+    void rememberToken(const QString &value);
+    void loadRememberedSession();
+    void refreshDirectory();
+    void refreshMonitors();
+    void updateUI();
+    void updateMonitorList(const QJsonArray &items);
+    bool testConnection();
+
     QString authToken;
     QJsonArray assignedMonitors;
-    int monitorId = 0;
-    bool logoutPerformed = false;
-    QGroupBox *monitorGroup = nullptr;
-    QTabWidget *accountTabs = nullptr;
-    QLineEdit *loginEdit;
-    QLineEdit *passwordEdit;
-    QLineEdit *signupFullNameEdit;
-    QLineEdit *signupUsernameEdit;
-    QLineEdit *signupPasswordEdit;
-    QLineEdit *signupConfirmEdit;
-    QLineEdit *labelEdit;
-    QLineEdit *remarkEdit;
-    QComboBox *osSelector;
-    QComboBox *machineSelector;
-    QCheckBox *notificationsCheck;
-    QLabel *accountStatusLabel;
-    QLabel *connectionStatusLabel;
-    QLabel *monitorIPLabel;
-    QPushButton *logoutButton;
-    QComboBox *monitorSelector;
-    QPushButton *signInButton;
-    QPushButton *requestMonitorButton;
-
-    QLineEdit *serverIPEdit;
-    QSpinBox *serverPortEdit;
-    QLineEdit *clientNameEdit;
-    QPushButton *testButton;
-    QPushButton *saveButton;
-    QPushButton *cancelButton;
+    int monitorId=0;
+    bool assignmentLocked=false;
+    bool logoutPerformed=false;
+    QLineEdit *serverIPEdit=nullptr,*clientNameEdit=nullptr,*pairingEdit=nullptr;
+    QLineEdit *labelEdit=nullptr,*remarkEdit=nullptr;
+    QSpinBox *serverPortEdit=nullptr;
+    QComboBox *userSelector=nullptr,*monitorSelector=nullptr,*osSelector=nullptr,*machineSelector=nullptr;
+    QLabel *connectionStatusLabel=nullptr,*assignmentStatusLabel=nullptr,*monitorIPLabel=nullptr;
+    QCheckBox *notificationsCheck=nullptr;
+    QGroupBox *monitorGroup=nullptr;
+    QPushButton *testButton=nullptr,*pairButton=nullptr,*switchButton=nullptr,*logoutButton=nullptr,*saveButton=nullptr;
 };
-
-#endif // CONFIGDIALOG_H 
+#endif
