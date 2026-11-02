@@ -11,9 +11,9 @@ class Monitors extends Base {
     }
     
     public function index() {
-        $monitors = $this->db->fetchAll(
-            "SELECT * FROM tbl_monitor_ips ORDER BY id"
-        );
+        $monitors = $this->isAdmin()
+          ? $this->db->fetchAll("SELECT * FROM tbl_monitor_ips ORDER BY id")
+          : $this->db->fetchAll("SELECT * FROM tbl_monitor_ips WHERE owner_user_id=:uid ORDER BY id", ['uid'=>$this->user['id']]);
         
         // Add dynamic status calculation for each monitor
         foreach ($monitors as &$monitor) {
@@ -65,19 +65,8 @@ class Monitors extends Base {
             } elseif (empty($ip_address) || empty($name)) {
                 $error = 'IP address and name are required';
             } else {
-                // Check if IP or MAC address already exists (prioritize MAC address check)
-                $existing = null;
-                if (!empty($mac_address)) {
-                    $existing = $this->db->fetch(
-                        "SELECT id FROM tbl_monitor_ips WHERE mac_address = :mac_address",
-                        ['mac_address' => $mac_address]
-                    );
-                    if ($existing) {
-                        $error = 'MAC address already exists';
-                    }
-                }
-                
-                // Also check IP address if MAC check didn't find anything
+                $existing = false;
+                $error = null;
                 if (!$existing) {
                     $existing = $this->db->fetch(
                         "SELECT id FROM tbl_monitor_ips WHERE ip_address = :ip_address",
@@ -98,6 +87,7 @@ class Monitors extends Base {
                                 'username' => $username,
                                 'mac_address' => ($mac_address !== '' ? $mac_address : null),
                                 'type' => $type,
+                                'platform' => ($platform ?: null),
                                 'os_status' => 0,
                                 'monitor_status' => 0,
                                 'created_at' => date('Y-m-d H:i:s')
@@ -143,7 +133,8 @@ class Monitors extends Base {
             $username = trim($_POST['username'] ?? '');
             $slack_id = trim($_POST['slack_id'] ?? '');
             $platform = trim($_POST['platform'] ?? '');
-            
+            $owner_user_id = filter_var($_POST['owner_user_id']??null,FILTER_VALIDATE_INT)?:null;
+            if($owner_user_id && !$this->db->fetch('SELECT id FROM users WHERE id=:id',['id'=>$owner_user_id])) $error='Unknown account';
             // Validate type
             if (!in_array($type, ['desktop', 'laptop', 'server'])) {
                 $error = 'Invalid device type selected';
@@ -157,7 +148,8 @@ class Monitors extends Base {
                         'type' => $type,
                         'username' => $username,
                         'slack_id' => $slack_id,
-                        'platform' => !empty($platform) ? $platform : null
+                        'platform' => !empty($platform) ? $platform : null,
+                        'owner_user_id' => $owner_user_id
                     ];
                     
                     $this->db->update('tbl_monitor_ips', $update_data, 'id = :id', ['id' => $id]);
@@ -167,11 +159,13 @@ class Monitors extends Base {
             }
         }
         
-        $this->view('monitors/edit', ['monitor' => $monitor, 'error' => $error ?? null]);
+        $accounts=$this->db->fetchAll("SELECT id,name,username,email FROM users ORDER BY name,username");
+        $this->view('monitors/edit', ['monitor'=>$monitor,'accounts'=>$accounts,'error'=>$error??null]);
     }
     
     public function delete($id) {
         $this->requireAdmin();
+        if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'){http_response_code(405);exit('POST required');}
         $this->db->delete('tbl_monitor_ips', 'id = :id', ['id' => $id]);
         $this->redirect('monitors');
     }

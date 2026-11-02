@@ -514,12 +514,12 @@ ob_start();
                                     <i class="fas fa-file-alt"></i>
                                 </a>
                                 <?php if ($_SESSION['role'] === ROLE_ADMIN): ?>
-                                <a href="<?php echo BASE_URL; ?>monitors/delete/<?php echo $monitor['id']; ?>" 
+                                <form method="POST" action="<?php echo BASE_URL; ?>monitors/delete/<?php echo (int)$monitor['id']; ?>" style="display:inline"><button type="submit" 
                                    class="btn btn-sm btn-outline-danger" 
                                    title="Delete Monitor"
                                    onclick="return confirm('Are you sure you want to delete this monitor?')">
                                     <i class="fas fa-trash"></i>
-                                </a>
+                                </button></form>
                                 <?php endif; ?>
                             </div>
                         </td>

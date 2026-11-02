@@ -223,7 +223,11 @@ class View extends Base {
         $file_path = urldecode($file_path);
         
         // Construct full path
-        $full_path = BASEPATH . 'data/logs/ip_' . $monitor['ip_address'] . '/' . $file_path;
+        $full_path = realpath(BASEPATH . 'data/logs/ip_' . $monitor['ip_address'] . '/' . $file_path);
+        $allowed = realpath(BASEPATH . 'data/logs');
+        if(!$allowed||!$full_path||!str_starts_with($full_path,$allowed.DIRECTORY_SEPARATOR)){
+            http_response_code(403);$this->json(['error'=>'Invalid log path']);
+        }
         
         if (!file_exists($full_path)) {
             $this->json(['error' => 'Log file not found']);
@@ -286,7 +290,10 @@ class View extends Base {
         $this->json($monitors);
     }
     
-    public function view_file($file_path) {
+    public function view_file($file_path = '') {
+        $file_path = (string)($_GET['path'] ?? $file_path);
+        // Normalize stored paths from ./html/data to the webroot's data folder.
+        $file_path = preg_replace('#^(?:\\./)?html/#','',str_replace('\\\\','/',$file_path));
         // Security: Only allow viewing files from the data directories
         $file_path = urldecode($file_path);
         
@@ -310,8 +317,8 @@ class View extends Base {
         $is_allowed = false;
         foreach ($allowed_dirs as $allowed_dir) {
             $allowed_absolute = realpath(BASEPATH . $allowed_dir);
-            if ($allowed_absolute && $normalized_file_path && 
-                strpos($normalized_file_path, $allowed_absolute) === 0) {
+            if ($allowed_absolute && $normalized_file_path &&
+                ($normalized_file_path === $allowed_absolute || str_starts_with($normalized_file_path,$allowed_absolute.DIRECTORY_SEPARATOR))) {
                 $is_allowed = true;
                 break;
             }
@@ -367,7 +374,7 @@ class View extends Base {
         // Remove 'html/data/' from the beginning if present (since BASE_URL already includes 'html/')
         $path = preg_replace('/^html\/data\//', 'data/', $path);
         
-        return $path;
+        return 'view/view_file?path=' . rawurlencode($path);
     }
     
     public function formatFileSize($bytes) {

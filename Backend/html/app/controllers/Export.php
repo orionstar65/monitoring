@@ -10,6 +10,7 @@ class Export extends Base {
 
     public function __construct() {
         parent::__construct();
+        $this->requireAdmin();
     }
 
     public function index() {
@@ -149,7 +150,7 @@ class Export extends Base {
             $start_date = $_POST['start_date'] ?? null;
             $end_date = $_POST['end_date'] ?? null;
             $export_dir = $_POST['export_dir'] ?? null;
-            
+            if(!is_string($export_dir)||!preg_match('/^export_\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}$/',$export_dir)) throw new Exception('Invalid export directory');
             if (!$device_id || !$start_date || !$end_date || !$export_dir) {
                 throw new Exception('Missing required parameters');
             }
@@ -286,7 +287,10 @@ class Export extends Base {
         header('Content-Type: application/json');
         
         $export_dir = $_GET['export_dir'] ?? null;
-        $progress_file = $_GET['progress_file'] ?? 'progress.txt';
+        $progress_file = 'progress.txt';
+        if(!is_string($export_dir)||!preg_match('/^export_\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}$/',$export_dir)){
+            http_response_code(400);echo json_encode(['error'=>'Invalid export directory']);return;
+        }
         
         if (!$export_dir) {
             http_response_code(400);
@@ -372,7 +376,7 @@ class Export extends Base {
                 $this->logProgress("Completed device: {$device['username']} ({$device['ip_address']})");
                 
                 // Small delay to allow progress polling to catch up
-                usleep(2000000); // 2 second delay
+                // No artificial delay.
             }
             
             $this->logProgress("Export completed successfully!");
@@ -429,7 +433,7 @@ class Export extends Base {
         } catch (Exception $e) {
             $this->logProgress("⚠ Browser history export failed: " . $e->getMessage());
         }
-        usleep(1000000); // 1 second delay
+        // No artificial delay.
         
         // Export key logs
         $this->logProgress("Exporting key logs for {$username}...");
@@ -438,7 +442,7 @@ class Export extends Base {
         } catch (Exception $e) {
             $this->logProgress("⚠ Key logs export failed: " . $e->getMessage());
         }
-        usleep(1000000); // 1 second delay
+        // No artificial delay.
         
         // Export USB logs
         $this->logProgress("Exporting USB logs for {$username}...");
@@ -447,7 +451,7 @@ class Export extends Base {
         } catch (Exception $e) {
             $this->logProgress("⚠ USB logs export failed: " . $e->getMessage());
         }
-        usleep(1000000); // 1 second delay
+        // No artificial delay.
         
         // Export screenshots
         $this->logProgress("Exporting screenshots for {$username}...");
@@ -456,7 +460,7 @@ class Export extends Base {
         } catch (Exception $e) {
             $this->logProgress("⚠ Screenshots export failed: " . $e->getMessage());
         }
-        usleep(1000000); // 1 second delay
+        // No artificial delay.
         
         $this->logProgress("✓ Device export completed for {$username} ({$ip})");
     }
@@ -752,7 +756,7 @@ class Export extends Base {
             $videoPath = $outputFolder . "/" . $videoFilename;
             
             // Simple FFmpeg command - no complex escaping
-            $ffmpegCmd = $this->ffmpegPath . " -y -framerate 1 -i " . $outputFolder . "/img_%04d.jpg -c:v libx264 -pix_fmt yuv420p -crf 28 -vf scale=1280:720 " . $videoPath . " 2>&1";
+            $ffmpegCmd = escapeshellarg($this->ffmpegPath) . " -y -framerate 1 -i " . escapeshellarg($outputFolder . '/img_%04d.jpg') . " -c:v libx264 -pix_fmt yuv420p -crf 28 -vf scale=1280:720 " . escapeshellarg($videoPath) . " 2>&1";
             
             $this->logProgress("Running FFmpeg command...");
             $this->logProgress("Command: " . $ffmpegCmd);

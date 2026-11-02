@@ -131,6 +131,20 @@ ob_start();
                     </div>
                     
                     <div class="mb-3">
+                        <label for="owner_user_id" class="form-label">Assigned user</label>
+                        <select class="form-select" id="owner_user_id" name="owner_user_id">
+                          <option value="">Unassigned — awaiting admin approval</option>
+                          <?php foreach($accounts as $account): ?>
+                          <option value="<?= (int)$account['id'] ?>" <?= (int)($monitor['owner_user_id']??0)===(int)$account['id']?'selected':'' ?>>
+                            <?= htmlspecialchars(($account['name']?:$account['username']).' ('.$account['email'].')',ENT_QUOTES,'UTF-8') ?>
+                          </option>
+                          <?php endforeach; ?>
+                        </select>
+                        <?php if(!empty($monitor['requested_user_id'])): ?>
+                        <small class="text-muted">Requested by user #<?= (int)$monitor['requested_user_id'] ?></small>
+                        <?php endif; ?>
+                    </div>
+                    <div class="mb-3">
                         <label for="slack_id" class="form-label">
                             <i class="fab fa-slack me-1"></i>Slack ID
                         </label>
