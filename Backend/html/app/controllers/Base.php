@@ -27,7 +27,8 @@ class Base {
         }
         // Never trust stale roles cached before an administrator's edit.
         $_SESSION['role'] = $this->user['role'];
-        $_SESSION['username'] = $this->user['username'];
+        $_SESSION['user_no'] = (string)$this->user['user_no'];
+        $_SESSION['full_name'] = $this->user['name'];
     }
     
     protected function view($view, $data = []) {
