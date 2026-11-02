@@ -12,6 +12,7 @@ import CoreGraphics
 import IOKit
 import IOKit.usb
 import os.log
+import UserNotifications
 import Security
 
 let CHECKER_IDENTIFIER = "com.airentech.MonitorClient"
@@ -210,7 +211,7 @@ private final class MonitorPickerCoordinator: NSObject {
     }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     
     var storage: UserDefaults!
     private var clientToken: String = ""
@@ -249,12 +250,60 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
               let data = item as? Data else { return nil }
         return String(data: data, encoding: .utf8)
     }
-    private func showClientNotification(_ title: String, _ message: String) {
+    // Centralized user notifications; honors the notification switch in Settings.
+    private func deliverNotification(_ content: UNMutableNotificationContent) {
         guard notificationsEnabled else { return }
-        let notification = NSUserNotification()
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                NSLog("MonitorClient: notification delivery failed: %@", error.localizedDescription)
+            }
+        }
+    }
+
+    private func showClientNotification(_ title: String, _ message: String) {
+        let notification = UNMutableNotificationContent()
         notification.title = title
-        notification.informativeText = message
-        if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
+        notification.body = message
+        self.deliverNotification(notification)
+    }
+
+    private func configureNotifications() {
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        let accessibility = UNNotificationAction(
+            identifier: "OPEN_ACCESSIBILITY_SETTINGS",
+            title: "Open Settings",
+            options: [.foreground]
+        )
+        let recording = UNNotificationAction(
+            identifier: "OPEN_SCREEN_RECORDING_SETTINGS",
+            title: "Open Settings",
+            options: [.foreground]
+        )
+        center.setNotificationCategories([
+            UNNotificationCategory(
+                identifier: "MONITOR_ACCESSIBILITY",
+                actions: [accessibility],
+                intentIdentifiers: [],
+                options: []
+            ),
+            UNNotificationCategory(
+                identifier: "MONITOR_SCREEN_RECORDING",
+                actions: [recording],
+                intentIdentifiers: [],
+                options: []
+            )
+        ])
+        center.requestAuthorization(options: [.alert, .sound]) { _, error in
+            if let error = error {
+                NSLog("MonitorClient: notification permission error: %@", error.localizedDescription)
+            }
+        }
     }
     private func restoreRememberedSession() {
         guard let token = keychainLoadToken(), !token.isEmpty else {
@@ -598,7 +647,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         }
         
         // Set up notification delegate
-        NSUserNotificationCenter.default.delegate = self
+        configureNotifications()
         
         // Setup status bar menu
         do {
@@ -790,12 +839,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             let _ = CGWindowListCreateImage(CGRect.null, .optionOnScreenOnly, kCGNullWindowID, .bestResolution)
             
             // Show detailed notification based on previous state
-            let notification = NSUserNotification()
+            let notification = UNMutableNotificationContent()
             notification.title = "MonitorClient - Screen Recording Permission Required"
             
             if wasPreviouslyGranted {
                 // App was previously granted but permission was revoked
-                notification.informativeText = """
+                notification.body = """
                 Screen recording permission was revoked. To restore monitoring:
                 
                 1. Open System Preferences > Security & Privacy > Privacy > Screen Recording
@@ -809,7 +858,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                 logMessage("Screen recording permission was previously granted but has been revoked", level: .warning)
             } else {
                 // First time requesting permission
-                notification.informativeText = """
+                notification.body = """
                 MonitorClient needs screen recording permission to capture screenshots.
                 
                 To grant permission:
@@ -824,8 +873,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                 // logMessage("First time requesting screen recording permission", level: .info)
             }
             
-            notification.soundName = NSUserNotificationDefaultSoundName
-            if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
+            notification.sound = .default
+            self.deliverNotification(notification)
             
             // Check if permission was granted after the screen capture attempt
             // Use a timer to check multiple times since the dialog might take time to appear
@@ -2855,12 +2904,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         // logMessage("Requesting accessibility permission...", level: .info)
         
         // Show detailed notification based on previous state
-        let notification = NSUserNotification()
+        let notification = UNMutableNotificationContent()
         notification.title = "MonitorClient - Accessibility Permission Required"
         
         if wasPreviouslyGranted {
             // App was previously granted but permission was revoked
-            notification.informativeText = """
+            notification.body = """
             Accessibility permission was revoked. To restore monitoring:
             
             1. Open System Preferences > Security & Privacy > Privacy > Accessibility
@@ -2874,7 +2923,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             logMessage("Accessibility permission was previously granted but has been revoked", level: .warning)
         } else {
             // First time requesting permission
-            notification.informativeText = """
+            notification.body = """
             MonitorClient needs accessibility permission to monitor keyboard activity.
             
             To grant permission:
@@ -2889,8 +2938,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             // logMessage("First time requesting accessibility permission", level: .info)
         }
         
-        notification.soundName = NSUserNotificationDefaultSoundName
-        if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
+        notification.sound = .default
+        self.deliverNotification(notification)
         
         // Also log the instructions
         // logMessage("Accessibility permission instructions sent via notification", level: .info)
@@ -2947,18 +2996,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     
     private func showServerConnectionNotification(connected: Bool) {
         guard notificationsEnabled else { return }
-        let notification = NSUserNotification()
+        let notification = UNMutableNotificationContent()
         notification.title = "MonitorClient"
         
         if connected {
-            notification.informativeText = "Server connection restored"
-            notification.soundName = nil // No sound for reconnection
+            notification.body = "Server connection restored"
+            notification.sound = nil // No sound for reconnection
         } else {
-            notification.informativeText = "Server connection lost"
-            notification.soundName = NSUserNotificationDefaultSoundName
+            notification.body = "Server connection lost"
+            notification.sound = .default
         }
         
-        if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
+        self.deliverNotification(notification)
         // logMessage("Server connection notification: \(connected ? "restored" : "lost")", level: .info)
     }
     
@@ -3405,12 +3454,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         let screenRecordingGranted = isScreenRecordingEnabled()
         
         // Show notification with instructions
-        let notification = NSUserNotification()
+        let notification = UNMutableNotificationContent()
         notification.title = "MonitorClient - Grant Permissions"
         
         if !accessibilityGranted && !screenRecordingGranted {
             // Both permissions needed
-            notification.informativeText = """
+            notification.body = """
             MonitorClient needs both permissions to work properly:
             
             🔐 ACCESSIBILITY PERMISSION:
@@ -3428,7 +3477,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             """
         } else if !accessibilityGranted {
             // Only accessibility needed
-            notification.informativeText = """
+            notification.body = """
             MonitorClient needs accessibility permission:
             
             1. Open System Settings > Privacy & Security > Accessibility
@@ -3440,7 +3489,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             """
         } else if !screenRecordingGranted {
             // Only screen recording needed
-            notification.informativeText = """
+            notification.body = """
             MonitorClient needs screen recording permission:
             
             1. Open System Settings > Privacy & Security > Screen & System Audio Recording
@@ -3452,7 +3501,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         } else {
             // Both permissions already granted
             notification.title = "MonitorClient - Permissions Already Granted"
-            notification.informativeText = """
+            notification.body = """
             ✅ Accessibility: Granted
             ✅ Screen Recording: Granted
             
@@ -3460,8 +3509,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             """
         }
         
-        notification.soundName = NSUserNotificationDefaultSoundName
-        if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
+        notification.sound = .default
+        self.deliverNotification(notification)
         
         // Request permissions programmatically
         if !accessibilityGranted {
@@ -3617,12 +3666,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         // logMessage("Then add this app to the Accessibility list", level: .info)
         
         // Show a user notification with manual instructions
-        let notification = NSUserNotification()
+        let notification = UNMutableNotificationContent()
         notification.title = "Manual Accessibility Setup Required"
-        notification.informativeText = "Please open System Settings > Privacy & Security > Accessibility and add this app"
-        notification.soundName = NSUserNotificationDefaultSoundName
+        notification.body = "Please open System Settings > Privacy & Security > Accessibility and add this app"
+        notification.sound = .default
         
-        if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
+        self.deliverNotification(notification)
     }
     
     // Open System Preferences to Screen Recording settings
@@ -3713,12 +3762,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         // logMessage("Then add this app to the Screen Recording list", level: .info)
         
         // Show a user notification with manual instructions
-        let notification = NSUserNotification()
+        let notification = UNMutableNotificationContent()
         notification.title = "Manual Screen Recording Setup Required"
-        notification.informativeText = "Please open System Settings > Privacy & Security > Screen Recording and add this app"
-        notification.soundName = NSUserNotificationDefaultSoundName
+        notification.body = "Please open System Settings > Privacy & Security > Screen Recording and add this app"
+        notification.sound = .default
         
-        if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
+        self.deliverNotification(notification)
     }
     
     // Check accessibility permission periodically and request if needed
@@ -3737,14 +3786,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                     // logMessage("Periodic accessibility check: permission not granted, showing notification...", level: .info)
                     
                     // Show user notification about accessibility permission
-                    let notification = NSUserNotification()
+                    let notification = UNMutableNotificationContent()
                     notification.title = "MonitorClient Needs Accessibility Permission"
-                    notification.informativeText = "Please grant accessibility permission to enable keyboard monitoring"
-                    notification.soundName = NSUserNotificationDefaultSoundName
-                    notification.actionButtonTitle = "Open Settings"
-                    notification.otherButtonTitle = "Later"
+                    notification.body = "Please grant accessibility permission to enable keyboard monitoring"
+                    notification.sound = .default
+                    notification.categoryIdentifier = "MONITOR_ACCESSIBILITY"
                     
-                    if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
+                    
+                    self.deliverNotification(notification)
                     
                     storage.set(currentTime, forKey: "last-accessibility-notification")
                 }
@@ -3777,14 +3826,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                         // logMessage("Periodic screen recording check: permission not granted, showing notification...", level: .info)
                         
                         // Show user notification about screen recording permission
-                        let notification = NSUserNotification()
+                        let notification = UNMutableNotificationContent()
                         notification.title = "MonitorClient Needs Screen Recording Permission"
-                        notification.informativeText = "Please grant screen recording permission to enable screenshot monitoring"
-                        notification.soundName = NSUserNotificationDefaultSoundName
-                        notification.actionButtonTitle = "Open Settings"
-                        notification.otherButtonTitle = "Later"
+                        notification.body = "Please grant screen recording permission to enable screenshot monitoring"
+                        notification.sound = .default
+                        notification.categoryIdentifier = "MONITOR_SCREEN_RECORDING"
                         
-                        if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
+                        
+                        self.deliverNotification(notification)
                         
                         storage.set(currentTime, forKey: "last-screen-recording-notification")
                     }
@@ -3804,16 +3853,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     
 
     
-    // MARK: - NSUserNotificationCenterDelegate
-    
-    func userNotificationCenter(_ center: NSUserNotificationCenter, didActivate notification: NSUserNotification) {
-        if notification.actionButtonTitle == "Open Settings" {
-            openAccessibilityPreferences()
+    // MARK: - UNUserNotificationCenterDelegate
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        switch response.actionIdentifier {
+        case "OPEN_ACCESSIBILITY_SETTINGS":
+            DispatchQueue.main.async { [weak self] in self?.openAccessibilityPreferences() }
+        case "OPEN_SCREEN_RECORDING_SETTINGS":
+            DispatchQueue.main.async { [weak self] in self?.openScreenRecordingPreferences() }
+        default:
+            break
         }
+        completionHandler()
     }
-    
-    func userNotificationCenter(_ center: NSUserNotificationCenter, shouldPresent notification: NSUserNotification) -> Bool {
-        return true
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler(self.notificationsEnabled ? [.banner, .sound, .list] : [])
     }
 
     // Debug method to check accessibility permission status
@@ -3942,11 +4001,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             
             // Show notification
             DispatchQueue.main.async {
-                let notification = NSUserNotification()
+                let notification = UNMutableNotificationContent()
                 notification.title = "MonitorClient - Manual Send Complete"
-                notification.informativeText = "All monitoring data has been sent to server"
-                notification.soundName = nil
-                if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
+                notification.body = "All monitoring data has been sent to server"
+                notification.sound = nil
+                self.deliverNotification(notification)
             }
         }
     }
@@ -4108,7 +4167,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     @objc private func statusBarIconClicked() {
         updateTrayStatusDot()
         // Show a quick status notification
-        let notification = NSUserNotification()
+        let notification = UNMutableNotificationContent()
         notification.title = "MonitorClient Status"
         
         let serverIP = storage.string(forKey: "server-ip") ?? "Not configured"
@@ -4125,7 +4184,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         let isScreenRecordingEnabled = isScreenRecordingEnabled()
         let isKeyboardActive = eventTap != nil && CGEvent.tapIsEnabled(tap: eventTap!)
         
-        notification.informativeText = """
+        notification.body = """
         Client: \(clientIPAddress) / \(macAddress)
         Server: \(serverIP) (\(serverStatus))
         Accessibility: \(isAccessibilityEnabled ? "✅" : "❌")
@@ -4135,8 +4194,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         USB Events: \(usbDeviceLogs.count)
         """
         
-        notification.soundName = nil // No sound for status clicks
-        if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
+        notification.sound = nil // No sound for status clicks
+        self.deliverNotification(notification)
     }
     
     @objc private func updateStatusMenu() {
