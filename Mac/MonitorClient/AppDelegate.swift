@@ -2733,11 +2733,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         return true
     }
 
+    private var activeSettingsWindow: NSWindow?
+
     private func openLoginDialog() { openUnifiedSettingsWindow() }
     @objc private func openSettingsDialog() { openUnifiedSettingsWindow() }
 
     // Server, User and Monitor Settings share a single compact, scrollable window.
     private func openUnifiedSettingsWindow() {
+        if let existing = activeSettingsWindow {
+            NSApp.activate(ignoringOtherApps: true)
+            existing.makeKeyAndOrderFront(nil)
+            existing.orderFrontRegardless()
+            return
+        }
         let width: CGFloat = 510
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 670),
             styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
@@ -2746,6 +2754,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.center()
+        activeSettingsWindow = window
+        defer {
+            if activeSettingsWindow === window { activeSettingsWindow = nil }
+            window.orderOut(nil)
+        }
 
         let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: width, height: 670))
         scroll.hasVerticalScroller = true
@@ -2839,6 +2852,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         server.addArrangedSubview(row("Port", portField))
         let connection = text("", size: 12)
         server.addArrangedSubview(row("Connection", connection))
+        let testButton = button("Test Connection", id: "test-server")
+        let testResult = text("", size: 12)
+        testResult.textColor = .secondaryLabelColor
+        let testRow = NSStackView(views: [testButton, testResult])
+        testRow.orientation = .horizontal
+        testRow.spacing = 12
+        server.addArrangedSubview(row("", testRow))
         content.addArrangedSubview(server)
         rule()
 
@@ -2926,7 +2946,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         coordinator.submitButton = accountSubmit
         window.delegate = coordinator
         tabs.delegate = coordinator
-        for control in [accountSubmit, logout, save, close] {
+        for control in [accountSubmit, logout, save, close, testButton] {
             control.target = coordinator
             control.action = #selector(UnifiedWindowActions.activate(_:))
         }
@@ -3040,6 +3060,36 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         coordinator.handler = { [weak self] action in
             guard let self = self else { return }
             switch action {
+            case "test-server":
+                let host = ipField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                let portText = portField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !host.isEmpty, let port = Int(portText), (1...65535).contains(port),
+                      let url = URL(string: "\(port == 8924 ? "http" : "https")://\(host):\(port)/html/auth/login") else {
+                    testResult.stringValue = "Enter a valid IP and port"
+                    testResult.textColor = .systemRed
+                    return
+                }
+                testButton.isEnabled = false
+                testResult.stringValue = "Checking…"
+                testResult.textColor = .secondaryLabelColor
+                var request = URLRequest(url: url)
+                request.httpMethod = "GET"
+                request.timeoutInterval = 6
+                URLSession.shared.dataTask(with: request) { _, response, error in
+                    DispatchQueue.main.async {
+                        guard self.activeSettingsWindow === window else { return }
+                        testButton.isEnabled = true
+                        if error == nil, let http = response as? HTTPURLResponse,
+                           (200...399).contains(http.statusCode) {
+                            testResult.stringValue = "Server reachable"
+                            testResult.textColor = .systemGreen
+                        } else {
+                            testResult.stringValue = error?.localizedDescription
+                                ?? "Server unavailable or invalid response"
+                            testResult.textColor = .systemRed
+                        }
+                    }
+                }.resume()
             case "close":
                 self.notificationsEnabled = notifications.state == .on
                 NSApp.stopModal(withCode: .OK)
