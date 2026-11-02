@@ -801,7 +801,7 @@
           input.type='search';input.className='form-control form-control-sm';
           input.setAttribute('aria-label','Filter by '+label.textContent);
           // Use named columns so filtering still maps correctly after drag-reorder.
-          const col=instance.column(originalIndex);
+          const col=instance.column(header);
           input.value=col.search();
           input.addEventListener('input',()=>col.search(input.value).draw());
           div.append(label,input);fields.append(div);

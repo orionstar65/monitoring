@@ -14,11 +14,20 @@ function monitoringLanHttpAllowed(): bool {
     return filter_var($ip, FILTER_VALIDATE_IP,
         FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
 }
+function monitoringTrustedProxyHttps(): bool {
+    if(getenv('MONITOR_TRUST_PROXY_HTTPS')!=='1')return false;
+    // Never trust a caller-supplied X-Forwarded-Proto from an arbitrary peer.
+    // Only localhost is trusted by default; configure explicit proxy IPs if needed.
+    $peer=$_SERVER['REMOTE_ADDR']??'';
+    $trusted=explode(',',getenv('MONITOR_TRUSTED_PROXY_IPS')?:'127.0.0.1,::1');
+    $trusted=array_map('trim',$trusted);
+    return in_array($peer,$trusted,true)
+        && strtolower(trim($_SERVER['HTTP_X_FORWARDED_PROTO']??''))==='https';
+}
 function requireSecureRequest(): void {
-    // HTTPS must be end-to-end or terminated by a trusted, isolated reverse proxy.
+    // HTTPS must be end-to-end or terminated by an explicitly trusted proxy.
     $direct = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
-    $proxy = getenv('MONITOR_TRUST_PROXY_HTTPS') === '1'
-        && strtolower(trim($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+    $proxy = monitoringTrustedProxyHttps();
     if (!$direct && !$proxy && !monitoringLanHttpAllowed()) {
         http_response_code(426);
         header('Content-Type: application/json');

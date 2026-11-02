@@ -141,3 +141,18 @@ actual LAN range rather than opening the monitoring server publicly.
 
 **Security:** Only install a CA certificate you generated and verified. Do not
 disable TLS verification, use `curl -k` as a fix, or import the CA private key.
+
+
+## Reverse proxy trust boundary
+
+When PHP is behind an HTTPS-terminating reverse proxy, set
+`MONITOR_TRUST_PROXY_HTTPS=1`. The HTTPS forwarding header will now be
+accepted **only when** the immediate peer is an explicitly trusted proxy.
+Localhost (`127.0.0.1`, `::1`) is trusted by default. For a different
+reverse-proxy host, set `MONITOR_TRUSTED_PROXY_IPS` to its comma-separated
+**IP addresses**. Configure the proxy to overwrite incoming
+`X-Forwarded-Proto` and block direct access to the application backend.
+Never add a general LAN or wildcard IP range here.
+
+This prevents a caller on an untrusted interface from faking
+`X-Forwarded-Proto: https` to bypass the HTTPS requirement.

@@ -1,7 +1,7 @@
 <?php
+require_once dirname(__DIR__).'/services/ClientIdentity.php';
 $directHttps = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
-$trustedProxyHttps = getenv('MONITOR_TRUST_PROXY_HTTPS') === '1'
-  && strtolower(trim($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https';
+$trustedProxyHttps = monitoringTrustedProxyHttps();
 $lanHttpAllowed = false;
 if (getenv('MONITOR_ALLOW_HTTP') === '1') {
     $peer = $_SERVER['REMOTE_ADDR'] ?? '';
