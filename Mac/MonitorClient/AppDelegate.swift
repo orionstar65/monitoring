@@ -244,26 +244,13 @@ private final class AccountModalActions: NSObject, NSTabViewDelegate, NSWindowDe
 
 
 // Keeps one native window open while account and monitor sections change.
-private final class UnifiedWindowActions: NSObject, NSWindowDelegate, NSTabViewDelegate {
+private final class UnifiedWindowActions: NSObject, NSWindowDelegate {
     weak var window: NSWindow?
-    weak var accountTabs: NSTabView?
-    weak var loginUsername: NSTextField?
-    weak var signupFullName: NSTextField?
-    weak var submitButton: NSButton?
     var handler: ((String) -> Void)?
-
-    @objc func activate(_ sender: NSButton) {
-        handler?(sender.identifier?.rawValue ?? "")
-    }
+    @objc func activate(_ sender: NSButton) { handler?(sender.identifier?.rawValue ?? "") }
     @objc func selectMonitor(_ sender: NSPopUpButton) { handler?("monitor") }
-    func windowWillClose(_ notification: Notification) {
-        NSApp.stopModal(withCode: .cancel)
-    }
-    func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
-        let signup = (tabViewItem?.identifier as? String) == "signup"
-        submitButton?.title = signup ? "Create Account" : "Sign In"
-        window?.makeFirstResponder(signup ? signupFullName : loginUsername)
-    }
+    @objc func selectUser(_ sender: NSPopUpButton) { handler?("user") }
+    func windowWillClose(_ notification: Notification) { NSApp.stopModal(withCode: .cancel) }
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
@@ -2713,26 +2700,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         return result
     }
 
-    private func signInAndSelectMonitor(identifier: String, password: String) -> Bool {
-        guard let response = clientAuthRequest(["action": "login", "identifier": identifier, "password": password]),
-              response["success"] as? Bool == true,
-              let token = response["token"] as? String, token.count == 64 else {
-            let alert = NSAlert()
-            alert.messageText = "Sign-in failed"
-            alert.informativeText = "Check your username and password. If the password is incorrect, ask an administrator to reset it."
-            alert.runModal()
-            return false
-        }
-        clientToken = token
-        selectedMonitorId = 0
-        if let user = response["user"] as? [String: Any], let canonical = user["username"] as? String {
-            storage.set(canonical, forKey: "username")
-        }
-        keychainSaveToken(token)
-        updateTrayStatusDot()
-        return true
-    }
-
     private var activeSettingsWindow: NSWindow?
 
     private func openLoginDialog() { openUnifiedSettingsWindow() }
@@ -2741,15 +2708,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     // Server, User and Monitor Settings share a single compact, scrollable window.
     private func openUnifiedSettingsWindow() {
         if let existing = activeSettingsWindow {
-            NSApp.activate(ignoringOtherApps: true)
             existing.makeKeyAndOrderFront(nil)
-            existing.orderFrontRegardless()
+            NSApp.activate(ignoringOtherApps: true)
             return
         }
         let width: CGFloat = 510
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 670),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 650),
             styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
-        window.title = "MonitorClient"
+        window.title = "MonitorClient · Settings"
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
@@ -2760,7 +2726,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             window.orderOut(nil)
         }
 
-        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: width, height: 670))
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: width, height: 650))
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
@@ -2768,433 +2734,382 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         document.translatesAutoresizingMaskIntoConstraints = false
         scroll.documentView = document
         window.contentView = scroll
-
-        let content = NSStackView()
-        content.orientation = .vertical
-        content.alignment = .centerX
-        content.spacing = 12
-        content.translatesAutoresizingMaskIntoConstraints = false
-        document.addSubview(content)
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 14
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        document.addSubview(stack)
         NSLayoutConstraint.activate([
             document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
-            content.topAnchor.constraint(equalTo: document.topAnchor, constant: 16),
-            content.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 20),
-            content.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -20),
-            document.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: 22)
+            stack.topAnchor.constraint(equalTo: document.topAnchor, constant: 16),
+            stack.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 20),
+            stack.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -20),
+            document.bottomAnchor.constraint(equalTo: stack.bottomAnchor, constant: 20)
         ])
-
-        func text(_ value: String, size: CGFloat = 13, bold: Bool = false) -> NSTextField {
+        func text(_ value: String, bold: Bool = false) -> NSTextField {
             let field = NSTextField(labelWithString: value)
-            field.font = NSFont.systemFont(ofSize: size, weight: bold ? .semibold : .regular)
+            field.font = NSFont.systemFont(ofSize: bold ? 15 : 12, weight: bold ? .semibold : .regular)
             return field
         }
-        func input(_ placeholder: String, value: String = "", secure: Bool = false) -> NSTextField {
-            let field: NSTextField = secure ? NSSecureTextField() : NSTextField()
+        func entry(_ placeholder: String, value: String = "") -> NSTextField {
+            let field = NSTextField()
             field.placeholderString = placeholder
             field.stringValue = value
-            field.controlSize = .regular
-            field.widthAnchor.constraint(equalToConstant: 305).isActive = true
+            field.widthAnchor.constraint(equalToConstant: 290).isActive = true
             return field
         }
-        func row(_ title: String, _ element: NSView) -> NSStackView {
-            let caption = text(title)
-            caption.widthAnchor.constraint(equalToConstant: 130).isActive = true
-            let line = NSStackView(views: [caption, element])
-            line.orientation = .horizontal
-            line.alignment = .centerY
-            line.spacing = 10
-            return line
-        }
         func section(_ title: String) -> NSStackView {
-            let panel = NSStackView()
-            panel.orientation = .vertical
-            panel.alignment = .leading
-            panel.spacing = 9
-            let heading = text(title, size: 15, bold: true)
-            panel.addArrangedSubview(heading)
-            panel.widthAnchor.constraint(equalToConstant: 450).isActive = true
-            return panel
+            let pane = NSStackView()
+            pane.orientation = .vertical
+            pane.alignment = .leading
+            pane.spacing = 8
+            pane.widthAnchor.constraint(equalToConstant: 450).isActive = true
+            pane.addArrangedSubview(text(title, bold: true))
+            return pane
+        }
+        func line(_ title: String, _ control: NSView) -> NSStackView {
+            let caption = text(title)
+            caption.widthAnchor.constraint(equalToConstant: 140).isActive = true
+            let row = NSStackView(views: [caption, control])
+            row.orientation = .horizontal
+            row.alignment = .centerY
+            row.spacing = 8
+            return row
         }
         func rule() {
-            let separator = NSBox()
-            separator.boxType = .separator
-            separator.widthAnchor.constraint(equalToConstant: 450).isActive = true
-            content.addArrangedSubview(separator)
+            let divider = NSBox()
+            divider.boxType = .separator
+            divider.widthAnchor.constraint(equalToConstant: 450).isActive = true
+            stack.addArrangedSubview(divider)
         }
-        func button(_ title: String, id: String) -> NSButton {
-            let control = NSButton(title: title, target: nil, action: nil)
-            control.identifier = NSUserInterfaceItemIdentifier(id)
-            control.bezelStyle = .rounded
-            return control
+        func action(_ title: String, _ key: String) -> NSButton {
+            let button = NSButton(title: title, target: nil, action: nil)
+            button.identifier = NSUserInterfaceItemIdentifier(key)
+            button.bezelStyle = .rounded
+            return button
         }
-
-        // Compact brand header: the app logo and version, no descriptions.
         let brand = NSStackView()
         brand.orientation = .vertical
         brand.alignment = .centerX
         brand.spacing = 3
         let logo = NSImageView(image: NSApp.applicationIconImage)
         logo.imageScaling = .scaleProportionallyUpOrDown
-        logo.widthAnchor.constraint(equalToConstant: 46).isActive = true
-        logo.heightAnchor.constraint(equalToConstant: 46).isActive = true
-        let version = text("MonitorClient  ·  v1.4", size: 12, bold: true)
-        version.textColor = .secondaryLabelColor
+        logo.widthAnchor.constraint(equalToConstant: 43).isActive = true
+        logo.heightAnchor.constraint(equalToConstant: 43).isActive = true
         brand.addArrangedSubview(logo)
+        let version = text("MonitorClient · v1.5")
+        version.textColor = .secondaryLabelColor
         brand.addArrangedSubview(version)
-        content.addArrangedSubview(brand)
+        stack.addArrangedSubview(brand)
         rule()
 
-        // Section 1: server connection settings.
         let server = section("Server Settings")
-        let ipField = input("Server IP", value: storage.string(forKey: "server-ip") ?? "")
-        let portField = input("Port", value: storage.string(forKey: "server-port") ?? "8924")
-        server.addArrangedSubview(row("Server IP", ipField))
-        server.addArrangedSubview(row("Port", portField))
-        let connection = text("", size: 12)
-        server.addArrangedSubview(row("Connection", connection))
-        let testButton = button("Test Connection", id: "test-server")
-        let testResult = text("", size: 12)
-        testResult.textColor = .secondaryLabelColor
-        let testRow = NSStackView(views: [testButton, testResult])
-        testRow.orientation = .horizontal
-        testRow.spacing = 12
-        server.addArrangedSubview(row("", testRow))
-        content.addArrangedSubview(server)
+        let ipField = entry("Server address", value: storage.string(forKey: "server-ip") ?? "")
+        let portField = entry("Port", value: storage.string(forKey: "server-port") ?? "8925")
+        server.addArrangedSubview(line("Server IP", ipField))
+        server.addArrangedSubview(line("Port", portField))
+        let test = action("Test Connection", "test")
+        let status = text("Not tested")
+        status.textColor = .secondaryLabelColor
+        let checkRow = NSStackView(views: [test, status])
+        checkRow.spacing = 10
+        server.addArrangedSubview(line("Connection", checkRow))
+        stack.addArrangedSubview(server)
         rule()
 
-        // Section 2: user account (login/signup only when signed out).
-        let account = section("User Settings")
-        let signedInLabel = text("", size: 13)
-        account.addArrangedSubview(signedInLabel)
-        let tabs = NSTabView()
-        tabs.widthAnchor.constraint(equalToConstant: 450).isActive = true
-        tabs.heightAnchor.constraint(equalToConstant: 211).isActive = true
-        let signIn = NSTabViewItem(identifier: "signin")
-        signIn.label = "Sign In"
-        let signInView = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: 166))
-        let loginUser = input("Username or email")
-        let loginPass = input("Password", secure: true)
-        loginUser.frame = NSRect(x: 65, y: 96, width: 305, height: 28)
-        loginPass.frame = NSRect(x: 65, y: 55, width: 305, height: 28)
-        signInView.addSubview(loginUser)
-        signInView.addSubview(loginPass)
-        signIn.view = signInView
-        tabs.addTabViewItem(signIn)
-
-        let signUp = NSTabViewItem(identifier: "signup")
-        signUp.label = "Sign Up"
-        let signUpView = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: 166))
-        let fullName = input("Full Name")
-        let newUsername = input("Username")
-        let newPassword = input("Password (12+ characters)", secure: true)
-        let confirmPassword = input("Confirm password", secure: true)
-        for (field, y) in zip([fullName, newUsername, newPassword, confirmPassword],
-                              [125, 90, 55, 20]) {
-            field.frame = NSRect(x: 65, y: CGFloat(y), width: 305, height: 28)
-            signUpView.addSubview(field)
-        }
-        signUp.view = signUpView
-        tabs.addTabViewItem(signUp)
-        account.addArrangedSubview(tabs)
-
-        let accountSubmit = button("Sign In", id: "account-submit")
-        let logout = button("Log Out", id: "logout")
-        let actionsLine = NSStackView(views: [accountSubmit, logout])
-        actionsLine.spacing = 12
-        account.addArrangedSubview(actionsLine)
-        content.addArrangedSubview(account)
+        let userPane = section("User Selection")
+        let users = NSPopUpButton()
+        users.widthAnchor.constraint(equalToConstant: 290).isActive = true
+        let userRow = line("User No", users)
+        userPane.addArrangedSubview(userRow)
+        let enrollment = entry("16-character administrator pairing code")
+        userPane.addArrangedSubview(line("Pairing code", enrollment))
+        let pair = action("Pair Device", "pair")
+        let switchUser = action("Change User No", "switch")
+        let unpair = action("Disconnect Device", "disconnect")
+        let buttons = NSStackView(views: [pair, switchUser, unpair])
+        buttons.spacing = 8
+        userPane.addArrangedSubview(line("", buttons))
+        let notice = text("")
+        notice.textColor = .secondaryLabelColor
+        notice.lineBreakMode = .byWordWrapping
+        notice.maximumNumberOfLines = 3
+        notice.widthAnchor.constraint(equalToConstant: 440).isActive = true
+        userPane.addArrangedSubview(notice)
+        stack.addArrangedSubview(userPane)
         rule()
 
-        // Section 3: monitor settings is hidden until authentication succeeds.
-        let monitorSection = section("Monitor Settings")
+        let monitorPane = section("Monitor Settings")
         let picker = NSPopUpButton()
-        picker.widthAnchor.constraint(equalToConstant: 305).isActive = true
-        let label = input("Optional label")
+        picker.widthAnchor.constraint(equalToConstant: 290).isActive = true
+        let label = entry("Label")
+        let remark = entry("Remark")
+        let monitorIP = text("—")
         let os = NSPopUpButton()
         os.addItems(withTitles: ["Windows", "Mac", "Ubuntu"])
-        os.selectItem(withTitle: "Mac")
-        os.widthAnchor.constraint(equalToConstant: 305).isActive = true
+        os.widthAnchor.constraint(equalToConstant: 290).isActive = true
         let machine = NSPopUpButton()
         machine.addItems(withTitles: ["Laptop", "Desktop"])
-        machine.widthAnchor.constraint(equalToConstant: 305).isActive = true
-        let monitorIP = text("—")
-        let remark = input("Optional remark")
-        monitorSection.addArrangedSubview(row("Monitor", picker))
-        monitorSection.addArrangedSubview(row("Label", label))
-        monitorSection.addArrangedSubview(row("OS", os))
-        monitorSection.addArrangedSubview(row("Machine", machine))
-        monitorSection.addArrangedSubview(row("IP", monitorIP))
-        monitorSection.addArrangedSubview(row("Remark", remark))
-        let save = button("Save", id: "save-monitor")
-        monitorSection.addArrangedSubview(save)
-        content.addArrangedSubview(monitorSection)
+        machine.widthAnchor.constraint(equalToConstant: 290).isActive = true
+        monitorPane.addArrangedSubview(line("Monitor", picker))
+        monitorPane.addArrangedSubview(line("Label", label))
+        monitorPane.addArrangedSubview(line("OS", os))
+        monitorPane.addArrangedSubview(line("Machine", machine))
+        monitorPane.addArrangedSubview(line("IP address", monitorIP))
+        monitorPane.addArrangedSubview(line("Remark", remark))
+        let save = action("Save Monitor", "save")
+        monitorPane.addArrangedSubview(line("", save))
+        let monitorNote = text("Monitor assignment is controlled by the server.")
+        monitorNote.textColor = .secondaryLabelColor
+        monitorPane.addArrangedSubview(monitorNote)
+        stack.addArrangedSubview(monitorPane)
         rule()
-
-        // The status label remains visible even when notifications are disabled.
         let notifications = NSButton(checkboxWithTitle: "Show status notifications",
                                      target: nil, action: nil)
-        notifications.state = notificationsEnabled ? .on : .off
-        content.addArrangedSubview(notifications)
-        let close = button("Close", id: "close")
-        content.addArrangedSubview(close)
+        notifications.state = self.notificationsEnabled ? .on : .off
+        stack.addArrangedSubview(notifications)
+        let close = action("Close", "close")
+        stack.addArrangedSubview(close)
 
         let coordinator = UnifiedWindowActions()
         coordinator.window = window
-        coordinator.accountTabs = tabs
-        coordinator.loginUsername = loginUser
-        coordinator.signupFullName = fullName
-        coordinator.submitButton = accountSubmit
         window.delegate = coordinator
-        tabs.delegate = coordinator
-        for control in [accountSubmit, logout, save, close, testButton] {
-            control.target = coordinator
-            control.action = #selector(UnifiedWindowActions.activate(_:))
+        for button in [test, pair, switchUser, unpair, save, close] {
+            button.target = coordinator
+            button.action = #selector(UnifiedWindowActions.activate(_:))
         }
+        users.target = coordinator
+        users.action = #selector(UnifiedWindowActions.selectUser(_:))
         picker.target = coordinator
         picker.action = #selector(UnifiedWindowActions.selectMonitor(_:))
 
-        // Explicit navigation through both account tabs.
-        loginUser.nextKeyView = loginPass
-        loginPass.nextKeyView = accountSubmit
-        fullName.nextKeyView = newUsername
-        newUsername.nextKeyView = newPassword
-        newPassword.nextKeyView = confirmPassword
-        confirmPassword.nextKeyView = accountSubmit
-        window.initialFirstResponder = loginUser
-        tabs.selectTabViewItem(signIn)
-
-        var monitors: [[String: Any]] = []
-        func updateConnectionLabel() {
-            let ready = !self.clientToken.isEmpty && self.selectedMonitorId > 0 && self.isServerConnected
-            connection.stringValue = ready ? "● Connected and active" : "● Offline / Not configured"
-            connection.textColor = ready ? .systemGreen : .systemRed
-            self.updateTrayStatusDot()
-        }
-        func updateAccountVisibility() {
-            let signedIn = !self.clientToken.isEmpty
-            tabs.isHidden = signedIn
-            accountSubmit.isHidden = signedIn
-            signedInLabel.isHidden = !signedIn
-            logout.isHidden = !signedIn
-            signedInLabel.stringValue = signedIn
-                ? "Signed in: " + (self.storage.string(forKey: "username") ?? "Account")
-                : ""
-            monitorSection.isHidden = !signedIn
-            updateConnectionLabel()
-        }
+        var availableMonitors: [[String: Any]] = []
+        var locked = false
         func updateMonitorFields() {
             let id = picker.selectedItem?.representedObject as? Int ?? 0
-            save.title = id > 0 ? "Save" : "Add"
-            guard id > 0,
-                  let m = monitors.first(where: { ($0["id"] as? Int ?? -1) == id }) else {
+            guard let monitor = availableMonitors.first(where: { ($0["id"] as? Int) == id }) else {
                 label.stringValue = ""
                 remark.stringValue = ""
-                os.selectItem(withTitle: "Mac")
-                machine.selectItem(withTitle: "Laptop")
-                monitorIP.stringValue = "New monitor"
+                monitorIP.stringValue = "—"
                 return
             }
-            label.stringValue = m["name"] as? String ?? ""
-            remark.stringValue = m["remark"] as? String ?? ""
-            os.selectItem(withTitle: m["platform"] as? String ?? "Mac")
-            machine.selectItem(withTitle: ((m["type"] as? String) ?? "").lowercased() == "desktop" ? "Desktop" : "Laptop")
-            monitorIP.stringValue = m["ip_address"] as? String ?? "—"
+            label.stringValue = monitor["name"] as? String ?? ""
+            remark.stringValue = monitor["remark"] as? String ?? ""
+            monitorIP.stringValue = monitor["ip_address"] as? String ?? "—"
+            os.selectItem(withTitle: monitor["platform"] as? String ?? "Mac")
+            machine.selectItem(withTitle: (monitor["type"] as? String ?? "").lowercased() == "desktop" ? "Desktop" : "Laptop")
         }
         func refreshMonitors() {
-            let data = self.clientAuthRequest(["action": "monitors"], authenticated: true)
-            monitors = data?["monitors"] as? [[String: Any]] ?? []
+            guard !self.clientToken.isEmpty else {
+                availableMonitors = []
+                picker.removeAllItems()
+                return
+            }
+            let restored = self.clientAuthRequest(["action": "restore"], authenticated: true)
+            guard restored?["success"] as? Bool == true else {
+                availableMonitors = []
+                self.clientToken = ""
+                self.selectedMonitorId = 0
+                picker.removeAllItems()
+                return
+            }
+            availableMonitors = restored?["monitors"] as? [[String: Any]] ?? []
+            let currentNo = String(describing: (restored?["user"] as? [String: Any])?["user_no"] ?? "")
+            if let item = users.itemArray.first(where: { $0.title == currentNo }) {
+                users.select(item)
+            }
+            self.storage.set(currentNo, forKey: "user_no")
+            self.selectedMonitorId = restored?["monitor_id"] as? Int ?? 0
+            locked = restored?["assignment_locked"] as? Bool ?? false
             picker.removeAllItems()
-            for item in monitors {
-                let id = item["id"] as? Int ?? 0
-                let name = item["name"] as? String ?? "Monitor"
-                let platform = item["platform"] as? String ?? "—"
-                let type = (item["type"] as? String ?? "Desktop").capitalized
-                let address = item["ip_address"] as? String ?? "—"
-                picker.addItem(withTitle: "\(name) · \(platform) · \(type) · \(address)")
+            for monitor in availableMonitors {
+                let id = monitor["id"] as? Int ?? 0
+                let name = monitor["name"] as? String ?? "Monitor"
+                let platform = monitor["platform"] as? String ?? "—"
+                let type = monitor["type"] as? String ?? "Desktop"
+                let ip = monitor["ip_address"] as? String ?? "—"
+                picker.addItem(withTitle: "\(name) · \(platform) · \(type) · \(ip)")
                 picker.lastItem?.representedObject = id
             }
-            picker.addItem(withTitle: "Add New...")
-            picker.lastItem?.representedObject = 0
-            if let selected = picker.itemArray.first(where: {
-                ($0.representedObject as? Int ?? -1) == self.selectedMonitorId
-            }) { picker.select(selected) }
-            else { picker.selectItem(at: picker.numberOfItems - 1) }
+            if let item = picker.itemArray.first(where: { ($0.representedObject as? Int) == self.selectedMonitorId }) {
+                picker.select(item)
+            }
             updateMonitorFields()
         }
-        func saveServerSettings() -> Bool {
-            let newIP = ipField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            let newPort = portField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !newIP.isEmpty, let port = Int(newPort), port > 0, port <= 65535 else {
-                let alert = NSAlert()
-                alert.messageText = "Enter a valid server IP and port"
-                alert.runModal()
-                return false
+        func updateState() {
+            let enrolled = !self.clientToken.isEmpty && self.selectedMonitorId > 0
+            monitorPane.isHidden = !enrolled
+            unpair.isHidden = !enrolled
+            switchUser.isHidden = !enrolled
+            pair.isHidden = enrolled
+            enrollment.isHidden = enrolled
+            users.isEnabled = !enrolled || !locked
+            switchUser.isEnabled = enrolled && !locked
+            if !enrolled {
+                notice.stringValue = "Select a User No and enter the one-time pairing code supplied by an administrator. Monitor details appear after pairing."
+            } else if locked {
+                notice.stringValue = "User assignment is locked. Ask your administrator to edit this monitor."
+                notice.textColor = .systemOrange
+            } else {
+                notice.stringValue = "This monitor is paired. You may change User No while assignment is unlocked."
+                notice.textColor = .secondaryLabelColor
             }
-            if newIP != (self.storage.string(forKey: "server-ip") ?? "") ||
-               newPort != (self.storage.string(forKey: "server-port") ?? "8924") {
-                // Explicitly revoke the old server session before changing hosts.
-                if !self.clientToken.isEmpty {
-                    _ = self.clientAuthRequest(["action": "logout"], authenticated: true)
-                }
-                let oldTokenQuery: [String: Any] = [
+            status.stringValue = self.isServerConnected ? "Server reachable" : "Offline / Not configured"
+            self.updateTrayStatusDot()
+        }
+        func saveServer() -> Bool {
+            let host = ipField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let port = portField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !host.isEmpty, !host.contains("/"), let number = Int(port), (1...65535).contains(number) else { return false }
+            let oldHost = self.storage.string(forKey: "server-ip") ?? ""
+            let oldPort = self.storage.string(forKey: "server-port") ?? "8925"
+            if host != oldHost || port != oldPort {
+                // Never forward a bearer token to an unsaved, untrusted host.
+                let query: [String: Any] = [
                     kSecClass as String: kSecClassGenericPassword,
                     kSecAttrService as String: self.keychainService,
                     kSecAttrAccount as String: self.sessionAccount()
                 ]
-                SecItemDelete(oldTokenQuery as CFDictionary)
+                SecItemDelete(query as CFDictionary)
                 self.clientToken = ""
                 self.selectedMonitorId = 0
                 self.isServerConnected = false
-                if let tap = self.eventTap {
-                    CGEvent.tapEnable(tap: tap, enable: false)
-                    self.eventTap = nil
-                }
             }
-            self.storage.set(newIP, forKey: "server-ip")
-            self.storage.set(newPort, forKey: "server-port")
+            self.storage.set(host, forKey: "server-ip")
+            self.storage.set(port, forKey: "server-port")
             self.saveSettings(username: self.storage.string(forKey: "username") ?? "",
-                         serverIP: newIP, serverPort: newPort)
-            updateAccountVisibility()
+                              serverIP: host, serverPort: port)
             return true
         }
-        coordinator.handler = { [weak self] action in
+        func showError(_ message: String) {
+            let alert = NSAlert()
+            alert.messageText = "MonitorClient"
+            alert.informativeText = message
+            alert.runModal()
+        }
+        coordinator.handler = { [weak self] command in
             guard let self = self else { return }
-            switch action {
-            case "test-server":
+            switch command {
+            case "test":
                 let host = ipField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                let portText = portField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !host.isEmpty, let port = Int(portText), (1...65535).contains(port),
-                      let url = URL(string: "\(port == 8924 ? "http" : "https")://\(host):\(port)/html/auth/login") else {
-                    testResult.stringValue = "Enter a valid IP and port"
-                    testResult.textColor = .systemRed
+                let port = portField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let number = Int(port), (1...65535).contains(number), !host.isEmpty,
+                      let url = URL(string: "\(port == "8924" ? "http" : "https")://\(host):\(port)/html/auth/login") else {
+                    status.stringValue = "Invalid server address"
                     return
                 }
-                testButton.isEnabled = false
-                testResult.stringValue = "Checking…"
-                testResult.textColor = .secondaryLabelColor
+                test.isEnabled = false
+                status.stringValue = "Checking…"
                 var request = URLRequest(url: url)
-                request.httpMethod = "GET"
                 request.timeoutInterval = 6
                 URLSession.shared.dataTask(with: request) { _, response, error in
                     DispatchQueue.main.async {
                         guard self.activeSettingsWindow === window else { return }
-                        testButton.isEnabled = true
-                        if error == nil, let http = response as? HTTPURLResponse,
-                           (200...399).contains(http.statusCode) {
-                            testResult.stringValue = "Server reachable"
-                            testResult.textColor = .systemGreen
-                        } else {
-                            testResult.stringValue = error?.localizedDescription
-                                ?? "Server unavailable or invalid response"
-                            testResult.textColor = .systemRed
-                        }
+                        test.isEnabled = true
+                        status.stringValue = error == nil && (response as? HTTPURLResponse).map({ (200...399).contains($0.statusCode) }) == true
+                            ? "Server reachable" : "Server unavailable"
                     }
                 }.resume()
-            case "close":
-                self.notificationsEnabled = notifications.state == .on
-                NSApp.stopModal(withCode: .OK)
-                window.orderOut(nil)
-            case "logout":
-                if !self.clientToken.isEmpty {
-                    _ = self.clientAuthRequest(["action":"logout"],authenticated:true)
+            case "user":
+                if !self.clientToken.isEmpty && locked {
+                    showError("User assignment is locked. Ask your administrator to edit the monitor.")
                 }
-                let query: [String:Any] = [
+            case "monitor":
+                updateMonitorFields()
+                if (picker.selectedItem?.representedObject as? Int ?? 0) != self.selectedMonitorId {
+                    monitorNote.stringValue = "This device is paired to a different monitor. Ask your administrator for a new pairing code."
+                    save.isEnabled = false
+                } else {
+                    monitorNote.stringValue = "Monitor assigned to this installation."
+                    save.isEnabled = true
+                }
+            case "pair":
+                guard saveServer() else { showError("Enter a valid server IP and port."); return }
+                guard let number = users.titleOfSelectedItem, !number.isEmpty else { showError("Select User No."); return }
+                let response = self.clientAuthRequest([
+                    "action":"enroll", "user_no":number,
+                    "pairing_code":enrollment.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                ])
+                guard response?["success"] as? Bool == true,
+                      let token = response?["token"] as? String, token.count == 64 else {
+                    showError(response?["error"] as? String ?? "Enrollment failed. Ask your administrator for a new pairing code.")
+                    return
+                }
+                self.clientToken = token
+                self.selectedMonitorId = response?["monitor_id"] as? Int ?? 0
+                self.keychainSaveToken(token)
+                enrollment.stringValue = ""
+                refreshMonitors()
+                updateState()
+                if self.selectedMonitorId > 0 { self.startKeyboardMonitoring() }
+            case "switch":
+                guard !locked, let number = users.titleOfSelectedItem else {
+                    showError("User assignment is locked. Ask your administrator to edit the monitor.")
+                    return
+                }
+                let response = self.clientAuthRequest(["action":"switch_user","user_no":number],authenticated:true)
+                guard response?["success"] as? Bool == true,
+                      let token = response?["token"] as? String, token.count == 64 else {
+                    showError(response?["error"] as? String ?? "User selection could not be changed.")
+                    refreshMonitors()
+                    updateState()
+                    return
+                }
+                self.clientToken = token
+                self.keychainSaveToken(token)
+                refreshMonitors()
+                updateState()
+            case "disconnect":
+                _ = self.clientAuthRequest(["action":"logout"],authenticated:true)
+                let query: [String: Any] = [
                     kSecClass as String:kSecClassGenericPassword,
                     kSecAttrService as String:self.keychainService,
                     kSecAttrAccount as String:self.sessionAccount()
                 ]
                 SecItemDelete(query as CFDictionary)
-                if let tap=self.eventTap { CGEvent.tapEnable(tap:tap,enable:false);self.eventTap=nil }
                 self.clientToken = ""
                 self.selectedMonitorId = 0
                 self.isServerConnected = false
-                monitors.removeAll()
-                updateAccountVisibility()
-            case "account-submit":
-                guard saveServerSettings() else { return }
-                if tabs.selectedTabViewItem === signUp {
-                    let full = fullName.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !full.isEmpty && newPassword.stringValue == confirmPassword.stringValue else {
-                        let alert = NSAlert()
-                        alert.messageText = "Enter Full Name and matching passwords"
-                        alert.runModal()
-                        return
-                    }
-                    let result = self.clientAuthRequest([
-                        "action":"signup",
-                        "full_name":full,
-                        "username":newUsername.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
-                        "password":newPassword.stringValue,
-                        "confirm_password":confirmPassword.stringValue
-                    ])
-                    newPassword.stringValue = ""
-                    confirmPassword.stringValue = ""
-                    let existing = result?["code"] as? String == "username_exists"
-                    let success = result?["success"] as? Bool == true
-                    let alert = NSAlert()
-                    alert.messageText = success ? "Account created" : existing ? "Username exists" : "Sign Up"
-                    alert.informativeText = success || existing
-                        ? "Use Sign In with your username."
-                        : (result?["error"] as? String ?? "Unable to sign up.")
-                    alert.runModal()
-                    if success || existing {
-                        loginUser.stringValue = newUsername.stringValue
-                        tabs.selectTabViewItem(signIn)
-                    }
-                } else {
-                    if self.signInAndSelectMonitor(identifier:loginUser.stringValue,
-                                                  password:loginPass.stringValue) {
-                        loginPass.stringValue = ""
-                        refreshMonitors()
-                        updateAccountVisibility()
-                    }
-                }
-            case "monitor":
-                updateMonitorFields()
-            case "save-monitor":
-                guard saveServerSettings() else { return }
-                guard !self.clientToken.isEmpty else {
-                    let alert=NSAlert();alert.messageText="Sign in first";alert.runModal()
+                refreshMonitors()
+                updateState()
+            case "save":
+                guard saveServer(), !self.clientToken.isEmpty,
+                      let id = picker.selectedItem?.representedObject as? Int,
+                      id == self.selectedMonitorId else {
+                    showError("This device is not paired to that monitor.")
                     return
                 }
-                let id = picker.selectedItem?.representedObject as? Int ?? 0
-                let payload: [String:Any] = [
-                    "action":id>0 ? "save_monitor" : "request_monitor",
-                    "monitor_id":id,
-                    "label":label.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
+                let response = self.clientAuthRequest([
+                    "action":"save_monitor","monitor_id":id,
+                    "label":label.stringValue,"remark":remark.stringValue,
                     "os":os.titleOfSelectedItem ?? "Mac",
-                    "machine":(machine.titleOfSelectedItem ?? "Laptop").lowercased(),
-                    "remark":remark.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                ]
-                guard let result=self.clientAuthRequest(payload,authenticated:true),
-                      result["success"] as? Bool == true else {
-                    let alert=NSAlert();alert.messageText="Monitor not saved"
-                    alert.informativeText="Check ownership and server connection."
-                    alert.runModal();return
+                    "machine":(machine.titleOfSelectedItem ?? "Laptop").lowercased()
+                ],authenticated:true)
+                guard response?["success"] as? Bool == true else {
+                    showError(response?["error"] as? String ?? "Could not update monitor.")
+                    return
                 }
-                let selectedID = id>0 ? id : (result["monitor_id"] as? Int ?? 0)
-                guard selectedID>0,
-                      let selection=self.clientAuthRequest([
-                        "action":"select","monitor_id":selectedID
-                      ],authenticated:true),
-                      selection["success"] as? Bool == true else { return }
-                self.selectedMonitorId=selectedID
                 self.notificationsEnabled = notifications.state == .on
-                self.startKeyboardMonitoring()
                 refreshMonitors()
-                updateAccountVisibility()
+                updateState()
+            case "close":
+                self.notificationsEnabled = notifications.state == .on
                 NSApp.stopModal(withCode: .OK)
                 window.orderOut(nil)
-            default:
-                break
+            default: break
             }
         }
-
-        if !clientToken.isEmpty { refreshMonitors() }
-        updateAccountVisibility()
+        let directory = self.clientAuthRequest(["action":"directory"])
+        users.removeAllItems()
+        for record in directory?["users"] as? [[String: Any]] ?? [] {
+            let number = String(describing: record["user_no"] ?? "")
+            if !number.isEmpty { users.addItem(withTitle:number) }
+        }
+        refreshMonitors()
+        updateState()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        window.makeFirstResponder(clientToken.isEmpty ? loginUser : ipField)
         NSApp.runModal(for: window)
     }
 
