@@ -25,8 +25,13 @@ ob_start();
             <div class="row">
                 <div class="col-md-6">
                     <div class="mb-3">
-                        <label for="username" class="form-label">Username</label>
-                        <input type="text" class="form-control" id="username" name="username" required>
+                        <label for="owner_user_id" class="form-label">User</label>
+                        <select name="owner_user_id" id="owner_user_id" class="form-select">
+                          <option value="">Unassigned</option>
+                          <?php foreach($accounts as $person): ?>
+                          <option value="<?= (int)$person['id'] ?>"><?= htmlspecialchars(($person['name']??'').' ('.$person['username'].')',ENT_QUOTES,'UTF-8') ?></option>
+                          <?php endforeach; ?>
+                        </select>
                     </div>
                 </div>
                 <div class="col-md-6">

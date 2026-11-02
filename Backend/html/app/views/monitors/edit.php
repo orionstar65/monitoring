@@ -61,10 +61,10 @@ ob_start();
                     <div class="col-md-6">
                         <div class="mb-3">
                             <label for="username" class="form-label">
-                                <i class="fas fa-user me-1"></i>Username
+                                <i class="fas fa-user me-1"></i>Assigned user
                             </label>
                             <input type="text" class="form-control readonly-field" id="username" 
-                                   value="<?php echo htmlspecialchars($monitor['username'] ?: 'No username set'); ?>" readonly>
+                                   value="<?php echo htmlspecialchars($monitor['owner_name']??'—',ENT_QUOTES,'UTF-8'); ?>" readonly>
                         </div>
                     </div>
                     <div class="col-md-6">
@@ -119,24 +119,17 @@ ob_start();
             <div class="card-body">
                 <form method="POST" action="<?php echo BASE_URL; ?>monitors/edit/<?php echo $monitor['id']; ?>">
                     <div class="mb-3">
-                        <label for="username" class="form-label">
-                            <i class="fas fa-user me-1"></i>Username
-                        </label>
-                        <input type="text" class="form-control" id="username" name="username" 
-                               value="<?php echo htmlspecialchars($monitor['username'] ?: ''); ?>"
-                               placeholder="Enter username (optional)">
-                        <div class="form-text">
-                            Set or update the username for this monitor.
-                        </div>
+                        <label for="remark" class="form-label">Remark</label>
+                        <textarea class="form-control" name="remark" id="remark" maxlength="500" rows="2"><?= htmlspecialchars($monitor['remark']??'',ENT_QUOTES,'UTF-8') ?></textarea>
                     </div>
                     
                     <div class="mb-3">
                         <label for="owner_user_id" class="form-label">Assigned user</label>
                         <select class="form-select" id="owner_user_id" name="owner_user_id">
-                          <option value="">Unassigned — awaiting admin approval</option>
+                          <option value="">Unassigned</option>
                           <?php foreach($accounts as $account): ?>
                           <option value="<?= (int)$account['id'] ?>" <?= (int)($monitor['owner_user_id']??0)===(int)$account['id']?'selected':'' ?>>
-                            <?= htmlspecialchars(($account['name']?:$account['username']).' ('.$account['email'].')',ENT_QUOTES,'UTF-8') ?>
+                            <?= htmlspecialchars(($account['name']?:$account['username']).' ('.($account['email']??'no email').')',ENT_QUOTES,'UTF-8') ?>
                           </option>
                           <?php endforeach; ?>
                         </select>
