@@ -1846,7 +1846,7 @@ static std::string editText(HWND dlg,int id) {
 }
 enum {
     AUTH_TABS=4100,AUTH_USER=4101,AUTH_PASS=4102,AUTH_CONFIRM=4103,
-    AUTH_CONFIRM_LABEL=4104,AUTH_SUBMIT=4105,
+    AUTH_CONFIRM_LABEL=4104,AUTH_SUBMIT=4105,AUTH_SERVER=4106,
     SETTINGS_USER=4200,SETTINGS_IP=4201,SETTINGS_PORT=4202,
     SETTINGS_MONITOR=4203,SETTINGS_LABEL=4204,SETTINGS_OS=4205,
     SETTINGS_MACHINE=4206,SETTINGS_REMARK=4207,
@@ -1881,6 +1881,7 @@ static INT_PTR CALLBACK accountDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp)
         addControl(dlg,"STATIC","Confirm password",0,17,127,115,20,AUTH_CONFIRM_LABEL);
         addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_PASSWORD|ES_AUTOHSCROLL,130,124,290,26,AUTH_CONFIRM);
         addControl(dlg,"BUTTON","Sign In",WS_TABSTOP|BS_DEFPUSHBUTTON,205,164,110,31,AUTH_SUBMIT);
+        addControl(dlg,"BUTTON","Server...",WS_TABSTOP,20,164,92,31,AUTH_SERVER);
         addControl(dlg,"BUTTON","Cancel",WS_TABSTOP,324,164,96,31,IDCANCEL);
         addControl(dlg,"STATIC","Password must be at least 12 characters for Sign Up.",0,17,209,400,18,0);
         updateAuthTab(dlg);return TRUE;
@@ -1892,6 +1893,7 @@ static INT_PTR CALLBACK accountDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp)
         break;
     case WM_COMMAND:
         if(LOWORD(wp)==IDCANCEL){EndDialog(dlg,IDCANCEL);return TRUE;}
+        if(LOWORD(wp)==AUTH_SERVER){showMonitorSettings();return TRUE;}
         if(LOWORD(wp)==AUTH_SUBMIT){
             const std::string name=editText(dlg,AUTH_USER),password=editText(dlg,AUTH_PASS);
             Json::Value request;request["username"]=name;request["password"]=password;
@@ -1952,7 +1954,175 @@ bool showClientLogin() {
     updateTrayIcon();
     return showMonitorSettings();
 }
-// A separate native monitor settings dialog follows below.
+static Json::Value settingsMonitors;
+static void changeMonitorFields(HWND dlg) {
+    int ix=(int)SendDlgItemMessageA(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
+    int id=ix>=0?(int)SendDlgItemMessageA(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,ix,0):0;
+    SetDlgItemTextA(dlg,SETTINGS_SAVE,id>0?"Save":"Add");
+    SetDlgItemTextA(dlg,SETTINGS_LABEL,"");
+    SetDlgItemTextA(dlg,SETTINGS_REMARK,"");
+    SendDlgItemMessageA(dlg,SETTINGS_OS,CB_SETCURSEL,0,0);
+    SendDlgItemMessageA(dlg,SETTINGS_MACHINE,CB_SETCURSEL,0,0);
+    if(!id)return;
+    for(const auto &monitor:settingsMonitors){
+        if(monitor.get("id",0).asInt()!=id)continue;
+        SetDlgItemTextA(dlg,SETTINGS_LABEL,monitor.get("name","").asString().c_str());
+        SetDlgItemTextA(dlg,SETTINGS_REMARK,monitor.get("remark","").asString().c_str());
+        const std::string platform=monitor.get("platform","Windows").asString();
+        SendDlgItemMessageA(dlg,SETTINGS_OS,CB_SETCURSEL,
+            platform=="Mac"?1:platform=="Ubuntu"?2:0,0);
+        SendDlgItemMessageA(dlg,SETTINGS_MACHINE,CB_SETCURSEL,
+            monitor.get("type","").asString()=="desktop"?1:0,0);
+        break;
+    }
+}
+static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp) {
+    switch(msg) {
+    case WM_INITDIALOG: {
+        SetWindowTextA(dlg,"MonitorClient v1.4 - Settings");
+        addControl(dlg,"STATIC","Username",0,13,9,95,20,0);
+        HWND user=addControl(dlg,"EDIT",signedInUsername.c_str(),
+            WS_BORDER|ES_AUTOHSCROLL,108,7,310,25,SETTINGS_USER);
+        addControl(dlg,"STATIC","Server IP",0,13,40,95,20,0);
+        addControl(dlg,"EDIT",serverIP.c_str(),WS_BORDER|ES_AUTOHSCROLL,
+            108,38,310,25,SETTINGS_IP);
+        addControl(dlg,"STATIC","Port",0,13,71,95,20,0);
+        addControl(dlg,"EDIT",serverPort.c_str(),WS_BORDER|ES_AUTOHSCROLL,
+            108,69,310,25,SETTINGS_PORT);
+        addControl(dlg,"STATIC","Monitor",0,13,105,95,20,0);
+        HWND selector=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,
+            108,102,310,170,SETTINGS_MONITOR);
+        addControl(dlg,"STATIC","Label (optional)",0,13,136,95,20,0);
+        addControl(dlg,"EDIT","",WS_BORDER|ES_AUTOHSCROLL,
+            108,133,310,25,SETTINGS_LABEL);
+        addControl(dlg,"STATIC","OS",0,13,166,95,20,0);
+        HWND os=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL,
+            108,163,310,120,SETTINGS_OS);
+        for(const char *name:{"Windows","Mac","Ubuntu"})SendMessageA(os,CB_ADDSTRING,0,(LPARAM)name);
+        addControl(dlg,"STATIC","Machine",0,13,197,95,20,0);
+        HWND machine=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL,
+            108,194,310,120,SETTINGS_MACHINE);
+        for(const char *name:{"Laptop","Desktop"})SendMessageA(machine,CB_ADDSTRING,0,(LPARAM)name);
+        addControl(dlg,"STATIC","Remark",0,13,228,95,20,0);
+        addControl(dlg,"EDIT","",WS_BORDER|ES_AUTOHSCROLL,
+            108,225,310,25,SETTINGS_REMARK);
+        addControl(dlg,"BUTTON","Show status notifications",BS_AUTOCHECKBOX|WS_TABSTOP,
+            108,259,250,24,SETTINGS_NOTIFY);
+        CheckDlgButton(dlg,SETTINGS_NOTIFY,notificationsEnabled?BST_CHECKED:BST_UNCHECKED);
+        addControl(dlg,"BUTTON","Save",BS_DEFPUSHBUTTON|WS_TABSTOP,
+            214,294,104,30,SETTINGS_SAVE);
+        addControl(dlg,"BUTTON","Cancel",WS_TABSTOP,330,294,88,30,IDCANCEL);
+        if(!getClientToken().empty()) {
+            Json::Value req;req["action"]="monitors";
+            Json::Value answer=callClientAuth(req);
+            settingsMonitors=answer.get("monitors",Json::arrayValue);
+        }else settingsMonitors=Json::arrayValue;
+        int sel=-1,count=0;
+        for(const auto &device:settingsMonitors) {
+            int id=device.get("id",0).asInt();
+            std::string label=device.get("name","Monitor").asString()+" (#"+std::to_string(id)+")";
+            int pos=(int)SendMessageA(selector,CB_ADDSTRING,0,(LPARAM)label.c_str());
+            SendMessageA(selector,CB_SETITEMDATA,pos,id);
+            if(id==selectedMonitorId.load())sel=pos;
+            count++;
+        }
+        int add=(int)SendMessageA(selector,CB_ADDSTRING,0,(LPARAM)"Add New...");
+        SendMessageA(selector,CB_SETITEMDATA,add,0);
+        SendMessageA(selector,CB_SETCURSEL,sel>=0?sel:add,0);
+        changeMonitorFields(dlg);
+        return TRUE;
+    }
+    case WM_COMMAND:
+        if(LOWORD(wp)==IDCANCEL){EndDialog(dlg,IDCANCEL);return TRUE;}
+        if(LOWORD(wp)==SETTINGS_MONITOR && HIWORD(wp)==CBN_SELCHANGE){
+            changeMonitorFields(dlg);return TRUE;
+        }
+        if(LOWORD(wp)==SETTINGS_SAVE){
+            std::string name=editText(dlg,SETTINGS_USER);
+            std::string ip=editText(dlg,SETTINGS_IP);
+            std::string port=editText(dlg,SETTINGS_PORT);
+            if(ip.empty()||port.empty()||port.find_first_not_of("0123456789")!=std::string::npos){
+                MessageBoxA(dlg,"Enter a valid server IP and numeric port.","MonitorClient",MB_ICONWARNING);
+                return TRUE;
+            }
+            int nport=std::atoi(port.c_str());
+            if(nport<1||nport>65535){MessageBoxA(dlg,"Invalid port.","MonitorClient",MB_ICONWARNING);return TRUE;}
+            notificationsEnabled=IsDlgButtonChecked(dlg,SETTINGS_NOTIFY)==BST_CHECKED;
+            saveClientSetting("Client","notifications",notificationsEnabled?"1":"0");
+            saveClientSetting("Server","username",name);
+            saveClientSetting("Server","ip",ip);
+            saveClientSetting("Server","port",port);
+            const bool serverChanged=ip!=serverIP || port!=serverPort;
+            if(serverChanged){
+                const std::string oldTarget=credentialTarget();
+                CredDeleteA(oldTarget.c_str(),CRED_TYPE_GENERIC,0);
+                serverIP=ip;serverPort=port;
+                API_BASE_URL=(port=="8924"?"http://":"https://")+ip+":"+port;
+                selectedMonitorId.store(0);
+                {std::lock_guard<std::mutex> guard(authMutex);clientToken.clear();}
+                if(keyboardHook)removeKeyboardHook();
+                EndDialog(dlg,IDOK);
+                MessageBoxA(hMainWindow,"Server connection changed. Sign in to the new server.","MonitorClient",MB_OK|MB_ICONINFORMATION);
+                PostMessageA(hMainWindow,WM_COMMAND,MAKEWPARAM(ID_TRAY_SIGN_IN,0),0);
+                return TRUE;
+            }
+            if(getClientToken().empty()){
+                EndDialog(dlg,IDOK);return TRUE;
+            }
+            int index=(int)SendDlgItemMessageA(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
+            int id=index>=0?(int)SendDlgItemMessageA(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,index,0):0;
+            Json::Value data;
+            data["action"]=id>0?"save_monitor":"request_monitor";
+            data["monitor_id"]=id;
+            data["label"]=editText(dlg,SETTINGS_LABEL);
+            int osi=(int)SendDlgItemMessageA(dlg,SETTINGS_OS,CB_GETCURSEL,0,0);
+            data["os"]=osi==1?"Mac":osi==2?"Ubuntu":"Windows";
+            int machine=(int)SendDlgItemMessageA(dlg,SETTINGS_MACHINE,CB_GETCURSEL,0,0);
+            data["machine"]=machine==1?"desktop":"laptop";
+            data["remark"]=editText(dlg,SETTINGS_REMARK);
+            Json::Value saved=callClientAuth(data);
+            if(!saved.get("success",false).asBool()){
+                const std::string msg=saved.get("error","Unable to save monitor settings.").asString();
+                MessageBoxA(dlg,msg.c_str(),"MonitorClient",MB_ICONERROR|MB_OK);
+                return TRUE;
+            }
+            if(id<1) {
+                MessageBoxA(dlg,"New monitor requested. Ask your administrator to assign it before monitoring starts.",
+                    "Pending approval",MB_OK|MB_ICONINFORMATION);
+                EndDialog(dlg,IDCANCEL);return TRUE;
+            }
+            Json::Value req;req["action"]="select";req["monitor_id"]=id;
+            Json::Value result=callClientAuth(req);
+            if(!result.get("success",false).asBool()){
+                MessageBoxA(dlg,"Monitor not assigned to your account.","MonitorClient",MB_ICONERROR);
+                return TRUE;
+            }
+            selectedMonitorId.store(id);
+            signedInUsername=name;
+            if(!keyboardHook)setupKeyboardHook();
+            if(!usbMonitoringActive)setupUSBMONITORING();
+            EndDialog(dlg,IDOK);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+bool showMonitorSettings() {
+    // A signed-out user can also configure the server address before login.
+    // Resize the same blank dialog template with room for monitor fields.
+    struct BlankTemplate { DLGTEMPLATE dlg; WORD menu; WORD clazz; WORD title; };
+    BlankTemplate t={};
+    t.dlg.style=DS_MODALFRAME|WS_POPUP|WS_CAPTION|WS_SYSMENU;
+    t.dlg.dwExtendedStyle=0;t.dlg.cdit=0;
+    t.dlg.x=20;t.dlg.y=20;t.dlg.cx=285;t.dlg.cy=260;
+    bool success=DialogBoxIndirectParamA(GetModuleHandleA(NULL),&t.dlg,
+        hMainWindow,settingsDialogProc,0)==IDOK;
+    updateTrayIcon();
+    updateTrayMenu();
+    return success;
+}
+
 // Main function
 int main() {
     // Set DPI awareness to handle scaling properly (MinGW compatible)
