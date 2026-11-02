@@ -1,5 +1,5 @@
 <?php
-/** Authentication for telemetry, bound to an admin-assigned monitor ID. */
+/** Authentication for telemetry, bound to an assigned monitor ID. */
 /**
  * HTTP is available only as explicit LAN opt-in on a dedicated restricted vhost.
  * This is not safe for credentials and sensitive monitoring telemetry on
@@ -54,7 +54,7 @@ function clientAuthenticatedSession(mysqli $db,bool $bound=true): ?array {
     $token=clientBearer();
     if(!$token)return null;
     $hash=hash('sha256',$token);
-    $stmt=$db->prepare('SELECT s.id,s.user_id,s.monitor_id,s.session_type FROM client_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND (s.expires_at IS NULL OR s.expires_at>NOW()) AND s.revoked_at IS NULL AND s.session_type='device' LIMIT 1');
+    $stmt=$db->prepare('SELECT s.id,s.user_id,s.monitor_id,s.session_type FROM client_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND (s.expires_at IS NULL OR s.expires_at>NOW()) AND s.revoked_at IS NULL AND s.session_type=\'device\' LIMIT 1');
     $stmt->bind_param('s',$hash);$stmt->execute();
     $session=$stmt->get_result()->fetch_assoc();$stmt->close();
     if(!$session)return null;
@@ -71,7 +71,7 @@ function requireClientMonitor(mysqli $db): int {
     $session=clientAuthenticatedSession($db,true);
     if(!$session){
         header('Content-Type: application/json');http_response_code(401);
-        echo json_encode(['error'=>'Sign in and select an assigned monitor']);exit;
+        echo json_encode(['error'=>'Select User No and an assigned monitor']);exit;
     }
     return (int)$session['monitor_id'];
 }
