@@ -129,7 +129,7 @@ ob_start();
                           <option value="">Unassigned</option>
                           <?php foreach($accounts as $account): ?>
                           <option value="<?= (int)$account['id'] ?>" <?= (int)($monitor['owner_user_id']??0)===(int)$account['id']?'selected':'' ?>>
-                            <?= htmlspecialchars(($account['user_no']??'—').' / '.($account['name']??'').' / '.($account['ip_address']??'—'),ENT_QUOTES,'UTF-8') ?>
+                            <?= htmlspecialchars(($account['user_no']??'—').'/'.($account['name']??'').'/'.($account['ip_address']??'—'),ENT_QUOTES,'UTF-8') ?>
                           </option>
                           <?php endforeach; ?>
                         </select>
