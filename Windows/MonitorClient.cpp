@@ -2133,7 +2133,9 @@ static void updateUnifiedAuthTab(HWND dlg) {
         ShowWindow(GetDlgItem(dlg,id),signup?SW_SHOW:SW_HIDE);
     setDlgUtf8Text(dlg,AUTH_SUBMIT,signup?"Sign Up":"Sign In");
     SetWindowPos(GetDlgItem(dlg,AUTH_USER),nullptr,108,signup?268:248,310,25,SWP_NOZORDER);
+    SetWindowPos(GetDlgItem(dlg,4407),nullptr,13,signup?272:252,94,20,SWP_NOZORDER);
     SetWindowPos(GetDlgItem(dlg,AUTH_PASS),nullptr,108,signup?302:285,310,25,SWP_NOZORDER);
+    SetWindowPos(GetDlgItem(dlg,4408),nullptr,13,signup?305:289,95,20,SWP_NOZORDER);
     HWND focus=GetDlgItem(dlg,signup?AUTH_FULLNAME:AUTH_USER);
     if(focus)SetFocus(focus);
 }
@@ -2211,7 +2213,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"STATIC","● Offline / Not configured",0,246,152,172,21,SETTINGS_CONNECTION);
         addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,181,405,2,4506);
         addControl(dlg,"STATIC","User Settings",0,13,190,150,21,SETTINGS_USER_HEADING);
-        addControl(dlg,"STATIC","",0,108,216,310,23,SETTINGS_USER);
+        addControl(dlg,"STATIC","",0,108,216,204,23,SETTINGS_USER);
         addControl(dlg,"BUTTON","Log Out",WS_TABSTOP,322,216,96,27,SETTINGS_LOGOUT);
         HWND tabs=addControl(dlg,WC_TABCONTROLW,"",WS_TABSTOP,108,215,310,27,AUTH_TABS);
         TCITEMW item{};item.mask=TCIF_TEXT;
@@ -2289,7 +2291,9 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         }
         if(id==SETTINGS_TEST){
             const std::string host=editText(dlg,SETTINGS_IP),port=editText(dlg,SETTINGS_PORT);
-            if(host.empty()||port.empty()||port.find_first_not_of("0123456789")!=std::string::npos){
+            if(host.empty()||host.find_first_of(" /\\\r\n\t")!=std::string::npos||
+               port.empty()||port.find_first_not_of("0123456789")!=std::string::npos||
+               port.size()>5||std::atoi(port.c_str())<1||std::atoi(port.c_str())>65535){
                 showUtf8Message(dlg,"Enter a server address and numeric port.","Test Connection",MB_OK|MB_ICONWARNING);
                 return TRUE;
             }
