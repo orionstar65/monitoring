@@ -45,7 +45,7 @@ function clientAuthenticatedSession(mysqli $db,bool $bound=true): ?array {
     $token=clientBearer();
     if(!$token)return null;
     $hash=hash('sha256',$token);
-    $stmt=$db->prepare('SELECT s.id,s.user_id,s.monitor_id FROM client_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND (s.expires_at IS NULL OR s.expires_at>NOW()) AND s.revoked_at IS NULL LIMIT 1');
+    $stmt=$db->prepare('SELECT s.id,s.user_id,s.monitor_id FROM client_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND (s.expires_at IS NULL OR s.expires_at>NOW()) AND s.revoked_at IS NULL AND u.must_change_password=0 LIMIT 1');
     $stmt->bind_param('s',$hash);$stmt->execute();
     $session=$stmt->get_result()->fetch_assoc();$stmt->close();
     if(!$session)return null;

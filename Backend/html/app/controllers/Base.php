@@ -15,12 +15,19 @@ class Base {
     }
     
     protected function loadUser() {
-        if (isset($_SESSION['user_id'])) {
-            $this->user = $this->db->fetch(
-                "SELECT * FROM users WHERE id = :id",
-                ['id' => $_SESSION['user_id']]
-            );
+        if (!isset($_SESSION['user_id'])) return;
+        $this->user = $this->db->fetch(
+            "SELECT * FROM users WHERE id = :id",
+            ['id' => $_SESSION['user_id']]
+        );
+        if (!$this->user) {
+            $_SESSION = [];
+            session_regenerate_id(true);
+            $this->redirect('auth/login');
         }
+        // Never trust stale roles cached before an administrator's edit.
+        $_SESSION['role'] = $this->user['role'];
+        $_SESSION['username'] = $this->user['username'];
     }
     
     protected function view($view, $data = []) {

@@ -97,10 +97,17 @@ class Merge extends Base {
             $source_ips = !empty($source_ips) ? explode(',', $source_ips) : [];
         }
         
+        if(!is_array($source_ips)){http_response_code(400);$this->json(['success'=>false,'error'=>'Invalid source IPs']);}
         if(!$this->isAdmin()){
             $allowedIPs=array_column($this->db->fetchAll('SELECT ip_address FROM tbl_monitor_ips WHERE owner_user_id=:uid',
                 ['uid'=>$this->user['id']]),'ip_address');
-            $source_ips=array_values(array_intersect($source_ips,$allowedIPs));
+            // An empty array is a wildcard in DatabaseService. Non-admins may only
+            // rewrite filenames for explicitly selected, owned source IPs.
+            if(!$source_ips || array_diff($source_ips,$allowedIPs)){
+                http_response_code(403);
+                $this->json(['success'=>false,'error'=>'Select source IPs assigned to your account']);
+            }
+            $source_ips=array_values(array_unique($source_ips));
         }
         // Perform filename fix
         $result = $this->dbService->fixMismatchedFilenames($monitor_id, $source_ips);
