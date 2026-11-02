@@ -55,6 +55,9 @@ done
 [[ "$port" =~ ^[0-9]+$ ]] && ((10#$port >= 1 && 10#$port <= 65535)) || die "Invalid --port"
 need python3; need openssl; need apache2ctl; need a2enmod; need systemctl
 [[ -f "$vhost" ]] || die "Existing Apache vhost not found: $vhost. Configure Apache with Backend/setup_ubuntu_server.sh first."
+if grep -q '# BEGIN ACC DUAL HTTP' "$vhost"; then
+  die "The site now uses HTTP 8924 + HTTPS 8925. Use setup_dual_protocol.sh; do not run the single-port HTTPS installer."
+fi
 
 if [[ -z "$host" ]]; then
   host="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{

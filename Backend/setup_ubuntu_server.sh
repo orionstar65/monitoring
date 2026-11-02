@@ -257,8 +257,8 @@ fi
 
 echo "=== 5. Configure Apache on port ${BACKEND_PORT} ==="
 if [[ -f /etc/apache2/sites-available/mybackend.conf ]] &&
-    grep -q '^    # BEGIN MONITORING HTTPS' /etc/apache2/sites-available/mybackend.conf; then
-    echo "Preserving existing HTTPS Apache virtual host; use setup_https.sh to renew."
+    grep -Eq '^    # BEGIN (MONITORING HTTPS|ACC DUAL HTTP)' /etc/apache2/sites-available/mybackend.conf; then
+    echo "Preserving existing Apache TLS or dual-protocol virtual host."
 else
 cat > /etc/apache2/sites-available/mybackend.conf <<APACHE
 <VirtualHost *:${BACKEND_PORT}>
@@ -316,7 +316,10 @@ wget -qO- "http://127.0.0.1:${BACKEND_PORT}/webapi_config.php" 2>&1 | head -c 12
 
 echo ""
 echo "Setup complete."
-if grep -q '^    # BEGIN MONITORING HTTPS' /etc/apache2/sites-available/mybackend.conf; then
+if grep -q '^    # BEGIN ACC DUAL HTTP' /etc/apache2/sites-available/mybackend.conf; then
+  echo "HTTP  : http://${SERVER_IP}:8924/html/"
+  echo "HTTPS : https://${SERVER_IP}:8925/html/"
+elif grep -q '^    # BEGIN MONITORING HTTPS' /etc/apache2/sites-available/mybackend.conf; then
   echo "Dashboard : https://${SERVER_IP}:${BACKEND_PORT}/html/"
   echo "Client API: https://${SERVER_IP}:${BACKEND_PORT}/webapi.php"
 else
