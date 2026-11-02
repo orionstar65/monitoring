@@ -14,7 +14,7 @@ CREATE TEMPORARY TABLE legacy_monitor_accounts (
   import_username VARCHAR(50) NOT NULL,
   full_name VARCHAR(150) NOT NULL,
   PRIMARY KEY (import_username)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 INSERT INTO legacy_monitor_accounts(legacy_name,import_username,full_name)
 SELECT legacy_name,CONCAT('legacy_monitor_',MIN(id)),LEFT(legacy_name,150)
