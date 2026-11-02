@@ -246,7 +246,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         let status = SecItemAdd(item as CFDictionary, nil)
         if status != errSecSuccess {
-            showClientNotification("Pairing not saved", "Keychain is unavailable; pair this device again after restarting.")
+            showClientNotification("Session not saved", "Keychain is unavailable; select a User No again after restarting.")
         }
     }
     private func keychainLoadToken() -> String? {
@@ -371,7 +371,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         statusBarItem?.button?.imagePosition = .imageOnly
         statusBarItem?.button?.toolTip = active
             ? "MonitorClient v1.5 · Active"
-            : "MonitorClient v1.5 · Offline, not paired or unconfigured"
+            : "MonitorClient v1.5 · Offline, no user selected or unconfigured"
     }
     var eventTap: CFMachPort?
     var keyLogs: [KeyLog]!
