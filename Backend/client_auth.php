@@ -38,7 +38,7 @@ try {
         $st->execute();$rows=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
         echo json_encode(['success'=>true,'users'=>array_map(static fn($u)=>['user_no'=>(string)$u['user_no']],$rows)]);exit;
     }
-    // User No selection replaces administrator pairing codes. The server issues
+    // User No selection registers a monitor-bound device session. The server issues
     // a monitor-bound session; the client cannot choose another user's monitor.
     if($action==='enroll'){
         $userNo=trim((string)($data['user_no']??''));
@@ -74,7 +74,7 @@ try {
     }
     $session=clientAuthenticatedSession($db,false);
     if(!$session || ($session['session_type']??'')!=='device'){
-        http_response_code(401);echo json_encode(['error'=>'Select a User No to register this device']);exit;
+        http_response_code(401);echo json_encode(['error'=>'Select a User No to start monitoring']);exit;
     }
     $userId=(int)$session['user_id'];
     if($action==='switch_user'){
@@ -86,7 +86,7 @@ try {
         try {
             $st=$db->prepare('SELECT owner_user_id,assignment_locked FROM tbl_monitor_ips WHERE id=? FOR UPDATE');
             $st->bind_param('i',$mid);$st->execute();$monitor=$st->get_result()->fetch_assoc();$st->close();
-            if(!$monitor||(int)$monitor['owner_user_id']!==$userId){$db->rollback();http_response_code(403);echo json_encode(['error'=>'Assignment changed. Ask your administrator to re-enroll this device.']);exit;}
+            if(!$monitor||(int)$monitor['owner_user_id']!==$userId){$db->rollback();http_response_code(403);echo json_encode(['error'=>'Assignment changed. Select the user again or ask your administrator.']);exit;}
             if((int)$monitor['assignment_locked']===1){$db->rollback();http_response_code(423);echo json_encode(['error'=>'User assignment is locked. Ask your administrator to edit the monitor.','code'=>'assignment_locked']);exit;}
             $st=$db->prepare("SELECT id FROM users WHERE user_no=? AND role IN ('user','viewer') LIMIT 1");
             $st->bind_param('s',$newNo);$st->execute();$target=$st->get_result()->fetch_assoc();$st->close();
@@ -137,7 +137,7 @@ try {
         $monitorId=filter_var($data['monitor_id']??null,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
         if(!$monitorId){http_response_code(400);echo json_encode(['error'=>'Select an assigned monitor']);exit;}
         if((int)$session['monitor_id']!==$monitorId){
-            http_response_code(403);echo json_encode(['error'=>'Monitor is not paired to this device']);exit;
+            http_response_code(403);echo json_encode(['error'=>'This monitor is not selected for this device']);exit;
         }
         $st=$db->prepare('SELECT id FROM tbl_monitor_ips WHERE id=? AND owner_user_id=? LIMIT 1');
         $st->bind_param('ii',$monitorId,$userId);$st->execute();$owned=$st->get_result()->fetch_assoc();$st->close();
