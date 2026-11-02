@@ -236,6 +236,8 @@ private final class AccountModalActions: NSObject, NSTabViewDelegate, NSWindowDe
     func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
         let isSignUp = (tabViewItem?.identifier as? String) == "signup"
         primaryButton?.title = isSignUp ? "Sign Up" : "Sign In"
+        // Keep forward and reverse Tab traversal within the selected pane.
+        primaryButton?.nextKeyView = isSignUp ? signUpFullName : signInUsername
         window?.makeFirstResponder(isSignUp ? signUpFullName : signInUsername)
     }
 }
@@ -352,14 +354,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         else { showClientNotification("Monitor setup required", "Choose an assigned monitor in Settings.") }
         updateTrayStatusDot()
     }
-    // The app icon carries a small 7.5pt red/green status dot at bottom-right.
+    // The app icon carries a small 6.5pt red/green status dot at bottom-right.
     // No separate emoji or enlarged status indicator is rendered in the menu bar.
     private func makeTrayIcon(active: Bool) -> NSImage {
         let image = NSImage(size: NSSize(width: 22, height: 22), flipped: false) { _ in
             let base = NSApp.applicationIconImage
             base?.draw(in: NSRect(x: 2, y: 2, width: 18, height: 18),
                        from: .zero, operation: .sourceOver, fraction: 1)
-            let badge = NSBezierPath(ovalIn: NSRect(x: 14.5, y: 0.5, width: 7.5, height: 7.5))
+            let badge = NSBezierPath(ovalIn: NSRect(x: 15.5, y: 0.75, width: 6.5, height: 6.5))
             (active ? NSColor.systemGreen : NSColor.systemRed).setFill()
             badge.fill()
             NSColor.white.setStroke()
