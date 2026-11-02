@@ -58,7 +58,7 @@ private:
     int monitorId=0;
     bool assignmentLocked=false;
     bool logoutPerformed=false;
-    QLineEdit *serverIPEdit=nullptr,*clientNameEdit=nullptr,*pairingEdit=nullptr;
+    QLineEdit *serverIPEdit=nullptr,*clientNameEdit=nullptr;
     QLineEdit *labelEdit=nullptr,*remarkEdit=nullptr;
     QSpinBox *serverPortEdit=nullptr;
     QComboBox *userSelector=nullptr,*monitorSelector=nullptr,*osSelector=nullptr,*machineSelector=nullptr;
