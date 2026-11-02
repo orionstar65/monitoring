@@ -12,11 +12,22 @@
 7. Review newly imported accounts in User Management. Imported usernames use `legacy_monitor_ID` and must be edited by the administrator. Each imported account has an *unusable, random, locked* initial password; administrators can reset it and require the user to choose a new password.
 8. Validate login, signup, new monitor auto assignment, owner restrictions, password changes, and merge operations using both administrator and viewer accounts before production use.
 
-## Data retention and compatibility
+## Final legacy column removal
 
-This backfill intentionally **does not drop** `tbl_monitor_ips.username` yet. Several legacy reporting and ingestion paths still reference it, and dropping it without a complete consumer audit would break production. The new UI and ownership enforcement use `owner_user_id` and `users.name`, never the monitor's legacy username. A separate migration can remove the column after all legacy reporting and ingestion queries have been updated.
+The backfill preserves the original `tbl_monitor_ips.username` until the
+new server code is deployed and verified. The application now resolves owner names
+through `users` instead of relying on this legacy field.
 
-**Important:** The requested common temporary password `1234567890` is weak. Treat it as a one-time bootstrap secret and require immediate change. Admin resets revoke all desktop sessions. Consider replacing common temporary passwords with random, single-use tokens before making this service internet-accessible.
+After a staging validation and a fresh backup, run the **final one-time cleanup**:
+
+```bash
+mysql -u root -p monitoring_db < Backend/migrations/2026_11_02_drop_legacy_username_v14.sql
+```
+
+It recreates the four recent-log reporting views using the assigned account
+name, then drops `tbl_monitor_ips.username`. **Do not run this against an old
+server build or third-party integrations that still read the legacy column.**
+This final DDL operation cannot be undone without restoring a backup.
 
 ## Table controls
 
