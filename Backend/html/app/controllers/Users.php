@@ -10,10 +10,12 @@ class Users extends Base {
     
     public function index() {
         $users = $this->db->fetchAll(
-            "SELECT u.id,u.user_no,u.name,u.username,u.email,u.role,u.created_at,u.must_change_password,
-                    MAX(m.last_monitor_tic) AS last_activity
+            "SELECT u.id,u.user_no,u.name,u.email,u.role,u.created_at,u.must_change_password,
+                    MAX(m.last_monitor_tic) AS last_activity,
+                    (SELECT first_m.ip_address FROM tbl_monitor_ips first_m
+                     WHERE first_m.owner_user_id=u.id ORDER BY first_m.id LIMIT 1) AS ip_address
              FROM users u LEFT JOIN tbl_monitor_ips m ON m.owner_user_id=u.id
-             GROUP BY u.id,u.user_no,u.name,u.username,u.email,u.role,u.created_at,u.must_change_password
+             GROUP BY u.id,u.user_no,u.name,u.email,u.role,u.created_at,u.must_change_password
              ORDER BY u.created_at DESC"
         );
         
@@ -22,33 +24,25 @@ class Users extends Base {
     
     public function create() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $username = trim((string)($_POST['username'] ?? ''));
-            $name=trim((string)($_POST['name']??$username));
+            $name=trim((string)($_POST['name']??''));
             $password = $_POST['password'] ?? '';
             $email = trim((string)($_POST['email'] ?? ''));
             $role = $_POST['role'] ?? ROLE_USER;
             if(!in_array($role,['admin','user','viewer'],true))$role='viewer';
             
-            if (!preg_match('/^[A-Za-z0-9_.-]{3,50}$/',$username)
-                || strlen($password)<12 || strlen($password)>1024
+            if (strlen($password)<12 || strlen($password)>1024
                 || strlen($name)<2 || strlen($name)>150
                 || ($email!=='' && !filter_var($email,FILTER_VALIDATE_EMAIL))) {
-                $error = 'Enter a valid name, username, optional email and password (12+ characters).';
+                $error = 'Enter a valid full name, optional email and password (12+ characters).';
             } else {
-                // Check if username already exists
-                $existing = $this->db->fetch(
-                    "SELECT id FROM users WHERE username = :username",
-                    ['username' => $username]
-                );
-                
-                if ($existing || ($email!=='' && $this->db->fetch(
-                        'SELECT id FROM users WHERE email=:email',['email'=>$email]))) {
-                    $error = 'Username or email already exists';
+                $existing=$email!=='' && $this->db->fetch(
+                    'SELECT id FROM users WHERE email=:email',['email'=>$email]);
+                if($existing){
+                    $error='Email already exists';
                 } else {
                     $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
                     
                     $userId = $this->db->insert('users', [
-                        'username' => $username,
                         'name' => $name,
                         'password' => $hashedPassword,
                         'email' => $email!==''?$email:null,
@@ -77,8 +71,7 @@ class Users extends Base {
         }
         
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $username = trim((string)($_POST['username'] ?? ''));
-            $name=trim((string)($_POST['name']??$username));
+            $name=trim((string)($_POST['name']??''));
             $email = trim((string)($_POST['email'] ?? ''));
             $role = $_POST['role'] ?? ROLE_USER;
             if(!in_array($role,['admin','user','viewer'],true))$role='viewer';
@@ -88,27 +81,19 @@ class Users extends Base {
             $validUserNo=preg_match('/^[1-9][0-9]{0,14}$/D',$userNo)===1;
 
             
-            if (!$validUserNo || !preg_match('/^[A-Za-z0-9_.-]{3,50}$/',$username)
-                || strlen($name)<2 || strlen($name)>150
+            if (!$validUserNo || strlen($name)<2 || strlen($name)>150
                 || ($email!=='' && !filter_var($email,FILTER_VALIDATE_EMAIL))) {
-                $error = 'Enter a valid User No (1-15 digits), name, username and optional email.';
+                $error = 'Enter a valid User No (1-15 digits), full name and optional email.';
             } else {
-                // Check if username already exists for another user
-                $existing = $this->db->fetch(
-                    "SELECT id FROM users WHERE username = :username AND id != :id",
-                    ['username' => $username, 'id' => $id]
-                );
-                
                 $duplicateNo=$this->db->fetch('SELECT id FROM users WHERE user_no=:no AND id!=:id',['no'=>$userNo,'id'=>$id]);
-                if ($existing || $duplicateNo || ($email!=='' && $this->db->fetch(
+                if ($duplicateNo || ($email!=='' && $this->db->fetch(
                         'SELECT id FROM users WHERE email=:email AND id!=:id',
                         ['email'=>$email,'id'=>$id]))) {
-                    $error = 'User No, username or email already exists';
+                    $error = 'User No or email already exists';
                 } else {
                     $data = [
                         'user_no'=>$userNo,
                         'name'=>$name,
-                        'username' => $username,
                         'email' => $email!==''?$email:null,
                         'role' => $role
                     ];
@@ -150,7 +135,7 @@ class Users extends Base {
                     }
                     
                     if ($result > 0 || !$dataChanged) {
-                        if(!empty($password) || $role!==$user['role'] || $username!==$user['username']){
+                        if(!empty($password) || $role!==$user['role']){
                             $this->db->query(
                                 'UPDATE client_sessions SET revoked_at=NOW() WHERE user_id=:id AND revoked_at IS NULL',
                                 ['id'=>$id]
