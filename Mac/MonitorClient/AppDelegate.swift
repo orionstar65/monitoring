@@ -19,7 +19,7 @@ let CHECKER_IDENTIFIER = "com.airentech.MonitorClient"
 
 let API_ROUTE = "/webapi.php"
 let TIC_ROUTE = "/eventhandler.php"
-var APP_VERSION = "1.7"
+var APP_VERSION = "1.5"
 
 // Configuration variables (will be updated from API)
 var TIME_INTERVAL = 60      // Screenshots every 60 seconds (default)
@@ -370,8 +370,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         statusBarItem?.button?.title = ""
         statusBarItem?.button?.imagePosition = .imageOnly
         statusBarItem?.button?.toolTip = active
-            ? "MonitorClient v1.7 · Active"
-            : "MonitorClient v1.7 · Offline, no user selected or unconfigured"
+            ? "MonitorClient v1.5 · Active"
+            : "MonitorClient v1.5 · Offline, no user selected or unconfigured"
     }
     var eventTap: CFMachPort?
     var keyLogs: [KeyLog]!
@@ -620,7 +620,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // Check permissions based on app mode and previous state
         checkPermissionsOnStartup()
 
-        APP_VERSION = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.7"
+        APP_VERSION = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.5"
 
         keyLogs = []
         
@@ -2770,7 +2770,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         logo.widthAnchor.constraint(equalToConstant: 43).isActive = true
         logo.heightAnchor.constraint(equalToConstant: 43).isActive = true
         brand.addArrangedSubview(logo)
-        let version = text("MonitorClient · v1.7")
+        let version = text("MonitorClient · v1.5")
         version.textColor = .secondaryLabelColor
         brand.addArrangedSubview(version)
         stack.addArrangedSubview(brand)
