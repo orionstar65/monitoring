@@ -16,8 +16,8 @@ ob_start();
                     <?php if(!empty($_SESSION['success_message'])): ?><div class="alert alert-success"><?= htmlspecialchars($_SESSION['success_message'],ENT_QUOTES,'UTF-8') ?></div><?php unset($_SESSION['success_message']); endif; ?>
                     <form method="POST" action="<?php echo BASE_URL; ?>auth/login">
                         <div class="mb-3">
-                            <label for="username" class="form-label">Username</label>
-                            <input type="text" class="form-control" id="username" name="username" required>
+                            <label for="identifier" class="form-label">User No or email</label>
+                            <input type="text" class="form-control" id="identifier" name="identifier" autocomplete="username" required>
                         </div>
                         
                         <div class="mb-3">
