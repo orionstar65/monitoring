@@ -2146,6 +2146,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,181,405,2,4506);
         addControl(dlg,"STATIC","User:",0,13,202,90,20,SETTINGS_USER);
         addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,199,310,250,SETTINGS_USER_NO);
+        SendMessageW(GetDlgItem(dlg,SETTINGS_USER_NO),CB_SETDROPPEDWIDTH,540,0);
         addControl(dlg,"BUTTON","Disconnect",WS_TABSTOP,298,237,120,27,SETTINGS_LOGOUT);
         addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,301,405,2,4507);
         addControl(dlg,"STATIC","",0,13,312,405,28,SETTINGS_NOTICE);
