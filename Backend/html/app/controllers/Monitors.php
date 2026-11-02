@@ -112,7 +112,7 @@ class Monitors extends Base {
             }
         }
         
-        $accounts=$this->db->fetchAll("SELECT id,name,username FROM users ORDER BY name,username");
+        $accounts=$this->db->fetchAll("SELECT id,name,username,user_no FROM users ORDER BY name,username");
         $this->view('monitors/create', ['error' => $error ?? null,'accounts'=>$accounts]);
     }
     
