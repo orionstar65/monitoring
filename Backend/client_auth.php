@@ -37,9 +37,9 @@ try {
     // monitor-bound bearer credentials without a separate identity proof.
     if(($action==='directory'||$action==='enroll') && getenv('MONITOR_ENABLE_USER_NO_ENROLL')!=='1'){
         http_response_code(503);
-        echo json_encode(['error'=>'User No enrollment is disabled on this server. Ask your administrator to enable it on a trusted network.']);exit;
+        echo json_encode(['error'=>'User list disabled. Ask admin to set MONITOR_ENABLE_USER_NO_ENROLL=1 on trusted LAN/VPN.']);exit;
     }
-    // Public directory reveals user numbers only. No names, email or monitor data.
+    // Restricted to explicitly enabled, trusted deployments: return each eligible\n    // user's number, display name and the IP of their first assigned monitor.
     if($action==='directory'){
         $st=$db->prepare("SELECT u.user_no,u.name,
                (SELECT m.ip_address FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id ORDER BY m.id LIMIT 1) AS ip_address
