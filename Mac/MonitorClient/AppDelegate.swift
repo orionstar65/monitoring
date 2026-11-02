@@ -1923,6 +1923,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         body.append(computerName.data(using: .utf8)!)
         body.append("\r\n".data(using: .utf8)!)
         
+        // Bound monitor identity is included for server consistency checking.
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"monitor_id\"\r\n\r\n".data(using: .utf8)!)
+        body.append(String(selectedMonitorId).data(using: .utf8)!)
+        body.append("\r\n".data(using: .utf8)!)
         // Add ctime parameter (required by backend)
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"ctime\"\r\n\r\n".data(using: .utf8)!)

