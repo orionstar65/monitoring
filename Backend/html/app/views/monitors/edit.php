@@ -109,24 +109,6 @@ ob_start();
     </div>
     
     <div class="col-md-4">
-        <?php if(isset($_SESSION['pairing_code_once']) && (int)$_SESSION['pairing_code_once']['monitor_id']===(int)$monitor['id']): ?>
-        <div class="alert alert-warning" role="alert">
-            <strong>One-time pairing code</strong>
-            <div class="font-monospace fs-5 my-2 user-select-all"><?= htmlspecialchars($_SESSION['pairing_code_once']['code'],ENT_QUOTES,'UTF-8') ?></div>
-            Share securely with the device user. Expires in 24 hours or after first use. It will not be displayed again.
-        </div>
-        <?php unset($_SESSION['pairing_code_once']); endif; ?>
-        <div class="card mb-3"><div class="card-body">
-            <h6>Device enrollment</h6>
-            <div class="small text-muted mb-2">Assigned User No: <strong><?= htmlspecialchars($monitor['owner_user_no']??'Unassigned',ENT_QUOTES,'UTF-8') ?></strong></div>
-            <div class="small mb-2"><?= !empty($monitor['pairing_code_hash']) && strtotime($monitor['pairing_expires_at']??'')>time() ? 'An enrollment code is active.' : 'No active enrollment code.' ?></div>
-            <form method="post" action="<?= BASE_URL ?>monitors/pairing_code/<?= (int)$monitor['id'] ?>"
-                onsubmit="return confirm('Generate a new single-use code? Any earlier unused code will stop working.')">
-                <button type="submit" class="btn btn-outline-primary w-100" <?= empty($monitor['owner_user_id'])?'disabled':'' ?>>
-                    <i class="fas fa-link me-1"></i>Generate pairing code
-                </button>
-            </form>
-        </div></div>
         <div class="card type-selector">
             <div class="card-header">
                 <h5 class="mb-0">
@@ -165,7 +147,7 @@ ob_start();
                                 Lock User No assignment
                             </label>
                         </div>
-                        <div class="form-text">While locked, the paired desktop app cannot change its user. Only administrators can reassign or unlock this monitor.</div>
+                        <div class="form-text">While locked, the desktop app cannot change its selected user. Only administrators can reassign or unlock this monitor.</div>
                     </div>
                     <div class="mb-3">
                         <label for="slack_id" class="form-label">
