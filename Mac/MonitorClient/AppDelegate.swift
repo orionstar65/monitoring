@@ -2706,60 +2706,167 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     private func openLoginDialog() {
-        let tabView = NSTabView(frame: NSRect(x: 0, y: 0, width: 370, height: 165))
+        // A dedicated native modal provides predictable focus and key-view loops;
+        // the old NSAlert accessory view did not reliably handle Tab/Shift-Tab.
+        let width: CGFloat = 460
+        let height: CGFloat = 500
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: width, height: height),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "MonitorClient"
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.isReleasedWhenClosed = false
+        window.autorecalculatesKeyViewLoop = false
+        window.center()
+
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        window.contentView = root
+
+        let logo = NSImageView(frame: NSRect(x: (width - 68) / 2, y: 386, width: 68, height: 68))
+        logo.image = NSApp.applicationIconImage
+        logo.imageScaling = .scaleProportionallyUpOrDown
+        logo.imageAlignment = .alignCenter
+        root.addSubview(logo)
+
+        let version = NSTextField(labelWithString: "v1.4")
+        version.frame = NSRect(x: 0, y: 359, width: width, height: 20)
+        version.alignment = .center
+        version.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        version.textColor = .secondaryLabelColor
+        root.addSubview(version)
+
+        let tabs = NSTabView(frame: NSRect(x: 35, y: 92, width: width - 70, height: 259))
+        root.addSubview(tabs)
+
         let signIn = NSTabViewItem(identifier: "signin")
         signIn.label = "Sign In"
-        let signInView = NSView(frame: NSRect(x: 0, y: 0, width: 365, height: 140))
-        let username = NSTextField(frame: NSRect(x: 20, y: 92, width: 325, height: 25))
+        let signInView = NSView(frame: NSRect(x: 0, y: 0, width: 385, height: 211))
+        let username = NSTextField(frame: NSRect(x: 24, y: 138, width: 337, height: 29))
         username.placeholderString = "Username or email"
-        let password = NSSecureTextField(frame: NSRect(x: 20, y: 52, width: 325, height: 25))
+        let password = NSSecureTextField(frame: NSRect(x: 24, y: 91, width: 337, height: 29))
         password.placeholderString = "Password"
-        signInView.addSubview(username);signInView.addSubview(password)
-        signIn.view = signInView;tabView.addTabViewItem(signIn)
+        signInView.addSubview(username)
+        signInView.addSubview(password)
+        signIn.view = signInView
+        tabs.addTabViewItem(signIn)
 
         let signUp = NSTabViewItem(identifier: "signup")
         signUp.label = "Sign Up"
-        let signUpView = NSView(frame: NSRect(x: 0, y: 0, width: 365, height: 140))
-        let newUser = NSTextField(frame: NSRect(x: 20, y: 105, width: 325, height: 25))
+        let signUpView = NSView(frame: NSRect(x: 0, y: 0, width: 385, height: 211))
+        let fullName = NSTextField(frame: NSRect(x: 24, y: 150, width: 337, height: 29))
+        fullName.placeholderString = "Full Name"
+        let newUser = NSTextField(frame: NSRect(x: 24, y: 108, width: 337, height: 29))
         newUser.placeholderString = "Username (3–50 characters)"
-        let newPass = NSSecureTextField(frame: NSRect(x: 20, y: 65, width: 325, height: 25))
-        newPass.placeholderString = "Password (at least 12 characters)"
-        let confirm = NSSecureTextField(frame: NSRect(x: 20, y: 25, width: 325, height: 25))
+        let newPass = NSSecureTextField(frame: NSRect(x: 24, y: 66, width: 337, height: 29))
+        newPass.placeholderString = "Password (12+ characters)"
+        let confirm = NSSecureTextField(frame: NSRect(x: 24, y: 24, width: 337, height: 29))
         confirm.placeholderString = "Confirm password"
-        signUpView.addSubview(newUser);signUpView.addSubview(newPass);signUpView.addSubview(confirm)
-        signUp.view = signUpView;tabView.addTabViewItem(signUp)
-
-        let alert = NSAlert()
-        alert.messageText = "MonitorClient v1.4 · Account"
-        alert.informativeText = "Sign in or create an account before configuring your monitor."
-        alert.accessoryView = tabView
-        alert.addButton(withTitle: "Continue")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else {
-            showClientNotification("Sign-in required", "Monitoring is disabled until you sign in and choose a monitor.")
-            return
+        for field in [fullName, newUser, newPass, confirm] {
+            signUpView.addSubview(field)
         }
-        if tabView.selectedTabViewItem === signUp {
-            guard newPass.stringValue == confirm.stringValue else {
-                let err = NSAlert()
-                err.messageText = "Passwords do not match"
-                err.runModal()
-                openLoginDialog()
+        signUp.view = signUpView
+        tabs.addTabViewItem(signUp)
+
+        let submit = NSButton(title: "Sign In", target: nil, action: nil)
+        submit.frame = NSRect(x: 249, y: 38, width: 96, height: 31)
+        submit.bezelStyle = .rounded
+        submit.keyEquivalent = "\r"
+        root.addSubview(submit)
+
+        let cancel = NSButton(title: "Cancel", target: nil, action: nil)
+        cancel.frame = NSRect(x: 351, y: 38, width: 83, height: 31)
+        cancel.bezelStyle = .rounded
+        cancel.keyEquivalent = "\u{1b}"
+        root.addSubview(cancel)
+
+        let actions = AccountModalActions()
+        actions.window = window
+        actions.signInUsername = username
+        actions.signUpFullName = fullName
+        actions.primaryButton = submit
+        submit.target = actions
+        submit.action = #selector(AccountModalActions.submit(_:))
+        cancel.target = actions
+        cancel.action = #selector(AccountModalActions.cancel(_:))
+        tabs.delegate = actions
+        window.delegate = actions
+
+        // Explicit navigation supports Tab and Shift-Tab in either tab.
+        username.nextKeyView = password
+        password.nextKeyView = submit
+        fullName.nextKeyView = newUser
+        newUser.nextKeyView = newPass
+        newPass.nextKeyView = confirm
+        confirm.nextKeyView = submit
+        submit.nextKeyView = username
+        cancel.nextKeyView = username
+        window.initialFirstResponder = username
+        tabs.selectTabViewItem(signIn)
+
+        // Keep the same form and field contents after validation errors.
+        while true {
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+            window.makeFirstResponder(tabs.selectedTabViewItem === signUp ? fullName : username)
+            guard NSApp.runModal(for: window) == .OK else {
+                showClientNotification("Sign-in required",
+                    "Monitoring is disabled until you sign in and choose a monitor.")
                 return
             }
-            let data = clientAuthRequest(["action":"signup",
-                "username":newUser.stringValue.trimmingCharacters(in: .whitespacesAndNewlines),
-                "password":newPass.stringValue,
-                "confirm_password":confirm.stringValue])
-            let message = data?["code"] as? String == "username_exists"
-                ? "This username already exists. Please use Sign In instead."
-                : (data?["message"] as? String ?? data?["error"] as? String ?? "Account creation failed.")
-            let feedback = NSAlert();feedback.messageText = "Sign Up";feedback.informativeText = message;feedback.runModal()
-            if data?["success"] as? Bool == true { openLoginDialog() }
-            return
-        }
-        if signInAndSelectMonitor(identifier: username.stringValue, password: password.stringValue) {
-            openSettingsDialog()
+
+            if tabs.selectedTabViewItem === signUp {
+                let name = fullName.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                let newUsername = newUser.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty else {
+                    let alert = NSAlert()
+                    alert.messageText = "Full Name is required"
+                    alert.runModal()
+                    continue
+                }
+                guard newPass.stringValue == confirm.stringValue else {
+                    let alert = NSAlert()
+                    alert.messageText = "Passwords do not match"
+                    alert.runModal()
+                    continue
+                }
+                let result = clientAuthRequest([
+                    "action": "signup",
+                    "full_name": name,
+                    "username": newUsername,
+                    "password": newPass.stringValue,
+                    "confirm_password": confirm.stringValue
+                ])
+                newPass.stringValue = ""
+                confirm.stringValue = ""
+                let duplicate = result?["code"] as? String == "username_exists"
+                let success = result?["success"] as? Bool == true
+                let alert = NSAlert()
+                alert.messageText = success ? "Account created" :
+                    (duplicate ? "Username already exists" : "Sign Up")
+                alert.informativeText = success
+                    ? "Your account is ready. Sign in to continue."
+                    : duplicate
+                        ? "This username is already registered. Please sign in instead."
+                        : (result?["error"] as? String ?? "Unable to create account.")
+                alert.runModal()
+                if success || duplicate {
+                    username.stringValue = newUsername
+                    tabs.selectTabViewItem(signIn)
+                    password.stringValue = ""
+                }
+                continue
+            }
+
+            if signInAndSelectMonitor(identifier: username.stringValue, password: password.stringValue) {
+                password.stringValue = ""
+                openSettingsDialog()
+                return
+            }
+            password.stringValue = ""
         }
     }
 
