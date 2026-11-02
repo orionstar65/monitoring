@@ -329,6 +329,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             return
         }
         selectedMonitorId = result["monitor_id"] as? Int ?? 0
+        if let no = (result["user"] as? [String: Any])?["user_no"] {
+            storage.set(String(describing: no), forKey: "user_no")
+        }
         if selectedMonitorId > 0 { startKeyboardMonitoring() }
         else { showClientNotification("Monitor setup required", "Choose an assigned monitor in Settings.") }
         updateTrayStatusDot()

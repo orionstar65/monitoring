@@ -1831,7 +1831,7 @@ bool restoreClientSession() {
         {std::lock_guard<std::mutex> guard(authMutex);clientToken.clear();}
         return false;
     }
-    signedInUsername=answer["user"].get("username","").asString();
+    signedInUsername=answer["user"].get("user_no","").asString();
     selectedMonitorId.store(answer.get("monitor_id",0).asInt());
     if(selectedMonitorId.load()>0){
         if(!keyboardHook) setupKeyboardHook();

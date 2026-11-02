@@ -34,7 +34,7 @@ try {
     $action=$data['action'];
     // Public directory reveals user numbers only. No names, email or monitor data.
     if($action==='directory'){
-        $st=$db->prepare('SELECT user_no FROM users ORDER BY user_no LIMIT 10000');
+        $st=$db->prepare("SELECT user_no FROM users WHERE role IN ('user','viewer') AND user_no IS NOT NULL ORDER BY user_no LIMIT 10000");
         $st->execute();$rows=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
         echo json_encode(['success'=>true,'users'=>array_map(static fn($u)=>['user_no'=>(string)$u['user_no']],$rows)]);exit;
     }
@@ -55,7 +55,7 @@ try {
         $codeHash=hash('sha256',$code);
         $db->begin_transaction();
         try {
-            $st=$db->prepare('SELECT m.id,m.owner_user_id,m.assignment_locked FROM tbl_monitor_ips m JOIN users u ON u.id=m.owner_user_id WHERE u.user_no=? AND m.pairing_code_hash=? AND m.pairing_expires_at>NOW() LIMIT 1 FOR UPDATE');
+            $st=$db->prepare("SELECT m.id,m.owner_user_id,m.assignment_locked FROM tbl_monitor_ips m JOIN users u ON u.id=m.owner_user_id WHERE u.user_no=? AND u.role IN ('user','viewer') AND m.pairing_code_hash=? AND m.pairing_expires_at>NOW() LIMIT 1 FOR UPDATE");
             $st->bind_param('ss',$userNo,$codeHash);$st->execute();$monitor=$st->get_result()->fetch_assoc();$st->close();
             if(!$monitor){$db->rollback();http_response_code(403);echo json_encode(['error'=>'Invalid or expired pairing code. Ask your administrator to generate a new code.']);exit;}
             $mid=(int)$monitor['id'];$uid=(int)$monitor['owner_user_id'];
@@ -91,7 +91,7 @@ try {
             $st->bind_param('i',$mid);$st->execute();$monitor=$st->get_result()->fetch_assoc();$st->close();
             if(!$monitor||(int)$monitor['owner_user_id']!==$userId){$db->rollback();http_response_code(403);echo json_encode(['error'=>'Assignment changed. Ask your administrator to re-enroll this device.']);exit;}
             if((int)$monitor['assignment_locked']===1){$db->rollback();http_response_code(423);echo json_encode(['error'=>'User assignment is locked. Ask your administrator to edit the monitor.','code'=>'assignment_locked']);exit;}
-            $st=$db->prepare('SELECT id FROM users WHERE user_no=? LIMIT 1');
+            $st=$db->prepare("SELECT id FROM users WHERE user_no=? AND role IN ('user','viewer') LIMIT 1");
             $st->bind_param('s',$newNo);$st->execute();$target=$st->get_result()->fetch_assoc();$st->close();
             if(!$target){$db->rollback();http_response_code(404);echo json_encode(['error'=>'User No not found']);exit;}
             $newId=(int)$target['id'];
@@ -113,8 +113,12 @@ try {
         $st->bind_param('i',$userId);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
         $monitorId=(int)($session['monitor_id']??0);
         if($monitorId && !in_array($monitorId,array_map(static fn($m)=>(int)$m['id'],$monitors),true))$monitorId=0;
-        echo json_encode(['success'=>true,'user'=>$user,'monitors'=>$monitors,'monitor_id'=>$monitorId,
-            'assignment_locked'=>!empty(array_values(array_filter($monitors,static fn($m)=>(int)$m['id']===$monitorId))[0]['assignment_locked'])]);exit;
+        $locked=false;
+        foreach($monitors as $monitor){
+            if((int)$monitor['id']===$monitorId){$locked=!empty($monitor['assignment_locked']);break;}
+        }
+        echo json_encode(['success'=>true,'user'=>$user,'monitors'=>$monitors,
+            'monitor_id'=>$monitorId,'assignment_locked'=>$locked]);exit;
     }
     if($action==='monitors'){
         $st=$db->prepare('SELECT id,name,ip_address,platform,type,remark,assignment_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY name,id');
