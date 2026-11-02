@@ -12,6 +12,7 @@
 #include <QEventLoop>
 #include <QInputDialog>
 #include <QProcess>
+#include <QSignalBlocker>
 #include <QTimer>
 #include <QFile>
 #include <QFormLayout>

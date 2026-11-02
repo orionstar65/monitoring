@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Ubuntu MonitorClient Installation Script
-# Version: 1.31
+# Version: 1.4
 
 set -e
 
@@ -65,6 +65,7 @@ sudo apt install -y \
     libqt5widgets5t64 \
     libqt5core5t64 \
     libudev-dev \
+    libsecret-tools \
     libx11-dev \
     libxext-dev \
     libxrandr-dev \

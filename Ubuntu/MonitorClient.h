@@ -76,6 +76,7 @@ public slots:
     void onTestConnectionAction();
     void onTestAPIEndpointsAction();
     void onConfigRefreshAction();
+    void notifyTray(const QString &title,const QString &message,QSystemTrayIcon::MessageIcon icon,int timeout);
 
 private slots:
     void monitorTimerTick();

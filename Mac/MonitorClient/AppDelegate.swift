@@ -254,7 +254,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         let notification = NSUserNotification()
         notification.title = title
         notification.informativeText = message
-        NSUserNotificationCenter.default.deliver(notification)
+        if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
     }
     private func restoreRememberedSession() {
         guard let token = keychainLoadToken(), !token.isEmpty else {
@@ -825,7 +825,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             }
             
             notification.soundName = NSUserNotificationDefaultSoundName
-            NSUserNotificationCenter.default.deliver(notification)
+            if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
             
             // Check if permission was granted after the screen capture attempt
             // Use a timer to check multiple times since the dialog might take time to appear
@@ -2890,7 +2890,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         }
         
         notification.soundName = NSUserNotificationDefaultSoundName
-        NSUserNotificationCenter.default.deliver(notification)
+        if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
         
         // Also log the instructions
         // logMessage("Accessibility permission instructions sent via notification", level: .info)
@@ -2958,7 +2958,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
             notification.soundName = NSUserNotificationDefaultSoundName
         }
         
-        NSUserNotificationCenter.default.deliver(notification)
+        if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
         // logMessage("Server connection notification: \(connected ? "restored" : "lost")", level: .info)
     }
     
@@ -3235,14 +3235,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                         
                         if httpResponse.statusCode != 200 {
                             self?.logError("\(eventType) chunk \(index + 1)/\(chunks.count) HTTP error: \(httpResponse.statusCode)", context: eventType)
-                            self?.isServerConnected = false // Mark as disconnected on HTTP error
+                            self?.isServerConnected = false
+                            return
                         }
                         }
                         
                         if let data = data, let responseString = String(data: data, encoding: .utf8) {
                             self?.logSuccess("\(eventType) chunk \(index + 1)/\(chunks.count) sent successfully", details: "Response: \(responseString)")
                             self?.logMessage("Response data size: \(data.count) bytes", level: .debug)
-                            self?.isServerConnected = true // Mark as connected on successful API call
+                            self?.isServerConnected = true
                         } else {
                             self?.logError("No response data received for \(eventType) chunk \(index + 1)/\(chunks.count)", context: eventType)
                             if let data = data {
@@ -3460,7 +3461,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         }
         
         notification.soundName = NSUserNotificationDefaultSoundName
-        NSUserNotificationCenter.default.deliver(notification)
+        if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
         
         // Request permissions programmatically
         if !accessibilityGranted {
@@ -3621,7 +3622,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         notification.informativeText = "Please open System Settings > Privacy & Security > Accessibility and add this app"
         notification.soundName = NSUserNotificationDefaultSoundName
         
-        NSUserNotificationCenter.default.deliver(notification)
+        if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
     }
     
     // Open System Preferences to Screen Recording settings
@@ -3717,7 +3718,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         notification.informativeText = "Please open System Settings > Privacy & Security > Screen Recording and add this app"
         notification.soundName = NSUserNotificationDefaultSoundName
         
-        NSUserNotificationCenter.default.deliver(notification)
+        if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
     }
     
     // Check accessibility permission periodically and request if needed
@@ -3743,7 +3744,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                     notification.actionButtonTitle = "Open Settings"
                     notification.otherButtonTitle = "Later"
                     
-                    NSUserNotificationCenter.default.deliver(notification)
+                    if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
                     
                     storage.set(currentTime, forKey: "last-accessibility-notification")
                 }
@@ -3783,7 +3784,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                         notification.actionButtonTitle = "Open Settings"
                         notification.otherButtonTitle = "Later"
                         
-                        NSUserNotificationCenter.default.deliver(notification)
+                        if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
                         
                         storage.set(currentTime, forKey: "last-screen-recording-notification")
                     }
@@ -3945,7 +3946,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
                 notification.title = "MonitorClient - Manual Send Complete"
                 notification.informativeText = "All monitoring data has been sent to server"
                 notification.soundName = nil
-                NSUserNotificationCenter.default.deliver(notification)
+                if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
             }
         }
     }
@@ -4135,7 +4136,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
         """
         
         notification.soundName = nil // No sound for status clicks
-        NSUserNotificationCenter.default.deliver(notification)
+        if notificationsEnabled { NSUserNotificationCenter.default.deliver(notification) }
     }
     
     @objc private func updateStatusMenu() {

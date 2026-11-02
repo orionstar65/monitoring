@@ -36,6 +36,7 @@
 // #include "utils/desktopinfo.h"
 #include "MonitorClient.h"
 #include "ConfigDialog.h"
+#include <QStandardPaths>
 #include <QPainter>
 #include <QPen>
 #include <QApplication>
@@ -370,11 +371,11 @@ int MonitorClient::getScreen()
             QFile::remove(filePath + QStringLiteral(".jpg"));
         updateStatusDisplay();
         if (trayIcon && sendResult == 0)
-            trayIcon->showMessage(QStringLiteral("Screenshot"),
+            notifyTray(QStringLiteral("Screenshot"),
                                   QStringLiteral("Uploaded successfully."),
                                   QSystemTrayIcon::Information, 2500);
         else if (trayIcon && sendResult != 0)
-            trayIcon->showMessage(QStringLiteral("Screenshot"),
+            notifyTray(QStringLiteral("Screenshot"),
                                   QStringLiteral("Upload failed."),
                                   QSystemTrayIcon::Warning, 4000);
     });
@@ -1344,6 +1345,14 @@ int MonitorClient::checkActiveScreen()
     return 1;
 }
 
+void MonitorClient::notifyTray(const QString &title,const QString &message,
+                               QSystemTrayIcon::MessageIcon icon,int timeout)
+{
+    QSettings settings(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
+                       +"/monitorclient/settings.ini",QSettings::IniFormat);
+    if(trayIcon && settings.value("Notifications/enabled",true).toBool())
+        trayIcon->showMessage(title,message,icon,timeout);
+}
 // System tray implementation
 void MonitorClient::setupSystemTray()
 {
@@ -1528,7 +1537,7 @@ void MonitorClient::showConnectionError(const QString& error)
     // Show notification only for first error
     QSettings local(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)+"/monitorclient/settings.ini",QSettings::IniFormat);
     if (trayIcon && local.value("Notifications/enabled",true).toBool() && !connectionErrorNotified) {
-        trayIcon->showMessage("Connection Error", error, QSystemTrayIcon::Warning, 5000);
+        notifyTray("Connection Error", error, QSystemTrayIcon::Warning, 5000);
         connectionErrorNotified = true;
     }
     
@@ -1619,11 +1628,11 @@ void MonitorClient::onTrayIconActivated(QSystemTrayIcon::ActivationReason reason
                 if (!trayIcon)
                     return;
                 if (ok)
-                    trayIcon->showMessage(QStringLiteral("Connection"),
+                    notifyTray(QStringLiteral("Connection"),
                                           QStringLiteral("Server reachable."),
                                           QSystemTrayIcon::Information, 2500);
                 else
-                    trayIcon->showMessage(QStringLiteral("Connection"),
+                    notifyTray(QStringLiteral("Connection"),
                                           lastError,
                                           QSystemTrayIcon::Warning, 5000);
             });
@@ -1653,7 +1662,7 @@ void MonitorClient::onSendAllAction()
                 clearTrayActivity();
                 updateStatusDisplay();
                 if (trayIcon) {
-                    trayIcon->showMessage(QStringLiteral("Send all"),
+                    notifyTray(QStringLiteral("Send all"),
                                           QStringLiteral("Operations queued or completed."),
                                           QSystemTrayIcon::Information, 2500);
                 }
@@ -1678,7 +1687,7 @@ void MonitorClient::onConfigureAction()
 
     scheduleConnectionTest(QStringLiteral("Verifying server…"), [this](bool ok) {
         if (trayIcon) {
-            trayIcon->showMessage(QStringLiteral("Configuration"),
+            notifyTray(QStringLiteral("Configuration"),
                                   ok ? QStringLiteral("Saved and verified.")
                                      : QStringLiteral("Saved; server check failed."),
                                   ok ? QSystemTrayIcon::Information : QSystemTrayIcon::Warning,
@@ -1702,7 +1711,7 @@ void MonitorClient::updateStatusDisplay()
 void MonitorClient::notifyRunningInstance()
 {
     if (trayIcon) {
-        trayIcon->showMessage(QStringLiteral("MonitorClient"),
+        notifyTray(QStringLiteral("MonitorClient"),
                               QStringLiteral("MonitorClient is already running in the system tray."),
                               QSystemTrayIcon::Information, 4000);
     }
@@ -1739,7 +1748,7 @@ void MonitorClient::onTestConnectionAction()
     scheduleConnectionTest(QStringLiteral("Testing connection…"), [this](bool ok) {
         if (!ok || !trayIcon)
             return;
-        trayIcon->showMessage(QStringLiteral("Connection test"),
+        notifyTray(QStringLiteral("Connection test"),
                               QStringLiteral("Server reachable."),
                               QSystemTrayIcon::Information, 3000);
     });
@@ -1758,7 +1767,7 @@ void MonitorClient::onTestAPIEndpointsAction()
         watcher->deleteLater();
         clearTrayActivity();
         if (trayIcon) {
-            trayIcon->showMessage(QStringLiteral("API test"),
+            notifyTray(QStringLiteral("API test"),
                                   success ? QStringLiteral("Endpoints OK.")
                                           : QStringLiteral("Endpoints failed."),
                                   success ? QSystemTrayIcon::Information : QSystemTrayIcon::Warning,
