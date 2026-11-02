@@ -5,24 +5,25 @@ class Auth extends Base {
     
     public function login() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $username = $_POST['username'] ?? '';
+            $identifier = trim((string)($_POST['identifier'] ?? ''));
             $password = $_POST['password'] ?? '';
             // var_dump("admin: ", password_hash($password, PASSWORD_DEFAULT));
-            if (empty($username) || empty($password)) {
-                $error = 'Username and password are required';
+            if ($identifier==='' || $password==='') {
+                $error = 'User No or email and password are required';
             } else {
                 $user = $this->db->fetch(
-                    "SELECT * FROM users WHERE username = :username OR email = :email",
-                    ['username' => $username,'email'=>$username]
+                    "SELECT * FROM users WHERE user_no = :user_no OR email = :email LIMIT 1",
+                    ['user_no' => ctype_digit($identifier) ? $identifier : '0','email'=>$identifier]
                 );
                 
-                $attemptKey=hash('sha256',($_SERVER['REMOTE_ADDR']??'').'|'.strtolower($username));
+                $attemptKey=hash('sha256',($_SERVER['REMOTE_ADDR']??'').'|'.strtolower($identifier));
                 $attempts=(int)$this->db->fetch("SELECT COUNT(*) AS hits FROM login_attempts WHERE attempt_key=:k AND attempted_at>DATE_SUB(NOW(),INTERVAL 15 MINUTE)",['k'=>$attemptKey])['hits'];
                 if($attempts>=8){http_response_code(429);$error='Too many login attempts; try again later.';}
                 elseif ($user && password_verify($password, $user['password'])) {
                     session_regenerate_id(true);
                     $_SESSION['user_id'] = $user['id'];
-                    $_SESSION['username'] = $user['username'];
+                    $_SESSION['user_no'] = (string)$user['user_no'];
+                    $_SESSION['full_name'] = $user['name'];
                     $_SESSION['role'] = $user['role'];
                     
                     $this->redirect(!empty($user['must_change_password'])
@@ -30,7 +31,7 @@ class Auth extends Base {
                         : ($user['role']==='admin' ? 'dashboard' : 'monitors'));
                 } else {
                     $this->db->insert('login_attempts',['attempt_key'=>$attemptKey]);
-                    $error = 'Invalid username or password';
+                    $error = 'Invalid User No, email, or password';
                 }
             }
         }
@@ -41,15 +42,13 @@ class Auth extends Base {
     public function signup() {
         if($_SERVER['REQUEST_METHOD']==='POST'){
             $name=trim((string)($_POST['name']??''));
-            $username=trim((string)($_POST['username']??''));
             $email=trim((string)($_POST['email']??''));
             $password=(string)($_POST['password']??'');
             if(strlen($name)<2||strlen($name)>150
                 ||preg_match('/[<>\\x00-\\x1f\\x7f]/',$name)
-                ||!preg_match('/^[A-Za-z0-9_.-]{3,50}$/',$username)
                 ||($email!=='' && !filter_var($email,FILTER_VALIDATE_EMAIL))
                 ||strlen($email)>254||strlen($password)<12||strlen($password)>1024){
-                $error='Enter a name, valid email, username (3–50 characters) and password of at least 12 characters.';
+                $error='Enter a full name, optional valid email and password of at least 12 characters.';
             }else{
                 // Enforce the same signup rate limit as the desktop API.
                 $key=hash('sha256',($_SERVER['REMOTE_ADDR']??'').'|signup');
@@ -62,17 +61,15 @@ class Auth extends Base {
                     return;
                 }
                 $this->db->insert('login_attempts',['attempt_key'=>$key]);
-                $existing=$email==='' ?
-                    $this->db->fetch('SELECT id FROM users WHERE username=:username',['username'=>$username])
-                    : $this->db->fetch('SELECT id FROM users WHERE username=:username OR email=:email',
-                        ['username'=>$username,'email'=>$email]);
-                if($existing)$error='Username or email already registered.';
+                $existing=$email==='' ? false
+                    : $this->db->fetch('SELECT id FROM users WHERE email=:email',['email'=>$email]);
+                if($existing)$error='Email already registered.';
                 else try{
-                    $newId=(int)$this->db->insert('users',['name'=>$name,'username'=>$username,'email'=>$email!==''?$email:null,
+                    $newId=(int)$this->db->insert('users',['name'=>$name,'email'=>$email!==''?$email:null,
                         'password'=>password_hash($password,PASSWORD_DEFAULT),'role'=>'viewer',
                         'created_at'=>date('Y-m-d H:i:s')]);
                     $this->db->update('users',['user_no'=>$newId+100000],'id=:id',['id'=>$newId]);
-                    $_SESSION['success_message']='Account created. Please sign in.';
+                    $_SESSION['success_message']='Account created. Your User No is '.($newId+100000).'. Use this number to sign in.';
                     $this->redirect('auth/login');
                 }catch(PDOException $e){$error='Could not create account.';}
             }
@@ -99,7 +96,7 @@ class Auth extends Base {
                 $this->db->query('UPDATE client_sessions SET revoked_at=NOW() WHERE user_id=:id AND revoked_at IS NULL',
                     ['id'=>$_SESSION['user_id']]);
                 session_regenerate_id(true);
-                $_SESSION['success_message']='Password updated. Desktop clients will need to sign in again.';
+                $_SESSION['success_message']='Password updated successfully.';
                 $this->redirect(($_SESSION['role']??'')==='admin'?'dashboard':'monitors');
             }
         }
