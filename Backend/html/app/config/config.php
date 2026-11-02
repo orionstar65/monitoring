@@ -7,7 +7,7 @@ define('DB_NAME', getenv('MONITOR_DB_NAME') ?: 'monitoring_db');
 
 // Application configuration
 define('APP_NAME', 'ACC-Monitor');
-define('APP_VERSION', '1.4.0');
+define('APP_VERSION', '1.5.0');
 define('BASE_URL', getenv('MONITOR_BASE_URL') ?: '/html/');
 // define('BASE_URL', getenv('MONITOR_BASE_URL') ?: '/html/');
 

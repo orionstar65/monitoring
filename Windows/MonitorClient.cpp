@@ -243,7 +243,7 @@ std::ofstream debugLogFile;
 std::string API_BASE_URL;
 std::string API_ROUTE = "/webapi.php";
 std::string TIC_ROUTE = "/eventhandler.php";
-std::string APP_VERSION = "1.4";
+std::string APP_VERSION = "1.5";
 
 // USB monitoring using WMI
 std::thread usbMonitoringThread;
@@ -1791,7 +1791,7 @@ static void saveClientSetting(const char* section,const char* key,const std::str
     WritePrivateProfileStringA(section,key,value.c_str(),path.c_str());
 }
 static std::string credentialTarget() {
-    return "ACC-Monitor-v1.4/" + serverIP + ":" + serverPort;
+    return "ACC-Monitor-v1.5/" + serverIP + ":" + serverPort;
 }
 static void rememberClientToken(const std::string& token) {
     const std::string target=credentialTarget();
@@ -2767,8 +2767,8 @@ void updateTrayIcon() {
     if(!redTrayIcon)redTrayIcon=buildStatusIcon(RGB(227,45,45));
     nid.uFlags=NIF_ICON|NIF_MESSAGE|NIF_TIP;
     nid.hIcon=active?greenTrayIcon:redTrayIcon;
-    strcpy_s(nid.szTip,active?"MonitorClient v1.4 - Active":
-         "MonitorClient v1.4 - Offline / Sign in or configure monitor");
+    strcpy_s(nid.szTip,active?"MonitorClient v1.5 - Active":
+         "MonitorClient v1.5 - Offline / Pair device or configure monitor");
     Shell_NotifyIconA(NIM_MODIFY,&nid);
 }
 

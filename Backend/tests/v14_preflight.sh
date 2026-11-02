@@ -15,7 +15,8 @@ for file in Backend/migrations/2026_11_02_identity.sql \
             Backend/migrations/2026_11_02_client_v14.sql \
             Backend/migrations/2026_11_02_accounts_v14.sql \
             Backend/migrations/2026_11_02_legacy_owners_v14.sql \
-            Backend/migrations/2026_11_02_drop_legacy_username_v14.sql; do
+            Backend/migrations/2026_11_02_drop_legacy_username_v14.sql \
+            Backend/migrations/2026_11_02_device_pairing_v15.sql; do
   test -s "$file" || { echo "Missing migration: $file" >&2; exit 1; }
 done
 echo "OK: all v1.4 migrations present"
