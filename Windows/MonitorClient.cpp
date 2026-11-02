@@ -2014,6 +2014,7 @@ static bool applyUnifiedServer(HWND dlg) {
 }
 
 static bool settingsAssignmentLocked=false;
+static std::string settingsDirectoryError;
 static std::string selectedUserNo(HWND dlg) {
     const HWND combo=GetDlgItem(dlg,SETTINGS_USER_NO);
     const int ix=(int)SendMessageW(combo,CB_GETCURSEL,0,0);
@@ -2035,11 +2036,20 @@ static void selectDirectoryUser(HWND dlg,const std::string& userNo) {
 }
 static void loadUserDirectory(HWND dlg) {
     const HWND selector=GetDlgItem(dlg,SETTINGS_USER_NO);
+    settingsDirectoryError.clear();
     SendMessageW(selector,CB_RESETCONTENT,0,0);
     SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)L"Select a user…");
     Json::Value req;req["action"]="directory";
     const Json::Value response=callClientAuth(req);
-    for(const auto& entry:response.get("users",Json::arrayValue)){
+    if(!response.get("success",false).asBool()){
+        settingsDirectoryError=response.get("error",
+            "Unable to load users. Check the server address, TLS and enrollment configuration.").asString();
+        SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)L"User list unavailable — check server");
+        SendMessageW(selector,CB_SETCURSEL,0,0);
+        return;
+    }
+    const Json::Value entries=response.get("users",Json::arrayValue);
+    for(const auto& entry:entries){
         const std::string no=entry.get("user_no","").asString();
         if(no.empty())continue;
         const std::string label=no+"/"+entry.get("full_name","").asString()+
@@ -2047,6 +2057,8 @@ static void loadUserDirectory(HWND dlg) {
         const std::wstring wide=utf8ToWide(label);
         SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)wide.c_str());
     }
+    if(SendMessageW(selector,CB_GETCOUNT,0,0)<=1)
+        settingsDirectoryError="No eligible users. Create a user or viewer in the web portal.";
     selectDirectoryUser(dlg,signedInUsername);
 }
 static void refreshUnifiedMonitors(HWND dlg) {
@@ -2103,9 +2115,12 @@ static void updateUnifiedVisibility(HWND dlg) {
     ShowWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),enrolled?SW_SHOW:SW_HIDE);
     EnableWindow(GetDlgItem(dlg,SETTINGS_USER_NO),!enrolled||!settingsAssignmentLocked);
     EnableWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),!settingsAssignmentLocked);
-    ShowWindow(GetDlgItem(dlg,SETTINGS_NOTICE),enrolled&&settingsAssignmentLocked?SW_SHOW:SW_HIDE);
-    if(settingsAssignmentLocked)
+    const bool hasNotice=(enrolled&&settingsAssignmentLocked)||!settingsDirectoryError.empty();
+    ShowWindow(GetDlgItem(dlg,SETTINGS_NOTICE),hasNotice?SW_SHOW:SW_HIDE);
+    if(enrolled&&settingsAssignmentLocked)
         setDlgUtf8Text(dlg,SETTINGS_NOTICE,"User selection is locked. Ask your administrator to edit.");
+    else if(!settingsDirectoryError.empty())
+        setDlgUtf8Text(dlg,SETTINGS_NOTICE,settingsDirectoryError);
     setDlgUtf8Text(dlg,SETTINGS_SAVE,enrolled?"Save Monitor":"Save Server");
     setDlgUtf8Text(dlg,SETTINGS_CONNECTION,
         connectionStatus.serverConnected&&enrolled?"● Connected and active":"● Offline / Not configured");
@@ -2115,15 +2130,15 @@ static void updateUnifiedVisibility(HWND dlg) {
         if(!child)continue;
     }
     if(enrolled){
-        SetWindowPos(GetDlgItem(dlg,SETTINGS_NOTIFY),nullptr,108,585,0,0,SWP_NOZORDER|SWP_NOSIZE);
-        SetWindowPos(GetDlgItem(dlg,SETTINGS_SAVE),nullptr,225,620,0,0,SWP_NOZORDER|SWP_NOSIZE);
-        SetWindowPos(GetDlgItem(dlg,SETTINGS_CLOSE),nullptr,332,620,0,0,SWP_NOZORDER|SWP_NOSIZE);
+        SetWindowPos(GetDlgItem(dlg,SETTINGS_NOTIFY),nullptr,108,572,0,0,SWP_NOZORDER|SWP_NOSIZE);
+        SetWindowPos(GetDlgItem(dlg,SETTINGS_SAVE),nullptr,225,607,0,0,SWP_NOZORDER|SWP_NOSIZE);
+        SetWindowPos(GetDlgItem(dlg,SETTINGS_CLOSE),nullptr,332,607,0,0,SWP_NOZORDER|SWP_NOSIZE);
     }else{
-        SetWindowPos(GetDlgItem(dlg,SETTINGS_NOTIFY),nullptr,108,350,0,0,SWP_NOZORDER|SWP_NOSIZE);
-        SetWindowPos(GetDlgItem(dlg,SETTINGS_SAVE),nullptr,225,385,0,0,SWP_NOZORDER|SWP_NOSIZE);
-        SetWindowPos(GetDlgItem(dlg,SETTINGS_CLOSE),nullptr,332,385,0,0,SWP_NOZORDER|SWP_NOSIZE);
+        SetWindowPos(GetDlgItem(dlg,SETTINGS_NOTIFY),nullptr,108,351,0,0,SWP_NOZORDER|SWP_NOSIZE);
+        SetWindowPos(GetDlgItem(dlg,SETTINGS_SAVE),nullptr,225,389,0,0,SWP_NOZORDER|SWP_NOSIZE);
+        SetWindowPos(GetDlgItem(dlg,SETTINGS_CLOSE),nullptr,332,389,0,0,SWP_NOZORDER|SWP_NOSIZE);
     }
-    SetWindowPos(dlg,nullptr,0,0,465,enrolled?710:485,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
+    SetWindowPos(dlg,nullptr,0,0,465,enrolled?685:480,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
 }
 static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp) {
     switch(msg) {
@@ -2147,29 +2162,29 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"STATIC","User:",0,13,202,90,20,SETTINGS_USER);
         addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,199,310,250,SETTINGS_USER_NO);
         SendMessageW(GetDlgItem(dlg,SETTINGS_USER_NO),CB_SETDROPPEDWIDTH,540,0);
-        addControl(dlg,"BUTTON","Disconnect",WS_TABSTOP,298,237,120,27,SETTINGS_LOGOUT);
-        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,301,405,2,4507);
-        addControl(dlg,"STATIC","",0,13,312,405,28,SETTINGS_NOTICE);
-        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,350,405,2,SETTINGS_MONITOR_DIVIDER);
-        addControl(dlg,"STATIC","Monitor Settings",0,13,359,180,23,SETTINGS_MONITOR_HEADING);
-        addControl(dlg,"STATIC","Monitor",0,13,388,90,21,4400);
-        addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,386,310,220,SETTINGS_MONITOR);
-        addControl(dlg,"STATIC","Label",0,13,423,90,21,4401);
-        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,420,310,25,SETTINGS_LABEL);
-        addControl(dlg,"STATIC","OS",0,13,456,90,21,4402);
-        HWND os=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,453,310,120,SETTINGS_OS);
+        addControl(dlg,"BUTTON","Disconnect",WS_TABSTOP,298,234,120,27,SETTINGS_LOGOUT);
+        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,267,405,2,4507);
+        addControl(dlg,"STATIC","",SS_LEFT,16,276,430,54,SETTINGS_NOTICE);
+        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,336,405,2,SETTINGS_MONITOR_DIVIDER);
+        addControl(dlg,"STATIC","Monitor Settings",0,13,346,180,23,SETTINGS_MONITOR_HEADING);
+        addControl(dlg,"STATIC","Monitor",0,13,375,90,21,4400);
+        addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,373,310,220,SETTINGS_MONITOR);
+        addControl(dlg,"STATIC","Label",0,13,410,90,21,4401);
+        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,407,310,25,SETTINGS_LABEL);
+        addControl(dlg,"STATIC","OS",0,13,443,90,21,4402);
+        HWND os=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,440,310,120,SETTINGS_OS);
         for(const wchar_t* name:{L"Windows",L"Mac",L"Ubuntu"})SendMessageW(os,CB_ADDSTRING,0,(LPARAM)name);
-        addControl(dlg,"STATIC","Machine",0,13,489,90,21,4403);
-        HWND machine=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,486,310,110,SETTINGS_MACHINE);
+        addControl(dlg,"STATIC","Machine",0,13,476,90,21,4403);
+        HWND machine=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,473,310,110,SETTINGS_MACHINE);
         for(const wchar_t* name:{L"Laptop",L"Desktop"})SendMessageW(machine,CB_ADDSTRING,0,(LPARAM)name);
-        addControl(dlg,"STATIC","IP address",0,13,522,90,21,4404);
-        addControl(dlg,"STATIC","—",0,108,522,310,21,SETTINGS_MONITOR_IP);
-        addControl(dlg,"STATIC","Remark",0,13,555,90,21,4405);
-        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,552,310,25,SETTINGS_REMARK);
-        addControl(dlg,"BUTTON","Show status notifications",BS_AUTOCHECKBOX|WS_TABSTOP,108,585,250,24,SETTINGS_NOTIFY);
+        addControl(dlg,"STATIC","IP address",0,13,509,90,21,4404);
+        addControl(dlg,"STATIC","—",0,108,509,310,21,SETTINGS_MONITOR_IP);
+        addControl(dlg,"STATIC","Remark",0,13,542,90,21,4405);
+        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,539,310,25,SETTINGS_REMARK);
+        addControl(dlg,"BUTTON","Show status notifications",BS_AUTOCHECKBOX|WS_TABSTOP,108,572,250,24,SETTINGS_NOTIFY);
         CheckDlgButton(dlg,SETTINGS_NOTIFY,notificationsEnabled?BST_CHECKED:BST_UNCHECKED);
-        addControl(dlg,"BUTTON","Save Monitor",WS_TABSTOP|BS_DEFPUSHBUTTON,225,620,96,30,SETTINGS_SAVE);
-        addControl(dlg,"BUTTON","Close",WS_TABSTOP,332,620,86,30,SETTINGS_CLOSE);
+        addControl(dlg,"BUTTON","Save Monitor",WS_TABSTOP|BS_DEFPUSHBUTTON,225,607,96,30,SETTINGS_SAVE);
+        addControl(dlg,"BUTTON","Close",WS_TABSTOP,332,607,86,30,SETTINGS_CLOSE);
         loadUserDirectory(dlg);
         refreshUnifiedMonitors(dlg);
         updateUnifiedVisibility(dlg);
