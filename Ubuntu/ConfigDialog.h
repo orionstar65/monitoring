@@ -35,6 +35,7 @@ public:
 private slots:
     void onSaveClicked();
     void onSignInClicked();
+    void onLogoutClicked();
     void onRequestMonitorClicked();
     void onSignUpClicked();
     void onMonitorChanged(int index);
@@ -56,6 +57,7 @@ private:
     int monitorId = 0;
     QLineEdit *loginEdit;
     QLineEdit *passwordEdit;
+    QLineEdit *signupFullNameEdit;
     QLineEdit *signupUsernameEdit;
     QLineEdit *signupPasswordEdit;
     QLineEdit *signupConfirmEdit;
@@ -64,6 +66,9 @@ private:
     QComboBox *osSelector;
     QComboBox *machineSelector;
     QCheckBox *notificationsCheck;
+    QLabel *accountStatusLabel;
+    QLabel *connectionStatusLabel;
+    QPushButton *logoutButton;
     QComboBox *monitorSelector;
     QPushButton *signInButton;
     QPushButton *requestMonitorButton;
