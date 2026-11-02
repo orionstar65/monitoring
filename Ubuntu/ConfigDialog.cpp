@@ -243,8 +243,8 @@ void ConfigDialog::refreshDirectory(){
         const auto user=entry.toObject();
         const QString number=user.value("user_no").toString();
         if(number.isEmpty())continue;
-        const QString label=number+" / "+user.value("full_name").toString()+
-            " / "+user.value("ip_address").toString("—");
+        const QString label=number+"/"+user.value("full_name").toString()+
+            "/"+user.value("ip_address").toString("—");
         userSelector->addItem(label,number);
     }
     const int ix=userSelector->findData(current);
