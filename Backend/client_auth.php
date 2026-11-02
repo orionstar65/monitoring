@@ -32,6 +32,13 @@ try {
         http_response_code(400);echo json_encode(['error'=>'Invalid JSON request']);exit;
     }
     $action=$data['action'];
+    // No-code enrollment is a deliberate trust decision. Require the server
+    // administrator to opt in before publishing a User No directory or issuing
+    // monitor-bound bearer credentials without a separate identity proof.
+    if(($action==='directory'||$action==='enroll') && getenv('MONITOR_ENABLE_USER_NO_ENROLL')!=='1'){
+        http_response_code(503);
+        echo json_encode(['error'=>'User No enrollment is disabled on this server. Ask your administrator to enable it on a trusted network.']);exit;
+    }
     // Public directory reveals user numbers only. No names, email or monitor data.
     if($action==='directory'){
         $st=$db->prepare("SELECT user_no FROM users WHERE role IN ('user','viewer') AND user_no IS NOT NULL ORDER BY user_no LIMIT 10000");
