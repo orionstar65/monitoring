@@ -129,7 +129,7 @@ ob_start();
                           <option value="">Unassigned</option>
                           <?php foreach($accounts as $account): ?>
                           <option value="<?= (int)$account['id'] ?>" <?= (int)($monitor['owner_user_id']??0)===(int)$account['id']?'selected':'' ?>>
-                            <?= htmlspecialchars(($account['name']?:$account['username']).' · No '.$account['user_no'],ENT_QUOTES,'UTF-8') ?>
+                            <?= htmlspecialchars(($account['user_no']??'—').' / '.($account['name']??'').' / '.($account['ip_address']??'—'),ENT_QUOTES,'UTF-8') ?>
                           </option>
                           <?php endforeach; ?>
                         </select>
@@ -157,7 +157,7 @@ ob_start();
                                value="<?php echo htmlspecialchars($monitor['slack_id'] ?: ''); ?>"
                                placeholder="Enter Slack ID (optional)">
                         <div class="form-text">
-                            Slack ID for grouping notifications. Leave empty to use username.
+                            Slack ID for grouping notifications. Leave empty to use the account's full name.
                         </div>
                     </div>
                     
