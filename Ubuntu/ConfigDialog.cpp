@@ -26,16 +26,21 @@
 
 ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     setWindowTitle("MonitorClient v1.5 — Settings");
-    setMinimumSize(470,420);
-    resize(520,700);
+    setMinimumSize(500,420);
+    resize(560,640);
     setModal(true);
     auto *outer=new QVBoxLayout(this);
+    outer->setContentsMargins(14,10,14,12);
+    outer->setSpacing(10);
     auto *scroll=new QScrollArea(this);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setAlignment(Qt::AlignTop);
     auto *page=new QWidget(scroll);
     auto *content=new QVBoxLayout(page);
-    content->setSpacing(12);
+    content->setContentsMargins(2,0,2,2);
+    content->setSpacing(10);
+    content->setAlignment(Qt::AlignTop);
     scroll->setWidget(page);
     outer->addWidget(scroll);
     auto *header=new QHBoxLayout();
@@ -74,11 +79,14 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     auto *userForm=new QFormLayout(userGroup);
     userSelector=new QComboBox(userGroup);
     userSelector->setMinimumWidth(350);
+    userSelector->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    userSelector->setMinimumContentsLength(28);
     userForm->addRow("User:",userSelector);
     logoutButton=new QPushButton("Disconnect",userGroup);
     userForm->addRow("",logoutButton);
     assignmentStatusLabel=new QLabel(userGroup);
     assignmentStatusLabel->setWordWrap(true);
+    assignmentStatusLabel->setStyleSheet("color:#bf3838;");
     userForm->addRow("",assignmentStatusLabel);
     content->addWidget(userGroup);
     divider();
@@ -239,12 +247,21 @@ bool ConfigDialog::saveServerIfChanged(){
 void ConfigDialog::refreshDirectory(){
     auto result=authRequest({{"action","directory"}});
     const QSignalBlocker blocked(userSelector);
-    const QString current=authToken.isEmpty()?
-        QSettings(settingsPath(),QSettings::IniFormat).value("User/no").toString()
-        : userSelector->currentData().toString();
+    const QString current=authToken.isEmpty()?QString():activeUserNo;
     userSelector->clear();
     userSelector->addItem("Select a user…",QString());
-    for(auto entry:result.value("users").toArray()){
+    if(!result.value("success").toBool()){
+        directoryError=result.value("error").toString(
+            "Cannot load users. Verify the server address, TLS and enrollment configuration.");
+        userSelector->addItem("User list unavailable — check server",QString());
+        userSelector->setCurrentIndex(0);
+        updateUI();
+        return;
+    }
+    const auto records=result.value("users").toArray();
+    directoryError=records.isEmpty()
+        ? "No eligible users. Add a User or Viewer in the web portal." : QString();
+    for(auto entry:records){
         const auto user=entry.toObject();
         const QString number=user.value("user_no").toString();
         if(number.isEmpty())continue;
@@ -342,9 +359,12 @@ void ConfigDialog::updateUI(){
     logoutButton->setVisible(enrolled);
     logoutButton->setEnabled(enrolled&&!assignmentLocked);
     userSelector->setEnabled(!enrolled||!assignmentLocked);
-    assignmentStatusLabel->setVisible(enrolled&&assignmentLocked);
-    if(enrolled&&assignmentLocked)
+    const bool hasLock=enrolled&&assignmentLocked;
+    assignmentStatusLabel->setVisible(hasLock||!directoryError.isEmpty());
+    if(hasLock)
         assignmentStatusLabel->setText("User selection is locked. Ask your administrator to edit.");
+    else if(!directoryError.isEmpty())
+        assignmentStatusLabel->setText(directoryError);
     saveButton->setText(enrolled?"Save Monitor":"Save Server");
     saveButton->setEnabled(true);
 }
