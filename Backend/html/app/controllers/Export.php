@@ -279,6 +279,38 @@ class Export extends Base {
         }
     }
 
+    /** Download a completed export only through authenticated administration. */
+    public function api_download() {
+        $name=(string)($_GET['export_dir']??'');
+        if(!preg_match('/^export_\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}$/',$name)){
+            http_response_code(400);exit('Invalid export');
+        }
+        $base=realpath(BASEPATH.'exports');
+        $root=realpath(BASEPATH.'exports/'.$name);
+        if(!$base||!$root||!str_starts_with($root,$base.DIRECTORY_SEPARATOR)||!is_dir($root)){
+            http_response_code(404);exit('Export not found');
+        }
+        if(!class_exists('ZipArchive')){http_response_code(503);exit('PHP zip extension required');}
+        $zipPath=$base.'/'.$name.'.zip';
+        $zip=new ZipArchive();
+        if($zip->open($zipPath,ZipArchive::CREATE|ZipArchive::OVERWRITE)!==true){
+            http_response_code(500);exit('Unable to build ZIP');
+        }
+        $iterator=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root,FilesystemIterator::SKIP_DOTS));
+        foreach($iterator as $file){
+            if(!$file->isFile()||$file->isLink())continue;
+            $resolved=realpath($file->getPathname());
+            if(!$resolved||!str_starts_with($resolved,$root.DIRECTORY_SEPARATOR))continue;
+            $zip->addFile($resolved,substr($resolved,strlen($root)+1));
+        }
+        $zip->close();
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="'.$name.'.zip"');
+        header('Content-Length: '.filesize($zipPath));
+        header('Cache-Control: no-store');
+        readfile($zipPath);
+    }
+
     public function api_progress() {
         // Disable error reporting to prevent HTML error output
         error_reporting(0);

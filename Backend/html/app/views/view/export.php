@@ -831,7 +831,7 @@ function showDownloadSection() {
 function downloadExport() {
     if (currentExportDir) {
         // Create a link to download the export folder
-        const downloadUrl = `<?php echo BASE_URL; ?>exports/${currentExportDir}/`;
+        const downloadUrl = `<?php echo BASE_URL; ?>export/api_download?export_dir=${encodeURIComponent(currentExportDir)}`;
         window.open(downloadUrl, '_blank');
     }
 }
