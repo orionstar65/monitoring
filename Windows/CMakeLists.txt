@@ -55,6 +55,7 @@ target_link_libraries(MonitorClient
     psapi
     setupapi
     user32
+    comctl32
     gdi32
     kernel32
     advapi32

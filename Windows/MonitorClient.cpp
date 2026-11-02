@@ -2127,6 +2127,8 @@ bool showMonitorSettings() {
 int main() {
     // Set DPI awareness to handle scaling properly (MinGW compatible)
     SetProcessDPIAware();
+    INITCOMMONCONTROLSEX common={sizeof(INITCOMMONCONTROLSEX),ICC_TAB_CLASSES};
+    InitCommonControlsEx(&common);
     
     // Initialize COM for GDI+
     CoInitialize(NULL);
@@ -2394,6 +2396,8 @@ void manualConfigRefresh() {
     fetchConfigurationFromAPI();
 }
 
+static HICON greenTrayIcon=nullptr;
+static HICON redTrayIcon=nullptr;
 // Setup system tray
 void setupSystemTray() {
     // Register window class for the tray icon
@@ -2459,6 +2463,9 @@ void setupSystemTray() {
 // Cleanup system tray
 void cleanupSystemTray() {
     Shell_NotifyIconA(NIM_DELETE, &nid);
+    if(greenTrayIcon && greenTrayIcon!=LoadIconA(nullptr,IDI_APPLICATION))DestroyIcon(greenTrayIcon);
+    if(redTrayIcon && redTrayIcon!=LoadIconA(nullptr,IDI_APPLICATION))DestroyIcon(redTrayIcon);
+    greenTrayIcon=redTrayIcon=nullptr;
     if (hTrayMenu) {
         DestroyMenu(hTrayMenu);
         hTrayMenu = NULL;
@@ -2528,18 +2535,43 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
 
 
-// Update tray icon based on connection status
-void updateTrayIcon() {
-    if (connectionStatus.serverConnected && selectedMonitorId.load()>0 && !getClientToken().empty()) {
-        nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
-        nid.hIcon = LoadIconA(NULL, (LPCSTR)IDI_INFORMATION); // Green information icon
-        strcpy_s(nid.szTip, "Monitor Client (Connected)");
-    } else {
-        nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
-        nid.hIcon = LoadIconA(NULL, (LPCSTR)IDI_ERROR); // Red error icon
-        strcpy_s(nid.szTip, "Monitor Client (Disconnected)");
+// Build a colored status dot over the system tray icon.
+static HICON buildStatusIcon(COLORREF dot) {
+    HICON base=LoadIconA(nullptr,IDI_APPLICATION);
+    ICONINFO info={};
+    if(!GetIconInfo(base,&info))return base;
+    HBITMAP color=(HBITMAP)CopyImage(info.hbmColor,IMAGE_BITMAP,32,32,LR_CREATEDIBSECTION);
+    if(!color){
+        DeleteObject(info.hbmColor);DeleteObject(info.hbmMask);
+        return base;
     }
-    Shell_NotifyIconA(NIM_MODIFY, &nid);
+    HDC screen=GetDC(nullptr),dc=CreateCompatibleDC(screen),mask=CreateCompatibleDC(screen);
+    HBITMAP old=(HBITMAP)SelectObject(dc,color);
+    HBITMAP oldMask=(HBITMAP)SelectObject(mask,info.hbmMask);
+    PatBlt(mask,19,19,13,13,BLACKNESS);
+    HBRUSH brush=CreateSolidBrush(dot);
+    HPEN pen=CreatePen(PS_SOLID,2,RGB(255,255,255));
+    HGDIOBJ oldBrush=SelectObject(dc,brush),oldPen=SelectObject(dc,pen);
+    Ellipse(dc,19,19,32,32);
+    SelectObject(dc,oldBrush);SelectObject(dc,oldPen);
+    SelectObject(dc,old);SelectObject(mask,oldMask);
+    DeleteObject(brush);DeleteObject(pen);
+    DeleteDC(dc);DeleteDC(mask);ReleaseDC(nullptr,screen);
+    ICONINFO result=info;result.hbmColor=color;
+    HICON icon=CreateIconIndirect(&result);
+    DeleteObject(color);DeleteObject(info.hbmColor);DeleteObject(info.hbmMask);
+    return icon?icon:base;
+}
+void updateTrayIcon() {
+    const bool active=connectionStatus.serverConnected && selectedMonitorId.load()>0
+                      && !getClientToken().empty();
+    if(!greenTrayIcon)greenTrayIcon=buildStatusIcon(RGB(22,185,80));
+    if(!redTrayIcon)redTrayIcon=buildStatusIcon(RGB(227,45,45));
+    nid.uFlags=NIF_ICON|NIF_MESSAGE|NIF_TIP;
+    nid.hIcon=active?greenTrayIcon:redTrayIcon;
+    strcpy_s(nid.szTip,active?"MonitorClient v1.4 - Active":
+         "MonitorClient v1.4 - Offline / Sign in or configure monitor");
+    Shell_NotifyIconA(NIM_MODIFY,&nid);
 }
 
 // Show connection error notification
