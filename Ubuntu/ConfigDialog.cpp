@@ -350,8 +350,11 @@ void ConfigDialog::onPairClicked(){
     const auto result=authRequest({{"action","enroll"},{"user_no",number}});
     if(!result.value("success").toBool()){
         QMessageBox::warning(this,"User selection failed",result.value("error").toString("Could not load assigned monitors."));
-        const QSignalBlocker blocked(userSelector);
-        userSelector->setCurrentIndex(0);
+        {
+            const QSignalBlocker blocked(userSelector);
+            userSelector->setCurrentIndex(0);
+        }
+        saveSettings();
         return;
     }
     authToken=result.value("token").toString();
@@ -361,8 +364,11 @@ void ConfigDialog::onPairClicked(){
     if(authToken.length()!=64||monitorId<1){
         authToken.clear();monitorId=0;
         QMessageBox::warning(this,"User selection failed","Invalid session details returned.");
-        const QSignalBlocker blocked(userSelector);
-        userSelector->setCurrentIndex(0);
+        {
+            const QSignalBlocker blocked(userSelector);
+            userSelector->setCurrentIndex(0);
+        }
+        saveSettings();
         return;
     }
     rememberToken(authToken);
@@ -375,7 +381,7 @@ void ConfigDialog::onSwitchClicked(){
     const auto result=authRequest({{"action","switch_user"},{"user_no",userSelector->currentData().toString()}},true);
     if(!result.value("success").toBool()){
         QMessageBox::warning(this,"Cannot change user",result.value("error").toString("Ask your administrator to change the assignment."));
-        refreshMonitors();updateUI();return;
+        refreshMonitors();saveSettings();updateUI();return;
     }
     authToken=result.value("token").toString();
     activeUserNo=userSelector->currentData().toString();
