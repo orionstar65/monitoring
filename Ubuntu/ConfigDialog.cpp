@@ -187,6 +187,11 @@ void ConfigDialog::onTestConnectionClicked(){
     testButton->setEnabled(true);
     connectionStatusLabel->setText(ok?"● Server reachable":"● Server unavailable (check IP, port and TLS)");
     connectionStatusLabel->setStyleSheet(ok?"color:#16803c":"color:#d32f2f");
+    if(ok && saveServerIfChanged()){
+        refreshDirectory();
+        refreshMonitors();
+        updateUI();
+    }
 }
 void ConfigDialog::clearStoredToken(const QString &host,int port){
     QProcess secret;
