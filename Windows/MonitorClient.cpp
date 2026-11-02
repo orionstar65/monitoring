@@ -2014,33 +2014,40 @@ static bool applyUnifiedServer(HWND dlg) {
 }
 
 static bool settingsAssignmentLocked=false;
+static std::string selectedUserNo(HWND dlg) {
+    const HWND combo=GetDlgItem(dlg,SETTINGS_USER_NO);
+    const int ix=(int)SendMessageW(combo,CB_GETCURSEL,0,0);
+    if(ix==CB_ERR || ix==0)return {};
+    const int length=(int)SendMessageW(combo,CB_GETLBTEXTLEN,ix,0);
+    if(length<=0||length>2048)return {};
+    std::wstring item(static_cast<size_t>(length)+1,L'\0');
+    SendMessageW(combo,CB_GETLBTEXT,ix,(LPARAM)item.data());
+    const size_t slash=item.find(L" / ");
+    if(slash==std::wstring::npos)return {};
+    return wideToUtf8(item.substr(0,slash));
+}
+static void selectDirectoryUser(HWND dlg,const std::string& userNo) {
+    const HWND combo=GetDlgItem(dlg,SETTINGS_USER_NO);
+    if(userNo.empty()){SendMessageW(combo,CB_SETCURSEL,0,0);return;}
+    const std::wstring prefix=utf8ToWide(userNo+" / ");
+    const int index=(int)SendMessageW(combo,CB_FINDSTRING,(WPARAM)-1,(LPARAM)prefix.c_str());
+    SendMessageW(combo,CB_SETCURSEL,index>=0?index:0,0);
+}
 static void loadUserDirectory(HWND dlg) {
-    HWND selector=GetDlgItem(dlg,SETTINGS_USER_NO);
-    const std::string last=signedInUsername;
+    const HWND selector=GetDlgItem(dlg,SETTINGS_USER_NO);
     SendMessageW(selector,CB_RESETCONTENT,0,0);
+    SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)L"Select a user…");
     Json::Value req;req["action"]="directory";
     const Json::Value response=callClientAuth(req);
     for(const auto& entry:response.get("users",Json::arrayValue)){
         const std::string no=entry.get("user_no","").asString();
         if(no.empty())continue;
-        const std::wstring text=utf8ToWide(no);
-        SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)text.c_str());
+        const std::string label=no+" / "+entry.get("full_name","").asString()+
+            " / "+entry.get("ip_address","—").asString();
+        const std::wstring wide=utf8ToWide(label);
+        SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)wide.c_str());
     }
-    const std::wstring saved=utf8ToWide(last);
-    if(!saved.empty()) {
-        const int index=(int)SendMessageW(selector,CB_FINDSTRINGEXACT,(WPARAM)-1,(LPARAM)saved.c_str());
-        if(index>=0)SendMessageW(selector,CB_SETCURSEL,index,0);
-    }
-    if(SendMessageW(selector,CB_GETCURSEL,0,0)==CB_ERR)
-        SendMessageW(selector,CB_SETCURSEL,0,0);
-}
-static std::string selectedUserNo(HWND dlg) {
-    const HWND combo=GetDlgItem(dlg,SETTINGS_USER_NO);
-    const int ix=(int)SendMessageW(combo,CB_GETCURSEL,0,0);
-    if(ix==CB_ERR)return {};
-    wchar_t name[60]={};
-    SendMessageW(combo,CB_GETLBTEXT,ix,(LPARAM)name);
-    return wideToUtf8(name);
+    selectDirectoryUser(dlg,signedInUsername);
 }
 static void refreshUnifiedMonitors(HWND dlg) {
     settingsMonitors=Json::arrayValue;
@@ -2054,10 +2061,7 @@ static void refreshUnifiedMonitors(HWND dlg) {
             settingsAssignmentLocked=answer.get("assignment_locked",false).asBool();
             signedInUsername=answer["user"].get("user_no","").asString();
             selectedMonitorId.store(answer.get("monitor_id",0).asInt());
-            const std::wstring number=utf8ToWide(signedInUsername);
-            const HWND userCombo=GetDlgItem(dlg,SETTINGS_USER_NO);
-            const int ix=(int)SendMessageW(userCombo,CB_FINDSTRINGEXACT,(WPARAM)-1,(LPARAM)number.c_str());
-            if(ix>=0)SendMessageW(userCombo,CB_SETCURSEL,ix,0);
+            selectDirectoryUser(dlg,signedInUsername);
         }else{
             // Revoked session: stop telemetry using this token.
             const std::string oldTarget=credentialTarget();
@@ -2096,17 +2100,12 @@ static void updateUnifiedVisibility(HWND dlg) {
         SETTINGS_REMARK,4400,4401,4402,4403,4404,4405
     };
     for(int id:monitorControls)ShowWindow(GetDlgItem(dlg,id),enrolled?SW_SHOW:SW_HIDE);
-    ShowWindow(GetDlgItem(dlg,SETTINGS_ENROLL),enrolled?SW_HIDE:SW_SHOW);
-    ShowWindow(GetDlgItem(dlg,SETTINGS_SWITCH),enrolled?SW_SHOW:SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),enrolled?SW_SHOW:SW_HIDE);
     EnableWindow(GetDlgItem(dlg,SETTINGS_USER_NO),!enrolled||!settingsAssignmentLocked);
-    EnableWindow(GetDlgItem(dlg,SETTINGS_SWITCH),!settingsAssignmentLocked);
     EnableWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),!settingsAssignmentLocked);
-    setDlgUtf8Text(dlg,SETTINGS_NOTICE,
-       !enrolled?"Select a User No to load its assigned monitors."
-       :settingsAssignmentLocked?
-         "User assignment is locked. Ask your administrator to edit this monitor."
-         :"User selected. You may change User No while unlocked.");
+    ShowWindow(GetDlgItem(dlg,SETTINGS_NOTICE),enrolled&&settingsAssignmentLocked?SW_SHOW:SW_HIDE);
+    if(settingsAssignmentLocked)
+        setDlgUtf8Text(dlg,SETTINGS_NOTICE,"User selection is locked. Ask your administrator to edit.");
     setDlgUtf8Text(dlg,SETTINGS_SAVE,enrolled?"Save Monitor":"Save Server");
     setDlgUtf8Text(dlg,SETTINGS_CONNECTION,
         connectionStatus.serverConnected&&enrolled?"● Connected and active":"● Offline / Not configured");
@@ -2145,12 +2144,9 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"BUTTON","Test Connection",WS_TABSTOP,108,148,132,27,SETTINGS_TEST);
         addControl(dlg,"STATIC","● Not tested",0,245,152,173,21,SETTINGS_CONNECTION);
         addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,181,405,2,4506);
-        addControl(dlg,"STATIC","User Selection",0,13,190,190,21,SETTINGS_USER_HEADING);
-        addControl(dlg,"STATIC","User No",0,13,223,90,20,SETTINGS_USER);
-        addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,220,310,250,SETTINGS_USER_NO);
-        addControl(dlg,"BUTTON","Select User No",WS_TABSTOP,108,258,135,29,SETTINGS_ENROLL);
-        addControl(dlg,"BUTTON","Change User No",WS_TABSTOP,108,258,140,29,SETTINGS_SWITCH);
-        addControl(dlg,"BUTTON","Disconnect",WS_TABSTOP,258,258,160,29,SETTINGS_LOGOUT);
+        addControl(dlg,"STATIC","User:",0,13,202,90,20,SETTINGS_USER);
+        addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,199,310,250,SETTINGS_USER_NO);
+        addControl(dlg,"BUTTON","Disconnect",WS_TABSTOP,298,237,120,27,SETTINGS_LOGOUT);
         addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,301,405,2,4507);
         addControl(dlg,"STATIC","",0,13,312,405,28,SETTINGS_NOTICE);
         addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,350,405,2,SETTINGS_MONITOR_DIVIDER);
@@ -2216,24 +2212,33 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             setDlgUtf8Text(dlg,SETTINGS_MONITOR_IP,ip);
             return TRUE;
         }
-        if(id==SETTINGS_ENROLL){
-            if(!applyUnifiedServer(dlg)){updateUnifiedVisibility(dlg);return TRUE;}
-            Json::Value request;request["action"]="enroll";
-            request["user_no"]=selectedUserNo(dlg);
-            const Json::Value response=callClientAuth(request);
-            if(!response.get("success",false).asBool()){
-                showUtf8Message(dlg,response.get("error","User selection failed.").asString(),
-                    "Select User No",MB_OK|MB_ICONWARNING);
-                return TRUE;
+        if(id==SETTINGS_USER_NO && HIWORD(wp)==CBN_SELCHANGE){
+            const std::string number=selectedUserNo(dlg);
+            if(number.empty())return TRUE;
+            if(!getClientToken().empty() && settingsAssignmentLocked){
+                showUtf8Message(dlg,"User assignment is locked. Ask your administrator to edit the monitor.",
+                    "Assignment locked",MB_OK|MB_ICONWARNING);
+                selectDirectoryUser(dlg,signedInUsername);return TRUE;
             }
+            if(!getClientToken().empty() && number==signedInUsername)return TRUE;
+            if(!applyUnifiedServer(dlg)){
+                selectDirectoryUser(dlg,signedInUsername);return TRUE;
+            }
+            const bool changing=!getClientToken().empty();
+            Json::Value request;request["action"]=changing?"switch_user":"enroll";
+            request["user_no"]=number;
+            const Json::Value response=callClientAuth(request);
             const std::string token=response.get("token","").asString();
-            const int monId=response.get("monitor_id",0).asInt();
-            if(token.size()!=64||monId<1){
-                showUtf8Message(dlg,"Server returned invalid session details.","Select User No",MB_OK|MB_ICONERROR);return TRUE;
+            const int monitor=response.get("monitor_id",0).asInt();
+            if(!response.get("success",false).asBool()||token.size()!=64||monitor<=0){
+                showUtf8Message(dlg,response.get("error","Unable to select user.").asString(),
+                    "User",MB_OK|MB_ICONWARNING);
+                selectDirectoryUser(dlg,signedInUsername);
+                refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);return TRUE;
             }
             {std::lock_guard<std::mutex> lock(authMutex);clientToken=token;}
-            selectedMonitorId.store(monId);
-            signedInUsername=selectedUserNo(dlg);
+            selectedMonitorId.store(monitor);
+            signedInUsername=number;
             rememberClientToken(token);
             refreshUnifiedMonitors(dlg);
             updateUnifiedVisibility(dlg);
@@ -2241,22 +2246,6 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             if(!usbMonitoringActive)setupUSBMONITORING();
             updateTrayIcon();
             return TRUE;
-        }
-        if(id==SETTINGS_SWITCH){
-            if(!applyUnifiedServer(dlg)){updateUnifiedVisibility(dlg);return TRUE;}
-            Json::Value request;request["action"]="switch_user";request["user_no"]=selectedUserNo(dlg);
-            const Json::Value result=callClientAuth(request);
-            if(!result.get("success",false).asBool()){
-                showUtf8Message(dlg,result.get("error","Ask your administrator to edit this monitor.").asString(),
-                    "User No",MB_OK|MB_ICONWARNING);
-                refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);return TRUE;
-            }
-            const std::string token=result.get("token","").asString();
-            if(token.size()!=64)return TRUE;
-            {std::lock_guard<std::mutex> lock(authMutex);clientToken=token;}
-            rememberClientToken(token);
-            refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);
-            updateTrayIcon();return TRUE;
         }
         if(id==SETTINGS_LOGOUT){
             if(settingsAssignmentLocked){
@@ -2272,6 +2261,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             {std::lock_guard<std::mutex> lock(authMutex);clientToken.clear();}
             selectedMonitorId.store(0);
             signedInUsername.clear();
+            selectDirectoryUser(dlg,"");
             settingsAssignmentLocked=false;
             if(keyboardHook)removeKeyboardHook();
             connectionStatus.serverConnected=false;
