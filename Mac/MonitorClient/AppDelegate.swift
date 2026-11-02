@@ -382,9 +382,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     // No separate emoji or enlarged status indicator is rendered in the menu bar.
     private func makeTrayIcon(active: Bool) -> NSImage {
         let image = NSImage(size: NSSize(width: 22, height: 22), flipped: false) { _ in
-            let base = NSApp.applicationIconImage
-            base?.draw(in: NSRect(x: 2, y: 2, width: 18, height: 18),
-                       from: .zero, operation: .sourceOver, fraction: 1)
+            // Keep the existing notepad glyph, not the application icon.
+            let notepad = NSAttributedString(string: "🗒️", attributes: [
+                .font: NSFont.systemFont(ofSize: 17)
+            ])
+            notepad.draw(in: NSRect(x: 1.5, y: 1.5, width: 19, height: 19))
             let badge = NSBezierPath(ovalIn: NSRect(x: 15.5, y: 0.75, width: 6.5, height: 6.5))
             (active ? NSColor.systemGreen : NSColor.systemRed).setFill()
             badge.fill()
