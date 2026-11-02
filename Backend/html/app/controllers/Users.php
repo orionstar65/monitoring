@@ -118,7 +118,7 @@ class Users extends Base {
                         $result = $this->db->update('users', $data, 'id = :id', ['id' => $id]);
                     } catch (PDOException $e) {
                         if($e->getCode()==='23000') {
-                            $error='User No, username or email already exists';
+                            $error='User No or email already exists';
                             $this->view('users/edit',['user'=>array_merge($user,['user_no'=>$userNo]),'error'=>$error]);
                             return;
                         }
