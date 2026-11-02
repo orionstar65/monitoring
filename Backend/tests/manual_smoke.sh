@@ -3,9 +3,18 @@
 # Example: bash Backend/tests/manual_smoke.sh https://monitor.example.com
 set -euo pipefail
 BASE="${1:-}"
-if [[ ! "$BASE" =~ ^https://[^/]+$ ]]; then
-  echo "Usage: bash Backend/tests/manual_smoke.sh https://your-monitor-host" >&2
+if [[ ! "$BASE" =~ ^https?://[^/]+$ ]]; then
+  echo "Usage: bash Backend/tests/manual_smoke.sh http://LAN_HOST:8924 or https://LAN_HOST:8925" >&2
   exit 2
+fi
+# Refuse unencrypted tests except on an RFC1918/loopback IPv4 address.
+if [[ "$BASE" == http://* ]]; then
+  hostname="${BASE#http://}"
+  hostname="${hostname%%:*}"
+  if [[ ! "$hostname" =~ ^(127\.|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.) ]]; then
+    echo "Refusing HTTP smoke test against a non-LAN hostname or address" >&2
+    exit 2
+  fi
 fi
 status() {
   curl --silent --show-error --location --output /dev/null --write-out '%{http_code}' \
