@@ -21,6 +21,7 @@ class Users extends Base {
             $password = $_POST['password'] ?? '';
             $email = $_POST['email'] ?? '';
             $role = $_POST['role'] ?? ROLE_USER;
+            if(!in_array($role,['admin','user','viewer'],true))$role='viewer';
             
             if (empty($username) || empty($password) || empty($email)) {
                 $error = 'All fields are required';
@@ -69,6 +70,7 @@ class Users extends Base {
             $name=trim((string)($_POST['name']??$username));
             $email = $_POST['email'] ?? '';
             $role = $_POST['role'] ?? ROLE_USER;
+            if(!in_array($role,['admin','user','viewer'],true))$role='viewer';
             $password = $_POST['password'] ?? '';
             
             if (empty($username) || empty($email)) {
@@ -84,6 +86,7 @@ class Users extends Base {
                     $error = 'Username already exists';
                 } else {
                     $data = [
+                        'name'=>$name,
                         'username' => $username,
                         'name' => $name,
                         'email' => $email,

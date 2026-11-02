@@ -16,7 +16,7 @@ USE monitoring_db;
 -- 2. UPDATE ROOT USER PASSWORD (if needed)
 -- =====================================================
 -- Uncomment and modify if you need to change root password
--- ALTER USER 'root'@'localhost' IDENTIFIED BY 'acc0924';
+-- Store database credentials outside source control.
 -- FLUSH PRIVILEGES;
 
 -- =====================================================
@@ -198,19 +198,8 @@ ORDER BY u.device_date DESC;
 -- 5. SEED INITIAL DATA
 -- =====================================================
 
--- Insert default admin user
--- Password: admin (hashed with password_hash())
-INSERT INTO users (username, email, password, role) VALUES 
-('admin', 'admin@monitoring.local', '$2y$10$KKoTCx08WTwAD844SiV2u.zEJRsmKwmabqrZibYuScDyWVk5Iz4jW', 'admin');
-
--- Insert default viewer user
--- Password: viewer123 (hashed with password_hash())
-INSERT INTO users (username, email, password, role) VALUES 
-('viewer', 'viewer@monitoring.local', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'viewer');
-
--- Insert sample monitor IP (optional - for testing)
-INSERT INTO tbl_monitor_ips (ip_address, mac_address, name, username, type, os_status, monitor_status, app_version) VALUES 
-('192.168.1.100', 'AA:BB:CC:DD:EE:FF', 'Test Computer', 'test.user', 'user', 1, 1, '1.0.0');
+-- No demo users/passwords or sample monitoring devices.
+-- Create first administrator through: php Backend/create_admin.php (after migration).
 
 -- =====================================================
 -- 6. CREATE INDEXES FOR PERFORMANCE

@@ -7,6 +7,7 @@ ob_start();
 <div class="card">
     <div class="card-body">
         <form method="POST" action="<?php echo BASE_URL; ?>users/create">
+            <div class="mb-3"><label class="form-label">Full name<input class="form-control" name="name" maxlength="150" required></label></div>
             <div class="row">
                 <div class="col-md-6">
                     <div class="mb-3">
@@ -34,6 +35,7 @@ ob_start();
                         <label for="role" class="form-label">Role</label>
                         <select class="form-select" id="role" name="role">
                             <option value="<?php echo ROLE_USER; ?>">User</option>
+                            <option value="viewer">Viewer</option>
                             <option value="<?php echo ROLE_ADMIN; ?>">Admin</option>
                         </select>
                     </div>
