@@ -48,6 +48,9 @@ if (!$data) {
     exit;
 }
 
+// Explicit monitor ID must agree with the server-side authenticated selection.
+$claimedId=filter_var($data['MonitorId']??null,FILTER_VALIDATE_INT);
+if($claimedId && (int)$claimedId!==$monitorId){http_response_code(403);echo json_encode(['error'=>'Monitor selection mismatch']);exit;}
 // Extract common data
 $appEvent = $data['Event'] ?? '';
 $version = $data['Version'] ?? '';

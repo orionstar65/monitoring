@@ -49,6 +49,9 @@ try {
     }
     if($action==='request_monitor'){
         $name=trim((string)($data['name']??''));
+        if(preg_match('/[<>\\x00-\\x1f]/',$name)){
+            http_response_code(400);echo json_encode(['error'=>'Invalid monitor name']);exit;
+        }
         if(strlen($name)<2||strlen($name)>100){http_response_code(400);echo json_encode(['error'=>'Name must be 2–100 characters']);exit;}
         $ip=$_SERVER['REMOTE_ADDR']??'';$type='desktop';
         $st=$db->prepare('INSERT INTO tbl_monitor_ips (name,ip_address,type,requested_user_id) VALUES (?,?,?,?)');

@@ -259,6 +259,9 @@ $clientIP = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'POST';
 $log_request_type = null; // Will be set based on the request type
 
+// Do not let client-provided IDs override the selected monitor from its session.
+$claimedId=filter_var($_POST['monitor_id']??null,FILTER_VALIDATE_INT);
+if($claimedId && (int)$claimedId!==$monitorId){http_response_code(403);echo json_encode(['error'=>'Monitor selection mismatch']);exit;}
 // Get MAC address from POST if available (for logging in MAC/IP format)
 $macAddress = $_POST['mac_address'] ?? null;
 if ($macAddress === '') {
