@@ -572,7 +572,7 @@
                 <div class="user-avatar">
                     <?php echo strtoupper(substr($_SESSION['full_name'], 0, 1)); ?>
                 </div>
-                <span>Welcome, <?php echo htmlspecialchars($_SESSION['username']); ?></span>
+                <span>Welcome, <?php echo htmlspecialchars($_SESSION['full_name']); ?></span>
             </div>
         </div>
 
