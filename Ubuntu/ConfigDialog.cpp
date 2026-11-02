@@ -285,6 +285,24 @@ bool ConfigDialog::testConnection()
 }
 void ConfigDialog::onSaveClicked()
 {
+    // A bearer token must never be forwarded to an edited server address.
+    QSettings previous(settingsPath(),QSettings::IniFormat);
+    const bool changedServer =
+        previous.value("Server/ip","192.168.1.45").toString()!=serverIPEdit->text().trimmed()
+        || previous.value("Server/port",8924).toInt()!=serverPortEdit->value();
+    if(changedServer){
+        authToken.clear();
+        monitorId=0;
+        assignedMonitors=QJsonArray();
+        monitorSelector->clear();
+        monitorSelector->addItem("Add New...",0);
+        saveSettings();
+        updateAccountUI();
+        emit sessionStateChanged();
+        QMessageBox::information(this,"Server changed",
+            "Server address saved. Sign in to the new server before choosing a monitor.");
+        return;
+    }
     if(authToken.isEmpty()){
         QMessageBox::warning(this,"Sign in required","Use the Sign In or Sign Up tab first.");
         return;
@@ -357,11 +375,17 @@ QJsonObject ConfigDialog::authRequest(const QJsonObject &payload,bool authentica
 }
 void ConfigDialog::onLogoutClicked()
 {
-    if(!authToken.isEmpty()){
+    QSettings previous(settingsPath(),QSettings::IniFormat);
+    const QString savedHost=previous.value("Server/ip","192.168.1.45").toString();
+    const int savedPort=previous.value("Server/port",8924).toInt();
+    // Only revoke over the original configured endpoint. Never send the
+    // remembered token to an unsaved server hostname entered into the form.
+    if(!authToken.isEmpty() && savedHost==serverIPEdit->text().trimmed()
+       && savedPort==serverPortEdit->value()){
         authRequest(QJsonObject{{"action","logout"}},true);
     }
     QProcess secret;
-    const QString address=serverIPEdit->text().trimmed()+":"+QString::number(serverPortEdit->value());
+    const QString address=savedHost+":"+QString::number(savedPort);
     secret.start("secret-tool",{"clear","service","acc-monitor","host",address});
     secret.waitForFinished(4000);
     authToken.clear();
