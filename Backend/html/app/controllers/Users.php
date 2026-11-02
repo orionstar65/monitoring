@@ -10,10 +10,10 @@ class Users extends Base {
     
     public function index() {
         $users = $this->db->fetchAll(
-            "SELECT u.id,u.name,u.username,u.email,u.role,u.created_at,u.must_change_password,
+            "SELECT u.id,u.user_no,u.name,u.username,u.email,u.role,u.created_at,u.must_change_password,
                     MAX(m.last_monitor_tic) AS last_activity
              FROM users u LEFT JOIN tbl_monitor_ips m ON m.owner_user_id=u.id
-             GROUP BY u.id,u.name,u.username,u.email,u.role,u.created_at,u.must_change_password
+             GROUP BY u.id,u.user_no,u.name,u.username,u.email,u.role,u.created_at,u.must_change_password
              ORDER BY u.created_at DESC"
         );
         

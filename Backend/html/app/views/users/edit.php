@@ -7,6 +7,11 @@ ob_start();
 <div class="card">
     <div class="card-body">
         <form method="POST" action="<?php echo BASE_URL; ?>users/edit/<?php echo $user['id']; ?>">
+            <div class="mb-3">
+                <label class="form-label">User No
+                <input class="form-control font-monospace" value="<?= htmlspecialchars($user['user_no']??'',ENT_QUOTES,'UTF-8') ?>" readonly></label>
+                <div class="form-text">Automatically assigned, immutable user identifier used by desktop applications.</div>
+            </div>
             <div class="mb-3"><label class="form-label">Full name<input class="form-control" name="name" maxlength="150" value="<?= htmlspecialchars($user['name']??'',ENT_QUOTES,'UTF-8') ?>" required></label></div>
             <div class="row">
                 <div class="col-md-6">

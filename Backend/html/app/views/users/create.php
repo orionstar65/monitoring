@@ -7,6 +7,7 @@ ob_start();
 <div class="card">
     <div class="card-body">
         <form method="POST" action="<?php echo BASE_URL; ?>users/create">
+            <div class="alert alert-info py-2">User No is generated automatically when this account is created.</div>
             <div class="mb-3"><label class="form-label">Full name<input class="form-control" name="name" maxlength="150" required></label></div>
             <div class="row">
                 <div class="col-md-6">

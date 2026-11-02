@@ -120,7 +120,7 @@ class Monitors extends Base {
         $this->requireAdmin();
         
         $monitor = $this->db->fetch(
-            "SELECT m.*,u.name AS owner_name FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id WHERE m.id=:id",
+            "SELECT m.*,u.name AS owner_name,u.user_no AS owner_user_no FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id WHERE m.id=:id",
             ['id' => $id]
         );
         
@@ -134,6 +134,7 @@ class Monitors extends Base {
             $slack_id = trim($_POST['slack_id'] ?? '');
             $platform = trim($_POST['platform'] ?? '');
             $owner_user_id = filter_var($_POST['owner_user_id']??null,FILTER_VALIDATE_INT)?:null;
+            $assignment_locked = isset($_POST['assignment_locked']) ? 1 : 0;
             if($owner_user_id && !$this->db->fetch('SELECT id FROM users WHERE id=:id',['id'=>$owner_user_id])) $error='Unknown account';
             // Validate type
             if(strlen($remark)>500){$error='Remark too long';}
@@ -150,24 +151,44 @@ class Monitors extends Base {
                         'remark' => $remark,
                         'slack_id' => $slack_id,
                         'platform' => !empty($platform) ? $platform : null,
-                        'owner_user_id' => $owner_user_id
+                        'owner_user_id' => $owner_user_id,
+                        'assignment_locked' => $assignment_locked
                     ];
                     
                     $this->db->update('tbl_monitor_ips', $update_data, 'id = :id', ['id' => $id]);
                     if((int)($monitor['owner_user_id']??0)!==(int)($owner_user_id??0)){
                         // A former owner must reselect an owned monitor on every device.
-                        $this->db->query('UPDATE client_sessions SET monitor_id=NULL WHERE monitor_id=:id',
+                        // Revoke all previously paired devices and invalidate any pending
+                        // pairing code belonging to the previous owner.
+                        $this->db->query('UPDATE client_sessions SET revoked_at=NOW() WHERE monitor_id=:id AND revoked_at IS NULL',
                             ['id'=>$id]);
+                        $this->db->query('UPDATE tbl_monitor_ips SET pairing_code_hash=NULL,pairing_expires_at=NULL WHERE id=:id',['id'=>$id]);
                     }
                     $this->redirect('monitors');
                 }
             }
         }
         
-        $accounts=$this->db->fetchAll("SELECT id,name,username,email FROM users ORDER BY name,username");
+        $accounts=$this->db->fetchAll("SELECT id,name,username,email,user_no FROM users ORDER BY name,username");
         $this->view('monitors/edit', ['monitor'=>$monitor,'accounts'=>$accounts,'error'=>$error??null]);
     }
     
+    /** Admin-only short-lived pairing secret; show once and store only its hash. */
+    public function pairing_code($id) {
+        $this->requireAdmin();
+        if(($_SERVER['REQUEST_METHOD']??'')!=='POST'){http_response_code(405);exit('POST required');}
+        $monitor=$this->db->fetch('SELECT id,owner_user_id FROM tbl_monitor_ips WHERE id=:id',['id'=>$id]);
+        if(!$monitor){http_response_code(404);exit('Monitor not found');}
+        if(empty($monitor['owner_user_id'])){http_response_code(409);exit('Assign a user before generating pairing code');}
+        $code=strtoupper(bin2hex(random_bytes(8)));
+        $this->db->update('tbl_monitor_ips',[
+            'pairing_code_hash'=>hash('sha256',$code),
+            'pairing_expires_at'=>date('Y-m-d H:i:s',time()+86400)
+        ],'id=:id',['id'=>$id]);
+        $_SESSION['pairing_code_once']=['monitor_id'=>(int)$id,'code'=>$code];
+        $this->redirect('monitors/edit/'.$id);
+    }
+
     public function delete($id) {
         $this->requireAdmin();
         if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'){http_response_code(405);exit('POST required');}
