@@ -1,6 +1,6 @@
 <?php
 // Database configuration
-define('DB_HOST', 'localhost');
+define('DB_HOST', getenv('MONITOR_DB_HOST') ?: 'localhost');
 define('DB_USER', getenv('MONITOR_DB_USER') ?: 'monitoring_app');
 define('DB_PASS', getenv('MONITOR_DB_PASSWORD') ?: '');
 define('DB_NAME', getenv('MONITOR_DB_NAME') ?: 'monitoring_db');

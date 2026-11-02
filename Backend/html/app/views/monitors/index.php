@@ -384,7 +384,8 @@ ob_start();
                 <thead class="table-dark">
                     <tr>
                         <th class="sortable" data-sort="id">ID<span class="sort-indicator"></span></th>
-                        <th class="sortable" data-sort="ip">IP Address<span class="sort-indicator"></span></th>
+                        <th>Name</th>
+                            <th class="sortable" data-sort="ip">IP Address<span class="sort-indicator"></span></th>
                         <th class="sortable" data-sort="username">Username<span class="sort-indicator"></span></th>
                         <th class="sortable" data-sort="slack">Slack ID<span class="sort-indicator"></span></th>
                         <th class="sortable" data-sort="type">Type<span class="sort-indicator"></span></th>
@@ -456,6 +457,7 @@ ob_start();
                         <td>
                             <span class="badge bg-secondary"><?php echo $monitor['id']; ?></span>
                         </td>
+                        <td><?= htmlspecialchars($monitor['name']??'Unnamed monitor',ENT_QUOTES,'UTF-8') ?></td>
                         <td>
                             <code><?php echo htmlspecialchars($monitor['ip_address']); ?></code>
                         </td>
@@ -508,7 +510,7 @@ ob_start();
                                     <i class="fas fa-edit"></i>
                                 </a>
                                 <?php endif; ?>
-                                <?php if (($_SESSION['role']??'')!=='viewer'): ?>
+                                <?php if (($_SESSION['role']??'')===ROLE_ADMIN): ?>
                                 <a href="<?php echo BASE_URL; ?>view/logs/<?php echo $monitor['id']; ?>" 
                                    class="btn btn-sm btn-outline-info" 
                                    title="View Logs">

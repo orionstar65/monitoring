@@ -44,16 +44,6 @@ error_log("Request URI: " . $request_uri);
 error_log("Base Path: " . $base_path);
 error_log("Path: " . $path);
 
-// Show debug info in browser for development
-if (false) {
-    echo "<h3>Routing Debug Info:</h3>";
-    echo "<p><strong>Request URI:</strong> $request_uri</p>";
-    echo "<p><strong>Base Path:</strong> $base_path</p>";
-    echo "<p><strong>Processed Path:</strong> $path</p>";
-}
-
-
-
 // Default route
 if (empty($path)) {
     $path = 'auth/login';
@@ -86,20 +76,11 @@ if (file_exists($controller_file)) {
             call_user_func_array([$controller_instance, $method], $params);
         } else {
             http_response_code(404);
-            echo "Method '$method' is not accessible via routing (it's " . ($reflection->isProtected() ? 'protected' : 'private') . ")";
+            echo 'Route not found';
         }
     } else {
         http_response_code(404);
-        echo "Method not found: $method<br>";
-        echo "Available methods in $controller_class:<br>";
-        $methods = get_class_methods($controller_instance);
-        foreach ($methods as $m) {
-            if ($m !== '__construct') {
-                $reflection = new ReflectionMethod($controller_instance, $m);
-                $visibility = $reflection->isPublic() ? 'public' : ($reflection->isProtected() ? 'protected' : 'private');
-                echo "- $m ($visibility)<br>";
-            }
-        }
+        echo 'Route not found';
     }
 } else {
     http_response_code(404);
