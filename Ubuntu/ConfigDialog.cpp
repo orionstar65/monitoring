@@ -350,6 +350,8 @@ void ConfigDialog::onPairClicked(){
     const auto result=authRequest({{"action","enroll"},{"user_no",number}});
     if(!result.value("success").toBool()){
         QMessageBox::warning(this,"User selection failed",result.value("error").toString("Could not load assigned monitors."));
+        const QSignalBlocker blocked(userSelector);
+        userSelector->setCurrentIndex(0);
         return;
     }
     authToken=result.value("token").toString();
@@ -358,7 +360,10 @@ void ConfigDialog::onPairClicked(){
     activeUserNo=number;
     if(authToken.length()!=64||monitorId<1){
         authToken.clear();monitorId=0;
-        QMessageBox::warning(this,"User selection failed","Invalid session details returned.");return;
+        QMessageBox::warning(this,"User selection failed","Invalid session details returned.");
+        const QSignalBlocker blocked(userSelector);
+        userSelector->setCurrentIndex(0);
+        return;
     }
     rememberToken(authToken);
     refreshMonitors();saveSettings();updateUI();
