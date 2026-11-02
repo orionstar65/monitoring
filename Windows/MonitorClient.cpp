@@ -1907,84 +1907,6 @@ static HWND addControl(HWND parent,const char* cls,const char* label,DWORD style
 static bool currentSignupTab(HWND dlg) {
     return TabCtrl_GetCurSel(GetDlgItem(dlg,AUTH_TABS))==1;
 }
-static void updateAuthTab(HWND dlg) {
-    const bool signup=currentSignupTab(dlg);
-    ShowWindow(GetDlgItem(dlg,AUTH_CONFIRM),signup?SW_SHOW:SW_HIDE);
-    ShowWindow(GetDlgItem(dlg,AUTH_CONFIRM_LABEL),signup?SW_SHOW:SW_HIDE);
-    setWindowUtf8Text(GetDlgItem(dlg,AUTH_SUBMIT),signup?"Sign Up":"Sign In");
-}
-static INT_PTR CALLBACK accountDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp) {
-    switch(msg){
-    case WM_INITDIALOG:{
-        setWindowUtf8Text(dlg,"MonitorClient v1.4 - Account");
-        HWND tabs=addControl(dlg,WC_TABCONTROLA,"",WS_TABSTOP,12,9,425,34,AUTH_TABS);
-        TCITEMW item={};item.mask=TCIF_TEXT;
-        item.pszText=const_cast<wchar_t*>(L"Sign In");TabCtrl_InsertItemW(tabs,0,&item);
-        item.pszText=const_cast<wchar_t*>(L"Sign Up");TabCtrl_InsertItemW(tabs,1,&item);
-        addControl(dlg,"STATIC","Username/email",0,17,57,115,20,0);
-        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,130,54,290,26,AUTH_USER);
-        addControl(dlg,"STATIC","Password",0,17,92,115,20,0);
-        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_PASSWORD|ES_AUTOHSCROLL,130,89,290,26,AUTH_PASS);
-        addControl(dlg,"STATIC","Confirm password",0,17,127,115,20,AUTH_CONFIRM_LABEL);
-        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_PASSWORD|ES_AUTOHSCROLL,130,124,290,26,AUTH_CONFIRM);
-        addControl(dlg,"BUTTON","Sign In",WS_TABSTOP|BS_DEFPUSHBUTTON,205,164,110,31,AUTH_SUBMIT);
-        addControl(dlg,"BUTTON","Server...",WS_TABSTOP,20,164,92,31,AUTH_SERVER);
-        addControl(dlg,"BUTTON","Cancel",WS_TABSTOP,324,164,96,31,IDCANCEL);
-        addControl(dlg,"STATIC","Password must be at least 12 characters for Sign Up.",0,17,209,400,18,0);
-        updateAuthTab(dlg);return TRUE;
-    }
-    case WM_NOTIFY:
-        if(((NMHDR*)lp)->idFrom==AUTH_TABS && ((NMHDR*)lp)->code==TCN_SELCHANGE){
-            updateAuthTab(dlg);return TRUE;
-        }
-        break;
-    case WM_COMMAND:
-        if(LOWORD(wp)==IDCANCEL){EndDialog(dlg,IDCANCEL);return TRUE;}
-        if(LOWORD(wp)==AUTH_SERVER){showMonitorSettings();return TRUE;}
-        if(LOWORD(wp)==AUTH_SUBMIT){
-            const std::string name=editText(dlg,AUTH_USER),password=editText(dlg,AUTH_PASS);
-            Json::Value request;request["username"]=name;request["password"]=password;
-            if(currentSignupTab(dlg)){
-                const std::string confirm=editText(dlg,AUTH_CONFIRM);
-                if(password!=confirm){showUtf8Message(dlg,"Passwords do not match.","MonitorClient",MB_OK|MB_ICONWARNING);return TRUE;}
-                request["action"]="signup";request["confirm_password"]=confirm;
-                Json::Value answer=callClientAuth(request);
-                if(answer.get("success",false).asBool()){
-                    showUtf8Message(dlg,"Account created. Switch to Sign In.","MonitorClient",MB_OK|MB_ICONINFORMATION);
-                    TabCtrl_SetCurSel(GetDlgItem(dlg,AUTH_TABS),0);updateAuthTab(dlg);
-                    setDlgUtf8Text(dlg,AUTH_PASS,"");setDlgUtf8Text(dlg,AUTH_CONFIRM,"");
-                }else{
-                    const std::string msg=answer.get("code","").asString()=="username_exists"
-                      ? "Username already exists. Please sign in instead."
-                      : answer.get("error","Registration failed.").asString();
-                    showUtf8Message(dlg,msg.c_str(),"MonitorClient",MB_OK|MB_ICONWARNING);
-                    if(answer.get("code","").asString()=="username_exists"){
-                        TabCtrl_SetCurSel(GetDlgItem(dlg,AUTH_TABS),0);updateAuthTab(dlg);
-                    }
-                }
-                return TRUE;
-            }
-            request["action"]="login";request.removeMember("username");request["identifier"]=name;
-            Json::Value answer=callClientAuth(request);
-            setDlgUtf8Text(dlg,AUTH_PASS,"");
-            if(!answer.get("success",false).asBool()){
-                showUtf8Message(dlg,"Incorrect credentials. If your password is wrong, ask your administrator to reset it.",
-                            "Sign-in failed",MB_ICONWARNING|MB_OK);
-                return TRUE;
-            }
-            const std::string token=answer.get("token","").asString();
-            if(token.size()!=64){showUtf8Message(dlg,"Invalid server response.","Sign-in failed",MB_ICONERROR);return TRUE;}
-            {std::lock_guard<std::mutex> g(authMutex);clientToken=token;}
-            signedInUsername=answer["user"].get("username","").asString();
-            selectedMonitorId.store(0);
-            rememberClientToken(token);
-            EndDialog(dlg,IDOK);
-            return TRUE;
-        }
-        break;
-    }
-    return FALSE;
-}
 // Exact 18-byte header plus three UTF-16 zero words, DWORD-aligned.
 struct alignas(DWORD) EmptyDialogTemplate {
     DWORD style, extendedStyle;
@@ -2154,8 +2076,11 @@ static void updateUnifiedVisibility(HWND dlg) {
     }
     // Notification preference is a global setting, not a monitor-only setting.
     ShowWindow(GetDlgItem(dlg,SETTINGS_NOTIFY),SW_SHOW);
-    for(int id:{AUTH_TABS,AUTH_USER,AUTH_PASS,AUTH_CONFIRM,AUTH_FULLNAME,
-                AUTH_CONFIRM_LABEL,AUTH_FULLNAME_LABEL,AUTH_SUBMIT,4407,4408})
+    const int authControlIds[] = {
+        AUTH_TABS, AUTH_USER, AUTH_PASS, AUTH_CONFIRM, AUTH_FULLNAME,
+        AUTH_CONFIRM_LABEL, AUTH_FULLNAME_LABEL, AUTH_SUBMIT, 4407, 4408
+    };
+    for (int id : authControlIds)
         ShowWindow(GetDlgItem(dlg,id),signedIn?SW_HIDE:SW_SHOW);
     if(!signedIn)updateUnifiedAuthTab(dlg);
     ShowWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),signedIn?SW_SHOW:SW_HIDE);
@@ -2218,9 +2143,9 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         HWND tabs=addControl(dlg,WC_TABCONTROLA,"",WS_TABSTOP,108,215,310,27,AUTH_TABS);
         TCITEMW item{};item.mask=TCIF_TEXT;
         item.pszText=const_cast<wchar_t*>(L"Sign In");
-        TabCtrl_InsertItemW(tabs,0,&item);
+        SendMessageW(tabs,TCM_INSERTITEMW,0,reinterpret_cast<LPARAM>(&item));
         item.pszText=const_cast<wchar_t*>(L"Sign Up");
-        TabCtrl_InsertItemW(tabs,1,&item);
+        SendMessageW(tabs,TCM_INSERTITEMW,1,reinterpret_cast<LPARAM>(&item));
         addControl(dlg,"STATIC","Full Name",0,13,239,91,20,AUTH_FULLNAME_LABEL);
         addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,
                    108,236,310,25,AUTH_FULLNAME);
@@ -2238,8 +2163,8 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,384,405,2,SETTINGS_MONITOR_DIVIDER);
         addControl(dlg,"STATIC","Monitor Settings",0,13,395,180,23,SETTINGS_MONITOR_HEADING);
         addControl(dlg,"STATIC","Monitor",0,13,422,90,21,4400);
-        HWND selector=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,
-                     108,422,310,180,SETTINGS_MONITOR);
+        addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,
+                   108,422,310,180,SETTINGS_MONITOR);
         addControl(dlg,"STATIC","Label",0,13,455,90,21,4401);
         addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,
                    108,455,310,25,SETTINGS_LABEL);
