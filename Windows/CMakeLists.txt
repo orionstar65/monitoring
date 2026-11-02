@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(MonitorClient)
+project(MonitorClient VERSION 1.4)
 
 # Windows-specific build configuration for MinGW-w64
 
@@ -55,6 +55,7 @@ target_link_libraries(MonitorClient
     psapi
     setupapi
     user32
+    gdi32
     kernel32
     advapi32
     shell32

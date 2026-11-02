@@ -2,6 +2,8 @@
 #include <wininet.h>
 #include <wincred.h>
 #include <credui.h>
+#include <cstring>
+#include <string>
 #include <atomic>
 // MinGW compatibility patch
 #ifndef _OBJIDL_H_
@@ -136,6 +138,8 @@ int configRefreshInterval = CONFIG_REFRESH_INTERVAL_DEFAULT;
 #define ID_TRAY_USB_STATUS 1010
 #define ID_TRAY_CONFIG_REFRESH 1011
 #define ID_TRAY_SIGN_IN 1012
+#define ID_TRAY_SETTINGS 1013
+#define ID_TRAY_NOTIFICATIONS 1014
 
 // Configuration structures
 struct IntervalsConfig {
@@ -181,6 +185,10 @@ std::string username;
 std::mutex authMutex;
 std::string clientToken;
 std::atomic<int> selectedMonitorId{0};
+bool notificationsEnabled = true;
+std::string signedInUsername;
+bool showMonitorSettings();
+bool restoreClientSession();
 std::string getClientToken(){std::lock_guard<std::mutex> g(authMutex);return clientToken;}
 
 // Global configuration
@@ -234,7 +242,7 @@ std::ofstream debugLogFile;
 std::string API_BASE_URL;
 std::string API_ROUTE = "/webapi.php";
 std::string TIC_ROUTE = "/eventhandler.php";
-std::string APP_VERSION = "1.0";
+std::string APP_VERSION = "1.4";
 
 // USB monitoring using WMI
 std::thread usbMonitoringThread;
@@ -309,6 +317,7 @@ bool showClientLogin();
 
 // Show Windows notification
 void showToastNotification(const std::string& title, const std::string& message, const std::string& type) {
+    if (!notificationsEnabled) return;
     // Use Windows Shell notification (balloon tip)
     if (nid.hWnd != NULL) {
         nid.uFlags = NIF_INFO;
@@ -399,11 +408,15 @@ void updateTrayMenu() {
     
     // Configuration refresh button
     AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_CONFIG_REFRESH, "Refresh Configuration");
-    AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SIGN_IN, selectedMonitorId.load()>0 ? "Change monitor / Sign in" : "Sign in / Select monitor");
+    AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SIGN_IN, getClientToken().empty() ? "Sign in / Sign up" : "Switch account");
+    AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SETTINGS, "Monitor Settings...");
+    AppendMenuA(hTrayMenu, MF_STRING | (notificationsEnabled ? MF_CHECKED : MF_UNCHECKED), ID_TRAY_NOTIFICATIONS, "Status notifications");
     
     // Actions section
     AppendMenuA(hTrayMenu, MF_SEPARATOR, 0, NULL);
     AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SEND_ALL, "Send All Requests Now");
+    AppendMenuA(hTrayMenu, MF_SEPARATOR, 0, NULL);
+    AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_EXIT, "Quit MonitorClient");
 }
 
 // Setup USB monitoring using device notifications (more efficient)
@@ -1133,7 +1146,6 @@ std::string httpPost(const std::string& url, const std::string& data) {
     std::string hostName(urlComp.lpszHostName, urlComp.dwHostNameLength);
     std::string urlPath(urlComp.lpszUrlPath, urlComp.dwUrlPathLength);
     if(urlComp.dwExtraInfoLength)urlPath.append(urlComp.lpszExtraInfo,urlComp.dwExtraInfoLength);
-    if(urlComp.dwExtraInfoLength)urlPath.append(urlComp.lpszExtraInfo,urlComp.dwExtraInfoLength);
     
     // Connecting to host
     
@@ -1767,68 +1779,180 @@ void monitorTask() {
 }
 
 
-bool showClientLogin() {
-    selectedMonitorId.store(0);
-    if(keyboardHook)removeKeyboardHook();
-    {std::lock_guard<std::mutex> guard(authMutex);clientToken.clear();}
-    CREDUI_INFOA info={};
-    info.cbSize=sizeof(info);
-    info.hwndParent=hMainWindow;
-    info.pszCaptionText="MonitorClient sign in";
-    info.pszMessageText="Sign in using your registered email/username and password.";
-    char login[256]={0},password[256]={0};
-    BOOL save=FALSE;
-    DWORD rc=CredUIPromptForCredentialsA(&info,API_BASE_URL.c_str(),nullptr,0,
-                  login,sizeof(login),password,sizeof(password),&save,
-                  CREDUI_FLAGS_GENERIC_CREDENTIALS|CREDUI_FLAGS_ALWAYS_SHOW_UI|CREDUI_FLAGS_DO_NOT_PERSIST);
-    if(rc!=NO_ERROR)return false;
-    Json::Value body;body["action"]="login";body["identifier"]=login;body["password"]=password;
-    std::string payload=Json::FastWriter().write(body);
-    SecureZeroMemory(password,sizeof(password));
-    Json::Value answer;Json::CharReaderBuilder reader;std::string errors;
-    std::istringstream input(httpPost(API_BASE_URL+"/client_auth.php",payload));
-    if(!Json::parseFromStream(reader,input,&answer,&errors)||!answer.get("success",false).asBool()){
-        MessageBoxA(hMainWindow,"Sign-in failed. Check credentials and HTTPS server settings.","MonitorClient",MB_ICONERROR|MB_OK);
+
+static std::string settingsFilePath() {
+    char fullPath[MAX_PATH] = {0};
+    GetFullPathNameA("settings.ini",MAX_PATH,fullPath,nullptr);
+    return fullPath;
+}
+static void saveClientSetting(const char* section,const char* key,const std::string& value) {
+    const std::string path=settingsFilePath();
+    WritePrivateProfileStringA(section,key,value.c_str(),path.c_str());
+}
+static std::string credentialTarget() {
+    return "ACC-Monitor-v1.4/" + serverIP + ":" + serverPort;
+}
+static void rememberClientToken(const std::string& token) {
+    const std::string target=credentialTarget();
+    CREDENTIALA cred={};
+    cred.Type=CRED_TYPE_GENERIC;
+    cred.TargetName=const_cast<char*>(target.c_str());
+    cred.CredentialBlobSize=static_cast<DWORD>(token.size());
+    cred.CredentialBlob=(LPBYTE)token.data();
+    cred.Persist=CRED_PERSIST_LOCAL_MACHINE;
+    cred.UserName=const_cast<char*>("ACC Monitor Client");
+    if (!CredWriteA(&cred,0))
+        showToastNotification("Session storage","Windows Credential Manager could not store the session.","error");
+}
+static std::string readClientToken() {
+    const std::string target=credentialTarget();
+    PCREDENTIALA cred=nullptr;
+    std::string token;
+    if(CredReadA(target.c_str(),CRED_TYPE_GENERIC,0,&cred) && cred){
+        token.assign(reinterpret_cast<const char*>(cred->CredentialBlob),cred->CredentialBlobSize);
+        CredFree(cred);
+    }
+    return token;
+}
+static Json::Value callClientAuth(const Json::Value& body) {
+    Json::Value result;Json::CharReaderBuilder builder;std::string errors;
+    std::istringstream input(httpPost(API_BASE_URL+"/client_auth.php",Json::FastWriter().write(body)));
+    if(!Json::parseFromStream(builder,input,&result,&errors))result=Json::objectValue;
+    return result;
+}
+bool restoreClientSession() {
+    const std::string saved=readClientToken();
+    if(saved.size()!=64) return false;
+    {std::lock_guard<std::mutex> guard(authMutex);clientToken=saved;}
+    Json::Value req;req["action"]="restore";
+    const Json::Value answer=callClientAuth(req);
+    if(!answer.get("success",false).asBool()){
+        {std::lock_guard<std::mutex> guard(authMutex);clientToken.clear();}
         return false;
     }
-    const std::string token=answer.get("token","").asString();
-    if(token.size()!=64)return false;
-    {std::lock_guard<std::mutex> guard(authMutex);clientToken=token;}
-    int monitor=0;
-    const Json::Value devices=answer["monitors"];
-    for(const auto &device:devices) {
-        std::string label=device.get("name","Unnamed device").asString()+
-                  "  (#"+std::to_string(device.get("id",0).asInt())+")\n\nUse this assigned monitor?";
-        int choice=MessageBoxA(hMainWindow,label.c_str(),"Select monitor",MB_YESNOCANCEL|MB_ICONQUESTION);
-        if(choice==IDCANCEL)return false;
-        if(choice==IDYES){monitor=device.get("id",0).asInt();break;}
+    signedInUsername=answer["user"].get("username","").asString();
+    selectedMonitorId.store(answer.get("monitor_id",0).asInt());
+    if(selectedMonitorId.load()>0){
+        if(!keyboardHook) setupKeyboardHook();
+        if(!usbMonitoringActive)setupUSBMONITORING();
     }
-    if(monitor<=0) {
-        if(MessageBoxA(hMainWindow,"No monitor selected. Request registration for this computer? An admin must approve it.",
-             "Request monitor",MB_YESNO|MB_ICONQUESTION)==IDYES){
-            char computer[256]={0};DWORD size=sizeof(computer);
-            GetComputerNameA(computer,&size);
-            Json::Value req;req["action"]="request_monitor";req["name"]=computer;
-            httpPost(API_BASE_URL+"/client_auth.php",Json::FastWriter().write(req));
-            MessageBoxA(hMainWindow,"Request submitted. Ask your admin to assign this monitor, then sign in again.",
-                         "Pending approval",MB_OK|MB_ICONINFORMATION);
-        }
-        return false;
-    }
-    Json::Value selection;selection["action"]="select";selection["monitor_id"]=monitor;
-    std::istringstream selectedInput(httpPost(API_BASE_URL+"/client_auth.php",Json::FastWriter().write(selection)));
-    Json::Value selected;std::string selectionErrors;
-    if(!Json::parseFromStream(reader,selectedInput,&selected,&selectionErrors)||!selected.get("success",false).asBool()){
-        MessageBoxA(hMainWindow,"Monitor selection was not approved.","MonitorClient",MB_OK|MB_ICONERROR);
-        return false;
-    }
-    selectedMonitorId.store(monitor);
-    if(!keyboardHook)setupKeyboardHook();
-    if(!usbMonitoringActive)setupUSBMONITORING();
-    updateTrayMenu();
+    updateTrayIcon();
     return true;
 }
-
+static std::string editText(HWND dlg,int id) {
+    char buffer[1100]={0};
+    GetDlgItemTextA(dlg,id,buffer,sizeof(buffer));
+    return std::string(buffer);
+}
+enum {
+    AUTH_TABS=4100,AUTH_USER=4101,AUTH_PASS=4102,AUTH_CONFIRM=4103,
+    AUTH_CONFIRM_LABEL=4104,AUTH_SUBMIT=4105,
+    SETTINGS_USER=4200,SETTINGS_IP=4201,SETTINGS_PORT=4202,
+    SETTINGS_MONITOR=4203,SETTINGS_LABEL=4204,SETTINGS_OS=4205,
+    SETTINGS_MACHINE=4206,SETTINGS_REMARK=4207,
+    SETTINGS_NOTIFY=4208,SETTINGS_SAVE=4209
+};
+static HWND addControl(HWND parent,const char* cls,const char* label,DWORD style,
+                       int x,int y,int width,int height,int id) {
+    return CreateWindowExA(0,cls,label,WS_CHILD|WS_VISIBLE|style,
+        x,y,width,height,parent,(HMENU)(INT_PTR)id,GetModuleHandleA(NULL),nullptr);
+}
+static bool currentSignupTab(HWND dlg) {
+    return TabCtrl_GetCurSel(GetDlgItem(dlg,AUTH_TABS))==1;
+}
+static void updateAuthTab(HWND dlg) {
+    const bool signup=currentSignupTab(dlg);
+    ShowWindow(GetDlgItem(dlg,AUTH_CONFIRM),signup?SW_SHOW:SW_HIDE);
+    ShowWindow(GetDlgItem(dlg,AUTH_CONFIRM_LABEL),signup?SW_SHOW:SW_HIDE);
+    SetWindowTextA(GetDlgItem(dlg,AUTH_SUBMIT),signup?"Sign Up":"Sign In");
+}
+static INT_PTR CALLBACK accountDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp) {
+    switch(msg){
+    case WM_INITDIALOG:{
+        SetWindowTextA(dlg,"MonitorClient v1.4 - Account");
+        HWND tabs=addControl(dlg,WC_TABCONTROLA,"",WS_TABSTOP,12,9,425,34,AUTH_TABS);
+        TCITEMA item={};item.mask=TCIF_TEXT;
+        item.pszText=const_cast<char*>("Sign In");TabCtrl_InsertItem(tabs,0,&item);
+        item.pszText=const_cast<char*>("Sign Up");TabCtrl_InsertItem(tabs,1,&item);
+        addControl(dlg,"STATIC","Username/email",0,17,57,115,20,0);
+        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,130,54,290,26,AUTH_USER);
+        addControl(dlg,"STATIC","Password",0,17,92,115,20,0);
+        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_PASSWORD|ES_AUTOHSCROLL,130,89,290,26,AUTH_PASS);
+        addControl(dlg,"STATIC","Confirm password",0,17,127,115,20,AUTH_CONFIRM_LABEL);
+        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_PASSWORD|ES_AUTOHSCROLL,130,124,290,26,AUTH_CONFIRM);
+        addControl(dlg,"BUTTON","Sign In",WS_TABSTOP|BS_DEFPUSHBUTTON,205,164,110,31,AUTH_SUBMIT);
+        addControl(dlg,"BUTTON","Cancel",WS_TABSTOP,324,164,96,31,IDCANCEL);
+        addControl(dlg,"STATIC","Password must be at least 12 characters for Sign Up.",0,17,209,400,18,0);
+        updateAuthTab(dlg);return TRUE;
+    }
+    case WM_NOTIFY:
+        if(((NMHDR*)lp)->idFrom==AUTH_TABS && ((NMHDR*)lp)->code==TCN_SELCHANGE){
+            updateAuthTab(dlg);return TRUE;
+        }
+        break;
+    case WM_COMMAND:
+        if(LOWORD(wp)==IDCANCEL){EndDialog(dlg,IDCANCEL);return TRUE;}
+        if(LOWORD(wp)==AUTH_SUBMIT){
+            const std::string name=editText(dlg,AUTH_USER),password=editText(dlg,AUTH_PASS);
+            Json::Value request;request["username"]=name;request["password"]=password;
+            if(currentSignupTab(dlg)){
+                const std::string confirm=editText(dlg,AUTH_CONFIRM);
+                if(password!=confirm){MessageBoxA(dlg,"Passwords do not match.","MonitorClient",MB_OK|MB_ICONWARNING);return TRUE;}
+                request["action"]="signup";request["confirm_password"]=confirm;
+                Json::Value answer=callClientAuth(request);
+                if(answer.get("success",false).asBool()){
+                    MessageBoxA(dlg,"Account created. Switch to Sign In.","MonitorClient",MB_OK|MB_ICONINFORMATION);
+                    TabCtrl_SetCurSel(GetDlgItem(dlg,AUTH_TABS),0);updateAuthTab(dlg);
+                    SetDlgItemTextA(dlg,AUTH_PASS,"");SetDlgItemTextA(dlg,AUTH_CONFIRM,"");
+                }else{
+                    const std::string msg=answer.get("code","").asString()=="username_exists"
+                      ? "Username already exists. Please sign in instead."
+                      : answer.get("error","Registration failed.").asString();
+                    MessageBoxA(dlg,msg.c_str(),"MonitorClient",MB_OK|MB_ICONWARNING);
+                    if(answer.get("code","").asString()=="username_exists"){
+                        TabCtrl_SetCurSel(GetDlgItem(dlg,AUTH_TABS),0);updateAuthTab(dlg);
+                    }
+                }
+                return TRUE;
+            }
+            request["action"]="login";request.removeMember("username");request["identifier"]=name;
+            Json::Value answer=callClientAuth(request);
+            SetDlgItemTextA(dlg,AUTH_PASS,"");
+            if(!answer.get("success",false).asBool()){
+                MessageBoxA(dlg,"Incorrect credentials. If your password is wrong, ask your administrator to reset it.",
+                            "Sign-in failed",MB_ICONWARNING|MB_OK);
+                return TRUE;
+            }
+            const std::string token=answer.get("token","").asString();
+            if(token.size()!=64){MessageBoxA(dlg,"Invalid server response.","Sign-in failed",MB_ICONERROR);return TRUE;}
+            {std::lock_guard<std::mutex> g(authMutex);clientToken=token;}
+            signedInUsername=answer["user"].get("username","").asString();
+            selectedMonitorId.store(0);
+            rememberClientToken(token);
+            EndDialog(dlg,IDOK);
+            return TRUE;
+        }
+        break;
+    }
+    return FALSE;
+}
+static INT_PTR runDialog(DLGPROC proc) {
+    struct BlankTemplate { DLGTEMPLATE dlg; WORD menu; WORD clazz; WORD title; };
+    BlankTemplate t={};
+    t.dlg.style=DS_MODALFRAME|WS_POPUP|WS_CAPTION|WS_SYSMENU;
+    t.dlg.dwExtendedStyle=0;t.dlg.cdit=0;
+    t.dlg.x=20;t.dlg.y=20;t.dlg.cx=285;t.dlg.cy=195;
+    return DialogBoxIndirectParamA(GetModuleHandleA(NULL),&t.dlg,hMainWindow,proc,0);
+}
+bool showClientLogin() {
+    if(keyboardHook)removeKeyboardHook();
+    selectedMonitorId.store(0);
+    {std::lock_guard<std::mutex> g(authMutex);clientToken.clear();}
+    if(runDialog(accountDialogProc)!=IDOK){updateTrayIcon();return false;}
+    updateTrayIcon();
+    return showMonitorSettings();
+}
+// A separate native monitor settings dialog follows below.
 // Main function
 int main() {
     // Set DPI awareness to handle scaling properly (MinGW compatible)
@@ -1860,7 +1984,8 @@ int main() {
     
     // Do not activate activity capture before an explicit sign-in.
     setupSystemTray();
-    showClientLogin();
+    if (!restoreClientSession()) showClientLogin();
+    else if(selectedMonitorId.load()<1) showMonitorSettings();
     
     // Start monitoring thread
     std::thread monitorThread(monitorTask);
@@ -1905,6 +2030,7 @@ void writeDebugLog(const std::string& message) {
 bool loadSettings() {
     std::ifstream settingsFile("settings.ini");
     if (!settingsFile.is_open()) {
+        notificationsEnabled = true;
         // settings.ini not found, using defaults
         serverIP = "192.168.1.45";
         serverPort = "8924";
@@ -1958,6 +2084,7 @@ bool loadSettings() {
     settingsFile.close();
 
     API_BASE_URL = (serverPort == "8924" ? "http://" : "https://") + serverIP + ":" + serverPort;
+    notificationsEnabled = GetPrivateProfileIntA("Client","notifications",1,"settings.ini") != 0;
     // Settings loaded
     return true;
 }
@@ -2207,6 +2334,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 case ID_TRAY_SIGN_IN:
                     showClientLogin();
                     break;
+                case ID_TRAY_SETTINGS:
+                    showMonitorSettings();
+                    break;
+                case ID_TRAY_NOTIFICATIONS:
+                    notificationsEnabled = !notificationsEnabled;
+                    WritePrivateProfileStringA("Client","notifications",notificationsEnabled ? "1":"0","settings.ini");
+                    updateTrayMenu();
+                    break;
                 case ID_TRAY_CONFIG_REFRESH:
                     std::thread([](){
                         manualConfigRefresh();
@@ -2225,7 +2360,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
 // Update tray icon based on connection status
 void updateTrayIcon() {
-    if (connectionStatus.serverConnected) {
+    if (connectionStatus.serverConnected && selectedMonitorId.load()>0 && !getClientToken().empty()) {
         nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
         nid.hIcon = LoadIconA(NULL, (LPCSTR)IDI_INFORMATION); // Green information icon
         strcpy_s(nid.szTip, "Monitor Client (Connected)");
