@@ -15,6 +15,7 @@
 #include <QTabWidget>
 #include <QCheckBox>
 #include <QJsonArray>
+#include <QScrollArea>
 
 class ConfigDialog : public QDialog
 {
@@ -31,6 +32,10 @@ public:
     int getMonitorId() const { return monitorId; }
     bool hasSession() const { return !authToken.isEmpty(); }
     bool notificationsEnabled() const { return notificationsCheck->isChecked(); }
+    bool didLogout() const { return logoutPerformed; }
+
+signals:
+    void sessionStateChanged();
 
 private slots:
     void onSaveClicked();
@@ -43,6 +48,7 @@ private slots:
     void onTestConnectionClicked();
 
 private:
+    void updateAccountUI();
     void loadSettings();
     void saveSettings();
     bool testConnection();
@@ -55,6 +61,9 @@ private:
     QString authToken;
     QJsonArray assignedMonitors;
     int monitorId = 0;
+    bool logoutPerformed = false;
+    QGroupBox *monitorGroup = nullptr;
+    QTabWidget *accountTabs = nullptr;
     QLineEdit *loginEdit;
     QLineEdit *passwordEdit;
     QLineEdit *signupFullNameEdit;

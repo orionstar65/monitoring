@@ -20,13 +20,44 @@
 ConfigDialog::ConfigDialog(QWidget *parent)
     : QDialog(parent)
 {
-    setWindowTitle(QStringLiteral("MonitorClient — Configuration"));
-    setMinimumSize(470, 620);
-    resize(500, 670);
+    setWindowTitle(QStringLiteral("MonitorClient v1.4 — Settings"));
+    setMinimumSize(470, 420);
+    resize(520, 690);
     setModal(true);
 
-    // Create layout
-    QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    auto *outer = new QVBoxLayout(this);
+    outer->setContentsMargins(12, 12, 12, 12);
+    auto *scroll = new QScrollArea(this);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    auto *body = new QWidget(scroll);
+    auto *mainLayout = new QVBoxLayout(body);
+    mainLayout->setSpacing(10);
+    mainLayout->setContentsMargins(8, 8, 8, 8);
+    scroll->setWidget(body);
+    outer->addWidget(scroll);
+
+    auto *header = new QHBoxLayout();
+    auto *appIcon = new QLabel(body);
+    QIcon icon = QApplication::windowIcon();
+    if (icon.isNull()) icon = QIcon::fromTheme("accessories-text-editor");
+    appIcon->setPixmap(icon.pixmap(40, 40));
+    appIcon->setFixedSize(44, 44);
+    auto *brand = new QVBoxLayout();
+    auto *name = new QLabel("MonitorClient", body);
+    QFont heading = name->font();
+    heading.setPointSize(15);
+    heading.setBold(true);
+    name->setFont(heading);
+    brand->addWidget(name);
+    brand->addWidget(new QLabel("v1.4", body));
+    header->addWidget(appIcon);
+    header->addLayout(brand);
+    header->addStretch();
+    mainLayout->addLayout(header);
+    auto *divider = new QFrame(body);
+    divider->setFrameShape(QFrame::HLine);
+    mainLayout->addWidget(divider);
 
     // Server settings group
     QGroupBox *serverGroup = new QGroupBox("Server Settings");
@@ -50,16 +81,9 @@ ConfigDialog::ConfigDialog(QWidget *parent)
     portLayout->addWidget(serverPortEdit);
     serverLayout->addLayout(portLayout);
 
-    // Client Name
-    QHBoxLayout *nameLayout = new QHBoxLayout();
-    QLabel *nameLabel = new QLabel("Client Name:");
-    clientNameEdit = new QLineEdit();
-    nameLayout->addWidget(nameLabel);
-    nameLayout->addWidget(clientNameEdit);
-    serverLayout->addLayout(nameLayout);
-
-    // Test connection button
+    // Test current unsaved server address in the Server Settings section.
     testButton = new QPushButton("Test Connection");
+    testButton->setObjectName("testServerButton");
     serverLayout->addWidget(testButton);
 
     connectionStatusLabel=new QLabel("● Not connected / Not configured");
@@ -67,9 +91,10 @@ ConfigDialog::ConfigDialog(QWidget *parent)
     serverLayout->addWidget(connectionStatusLabel);
     mainLayout->addWidget(serverGroup);
 
-    QGroupBox *authGroup=new QGroupBox("Account");
+    QGroupBox *authGroup=new QGroupBox("User Settings");
     QVBoxLayout *authLayout=new QVBoxLayout(authGroup);
-    QTabWidget *tabs=new QTabWidget(authGroup);
+    accountTabs=new QTabWidget(authGroup);
+    QTabWidget *tabs=accountTabs;
     QWidget *signInTab=new QWidget(tabs);
     auto *signinLayout=new QVBoxLayout(signInTab);
     loginEdit=new QLineEdit();
@@ -98,6 +123,11 @@ ConfigDialog::ConfigDialog(QWidget *parent)
     signupLayout->addWidget(signupButton);
     tabs->addTab(signUpTab,"Sign Up");
     authLayout->addWidget(tabs);
+    clientNameEdit = new QLineEdit();
+    clientNameEdit->setPlaceholderText("Display name / device name");
+    auto *clientNameRow = new QFormLayout();
+    clientNameRow->addRow("Device name", clientNameEdit);
+    authLayout->addLayout(clientNameRow);
     accountStatusLabel=new QLabel("Not signed in");
     logoutButton=new QPushButton("Log Out");
     logoutButton->setEnabled(false);
@@ -110,7 +140,7 @@ ConfigDialog::ConfigDialog(QWidget *parent)
     connect(signInButton,&QPushButton::clicked,this,&ConfigDialog::onSignInClicked);
     connect(signupButton,&QPushButton::clicked,this,&ConfigDialog::onSignUpClicked);
 
-    QGroupBox *monitorGroup=new QGroupBox("Monitor Settings");
+    monitorGroup=new QGroupBox("Monitor Settings");
     auto *monitorLayout=new QFormLayout(monitorGroup);
     monitorSelector=new QComboBox();
     monitorSelector->addItem("Add New...",0);
@@ -134,13 +164,13 @@ ConfigDialog::ConfigDialog(QWidget *parent)
     mainLayout->addWidget(notificationsCheck);
     connect(monitorSelector,QOverload<int>::of(&QComboBox::currentIndexChanged),
             this,&ConfigDialog::onMonitorChanged);
-    // Buttons
+    // Keep settings actions outside the scroll area.
     QHBoxLayout *buttonLayout = new QHBoxLayout();
     saveButton = new QPushButton("Save");
     cancelButton = new QPushButton("Cancel");
     buttonLayout->addWidget(saveButton);
     buttonLayout->addWidget(cancelButton);
-    mainLayout->addLayout(buttonLayout);
+    outer->addLayout(buttonLayout);
 
     // Connect signals
     connect(saveButton, &QPushButton::clicked, this, &ConfigDialog::onSaveClicked);
@@ -150,10 +180,29 @@ ConfigDialog::ConfigDialog(QWidget *parent)
     // Load current settings
     loadSettings();
     loadRememberedSession();
+    updateAccountUI();
 }
 
 ConfigDialog::~ConfigDialog()
 {
+}
+void ConfigDialog::updateAccountUI()
+{
+    const bool signedIn = !authToken.isEmpty();
+    accountTabs->setVisible(!signedIn);
+    logoutButton->setVisible(signedIn);
+    accountStatusLabel->setVisible(signedIn);
+    monitorGroup->setVisible(signedIn);
+    saveButton->setEnabled(signedIn);
+    if(signedIn){
+        connectionStatusLabel->setText(monitorId > 0
+            ? "● Signed in · monitor #" + QString::number(monitorId)
+            : "● Signed in · select a monitor");
+        connectionStatusLabel->setStyleSheet("color:#c07b16;font-weight:600");
+    } else {
+        connectionStatusLabel->setText("● Not signed in / Not configured");
+        connectionStatusLabel->setStyleSheet("color:#d32f2f;font-weight:600");
+    }
 }
 
 QString ConfigDialog::getServerIP() const
@@ -260,6 +309,8 @@ void ConfigDialog::onSaveClicked()
         return;
     }
     monitorId=selectedId;
+    logoutPerformed = false;
+    emit sessionStateChanged();
     connectionStatusLabel->setText("● Authenticated · monitor #"+QString::number(monitorId));
     connectionStatusLabel->setStyleSheet("color:#1b8c40;font-weight:600");
     saveSettings();
@@ -315,8 +366,10 @@ void ConfigDialog::onLogoutClicked()
     monitorSelector->addItem("Add New...",0);
     accountStatusLabel->setText("Not signed in");
     logoutButton->setEnabled(false);
-    connectionStatusLabel->setText("● Not signed in");
-    connectionStatusLabel->setStyleSheet("color:#d32f2f;font-weight:600");
+    logoutPerformed = true;
+    QSettings(settingsPath(),QSettings::IniFormat).setValue("Monitor/id",0);
+    updateAccountUI();
+    emit sessionStateChanged();
 }
 void ConfigDialog::onSignInClicked()
 {
@@ -332,11 +385,13 @@ void ConfigDialog::onSignInClicked()
         return;
     }
     authToken=response.value("token").toString();
+    logoutPerformed = false;
     accountStatusLabel->setText("Signed in: "+loginEdit->text().trimmed());
     logoutButton->setEnabled(true);
     rememberToken(authToken);
     updateMonitorList(response.value("monitors").toArray());
-    QMessageBox::information(this,"Signed in","Choose your monitor below and save.");
+    updateAccountUI();
+    emit sessionStateChanged();
 }
 void ConfigDialog::onSignUpClicked()
 {
@@ -359,7 +414,8 @@ void ConfigDialog::onSignUpClicked()
         return;
     }
     loginEdit->setText(signupUsernameEdit->text().trimmed());
-    QMessageBox::information(this,"Account created","Account created. Switch to Sign In to continue.");
+    accountTabs->setCurrentIndex(0);
+    QMessageBox::information(this,"Account created","Account created. Sign in to continue.");
 }
 void ConfigDialog::updateMonitorList(const QJsonArray &monitors)
 {
@@ -439,6 +495,7 @@ void ConfigDialog::loadRememberedSession()
         restored.value("user").toObject().value("username").toString());
     logoutButton->setEnabled(true);
     updateMonitorList(restored.value("monitors").toArray());
+    updateAccountUI();
     const int saved=restored.value("monitor_id").toInt();
     if(saved>0){
         monitorId=saved;
