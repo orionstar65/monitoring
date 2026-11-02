@@ -2181,6 +2181,12 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
     case WM_APP+0x143:
         EnableWindow(GetDlgItem(dlg,SETTINGS_TEST),TRUE);
         setDlgUtf8Text(dlg,SETTINGS_CONNECTION,wp?"● Server reachable":"● Server unavailable");
+        if(wp && applyUnifiedServer(dlg)){
+            loadUserDirectory(dlg);
+            refreshUnifiedMonitors(dlg);
+            updateUnifiedVisibility(dlg);
+            setDlgUtf8Text(dlg,SETTINGS_CONNECTION,"● Server reachable");
+        }
         return TRUE;
     case WM_COMMAND:{
         const int id=LOWORD(wp);
