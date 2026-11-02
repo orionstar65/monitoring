@@ -2952,6 +2952,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             alert.informativeText = message
             alert.runModal()
         }
+        func refreshUserDirectory() {
+            let previousNo = (users.selectedItem?.representedObject as? String)
+                ?? self.storage.string(forKey: "user_no") ?? ""
+            let directory = self.clientAuthRequest(["action":"directory"])
+            users.removeAllItems()
+            users.addItem(withTitle: "Select a user…")
+            users.lastItem?.representedObject = ""
+            for record in directory?["users"] as? [[String: Any]] ?? [] {
+                let number = String(describing: record["user_no"] ?? "")
+                guard !number.isEmpty else { continue }
+                let name = record["full_name"] as? String ?? ""
+                let ip = record["ip_address"] as? String ?? "—"
+                users.addItem(withTitle: "\(number)/\(name)/\(ip)")
+                users.lastItem?.representedObject = number
+            }
+            if let item = users.itemArray.first(where: {
+                ($0.representedObject as? String) == previousNo
+            }) {
+                users.select(item)
+            } else {
+                users.selectItem(at: 0)
+            }
+        }
         coordinator.handler = { [weak self] command in
             guard let self = self else { return }
             switch command {
@@ -2971,8 +2994,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     DispatchQueue.main.async {
                         guard self.activeSettingsWindow === window else { return }
                         test.isEnabled = true
-                        status.stringValue = error == nil && (response as? HTTPURLResponse).map({ (200...399).contains($0.statusCode) }) == true
-                            ? "Server reachable" : "Server unavailable"
+                        let reachable = error == nil && (response as? HTTPURLResponse)
+                            .map({ (200...399).contains($0.statusCode) }) == true
+                        status.stringValue = reachable ? "Server reachable" : "Server unavailable"
+                        if reachable && saveServer() {
+                            refreshUserDirectory()
+                            refreshMonitors()
+                            updateState()
+                        }
                     }
                 }.resume()
             case "user":
@@ -3066,19 +3095,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             default: break
             }
         }
-        let directory = self.clientAuthRequest(["action":"directory"])
-        users.removeAllItems()
-        users.addItem(withTitle: "Select a user…")
-        users.lastItem?.representedObject = ""
-        for record in directory?["users"] as? [[String: Any]] ?? [] {
-            let number = String(describing: record["user_no"] ?? "")
-            guard !number.isEmpty else { continue }
-            let name = record["full_name"] as? String ?? ""
-            let ip = record["ip_address"] as? String ?? "—"
-            users.addItem(withTitle: "\(number)/\(name)/\(ip)")
-            users.lastItem?.representedObject = number
-        }
-        users.selectItem(at: 0)
+        refreshUserDirectory()
         refreshMonitors()
         updateState()
         window.makeKeyAndOrderFront(nil)
