@@ -1906,12 +1906,12 @@ static void updateAuthTab(HWND dlg) {
     const bool signup=currentSignupTab(dlg);
     ShowWindow(GetDlgItem(dlg,AUTH_CONFIRM),signup?SW_SHOW:SW_HIDE);
     ShowWindow(GetDlgItem(dlg,AUTH_CONFIRM_LABEL),signup?SW_SHOW:SW_HIDE);
-    SetWindowTextA(GetDlgItem(dlg,AUTH_SUBMIT),signup?"Sign Up":"Sign In");
+    setWindowUtf8Text(GetDlgItem(dlg,AUTH_SUBMIT),signup?"Sign Up":"Sign In");
 }
 static INT_PTR CALLBACK accountDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp) {
     switch(msg){
     case WM_INITDIALOG:{
-        SetWindowTextA(dlg,"MonitorClient v1.4 - Account");
+        setWindowUtf8Text(dlg,"MonitorClient v1.4 - Account");
         HWND tabs=addControl(dlg,WC_TABCONTROLA,"",WS_TABSTOP,12,9,425,34,AUTH_TABS);
         TCITEMW item={};item.mask=TCIF_TEXT;
         item.pszText=const_cast<wchar_t*>(L"Sign In");TabCtrl_InsertItemW(tabs,0,&item);
@@ -1941,18 +1941,18 @@ static INT_PTR CALLBACK accountDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp)
             Json::Value request;request["username"]=name;request["password"]=password;
             if(currentSignupTab(dlg)){
                 const std::string confirm=editText(dlg,AUTH_CONFIRM);
-                if(password!=confirm){MessageBoxA(dlg,"Passwords do not match.","MonitorClient",MB_OK|MB_ICONWARNING);return TRUE;}
+                if(password!=confirm){showUtf8Message(dlg,"Passwords do not match.","MonitorClient",MB_OK|MB_ICONWARNING);return TRUE;}
                 request["action"]="signup";request["confirm_password"]=confirm;
                 Json::Value answer=callClientAuth(request);
                 if(answer.get("success",false).asBool()){
-                    MessageBoxA(dlg,"Account created. Switch to Sign In.","MonitorClient",MB_OK|MB_ICONINFORMATION);
+                    showUtf8Message(dlg,"Account created. Switch to Sign In.","MonitorClient",MB_OK|MB_ICONINFORMATION);
                     TabCtrl_SetCurSel(GetDlgItem(dlg,AUTH_TABS),0);updateAuthTab(dlg);
-                    SetDlgItemTextA(dlg,AUTH_PASS,"");SetDlgItemTextA(dlg,AUTH_CONFIRM,"");
+                    setDlgUtf8Text(dlg,AUTH_PASS,"");setDlgUtf8Text(dlg,AUTH_CONFIRM,"");
                 }else{
                     const std::string msg=answer.get("code","").asString()=="username_exists"
                       ? "Username already exists. Please sign in instead."
                       : answer.get("error","Registration failed.").asString();
-                    MessageBoxA(dlg,msg.c_str(),"MonitorClient",MB_OK|MB_ICONWARNING);
+                    showUtf8Message(dlg,msg.c_str(),"MonitorClient",MB_OK|MB_ICONWARNING);
                     if(answer.get("code","").asString()=="username_exists"){
                         TabCtrl_SetCurSel(GetDlgItem(dlg,AUTH_TABS),0);updateAuthTab(dlg);
                     }
@@ -1961,14 +1961,14 @@ static INT_PTR CALLBACK accountDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp)
             }
             request["action"]="login";request.removeMember("username");request["identifier"]=name;
             Json::Value answer=callClientAuth(request);
-            SetDlgItemTextA(dlg,AUTH_PASS,"");
+            setDlgUtf8Text(dlg,AUTH_PASS,"");
             if(!answer.get("success",false).asBool()){
-                MessageBoxA(dlg,"Incorrect credentials. If your password is wrong, ask your administrator to reset it.",
+                showUtf8Message(dlg,"Incorrect credentials. If your password is wrong, ask your administrator to reset it.",
                             "Sign-in failed",MB_ICONWARNING|MB_OK);
                 return TRUE;
             }
             const std::string token=answer.get("token","").asString();
-            if(token.size()!=64){MessageBoxA(dlg,"Invalid server response.","Sign-in failed",MB_ICONERROR);return TRUE;}
+            if(token.size()!=64){showUtf8Message(dlg,"Invalid server response.","Sign-in failed",MB_ICONERROR);return TRUE;}
             {std::lock_guard<std::mutex> g(authMutex);clientToken=token;}
             signedInUsername=answer["user"].get("username","").asString();
             selectedMonitorId.store(0);
@@ -2005,22 +2005,22 @@ bool showClientLogin() {
 }
 static Json::Value settingsMonitors;
 static void changeMonitorFields(HWND dlg) {
-    int ix=(int)SendDlgItemMessageA(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
-    int id=ix>=0?(int)SendDlgItemMessageA(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,ix,0):0;
-    SetDlgItemTextA(dlg,SETTINGS_SAVE,id>0?"Save":"Add");
-    SetDlgItemTextA(dlg,SETTINGS_LABEL,"");
-    SetDlgItemTextA(dlg,SETTINGS_REMARK,"");
-    SendDlgItemMessageA(dlg,SETTINGS_OS,CB_SETCURSEL,0,0);
-    SendDlgItemMessageA(dlg,SETTINGS_MACHINE,CB_SETCURSEL,0,0);
+    int ix=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
+    int id=ix>=0?(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,ix,0):0;
+    setDlgUtf8Text(dlg,SETTINGS_SAVE,id>0?"Save":"Add");
+    setDlgUtf8Text(dlg,SETTINGS_LABEL,"");
+    setDlgUtf8Text(dlg,SETTINGS_REMARK,"");
+    SendDlgItemMessageW(dlg,SETTINGS_OS,CB_SETCURSEL,0,0);
+    SendDlgItemMessageW(dlg,SETTINGS_MACHINE,CB_SETCURSEL,0,0);
     if(!id)return;
     for(const auto &monitor:settingsMonitors){
         if(monitor.get("id",0).asInt()!=id)continue;
-        SetDlgItemTextA(dlg,SETTINGS_LABEL,monitor.get("name","").asString().c_str());
-        SetDlgItemTextA(dlg,SETTINGS_REMARK,monitor.get("remark","").asString().c_str());
+        setDlgUtf8Text(dlg,SETTINGS_LABEL,monitor.get("name","").asString().c_str());
+        setDlgUtf8Text(dlg,SETTINGS_REMARK,monitor.get("remark","").asString().c_str());
         const std::string platform=monitor.get("platform","Windows").asString();
-        SendDlgItemMessageA(dlg,SETTINGS_OS,CB_SETCURSEL,
+        SendDlgItemMessageW(dlg,SETTINGS_OS,CB_SETCURSEL,
             platform=="Mac"?1:platform=="Ubuntu"?2:0,0);
-        SendDlgItemMessageA(dlg,SETTINGS_MACHINE,CB_SETCURSEL,
+        SendDlgItemMessageW(dlg,SETTINGS_MACHINE,CB_SETCURSEL,
             monitor.get("type","").asString()=="desktop"?1:0,0);
         break;
     }
@@ -2028,7 +2028,7 @@ static void changeMonitorFields(HWND dlg) {
 static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp) {
     switch(msg) {
     case WM_INITDIALOG: {
-        SetWindowTextA(dlg,"MonitorClient v1.4 - Settings");
+        setWindowUtf8Text(dlg,"MonitorClient v1.4 - Settings");
         addControl(dlg,"STATIC","Username",0,13,9,95,20,0);
         HWND user=addControl(dlg,"EDIT",signedInUsername.c_str(),
             WS_BORDER|ES_AUTOHSCROLL,108,7,310,25,SETTINGS_USER);
@@ -2047,11 +2047,17 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"STATIC","OS",0,13,166,95,20,0);
         HWND os=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL,
             108,163,310,120,SETTINGS_OS);
-        for(const char *name:{"Windows","Mac","Ubuntu"})SendMessageA(os,CB_ADDSTRING,0,(LPARAM)name);
+        for(const char *name:{"Windows","Mac","Ubuntu"}){
+            const std::wstring label=utf8ToWide(name);
+            SendMessageW(os,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
+        }
         addControl(dlg,"STATIC","Machine",0,13,197,95,20,0);
         HWND machine=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL,
             108,194,310,120,SETTINGS_MACHINE);
-        for(const char *name:{"Laptop","Desktop"})SendMessageA(machine,CB_ADDSTRING,0,(LPARAM)name);
+        for(const char *name:{"Laptop","Desktop"}){
+            const std::wstring label=utf8ToWide(name);
+            SendMessageW(machine,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(label.c_str()));
+        }
         addControl(dlg,"STATIC","Remark",0,13,228,95,20,0);
         addControl(dlg,"EDIT","",WS_BORDER|ES_AUTOHSCROLL,
             108,225,310,25,SETTINGS_REMARK);
@@ -2079,14 +2085,15 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
                 +" | "+device.get("platform","-").asString()
                 +" | "+device.get("type","desktop").asString()
                 +" | "+device.get("ip_address","-").asString();
-            int pos=(int)SendMessageA(selector,CB_ADDSTRING,0,(LPARAM)label.c_str());
-            SendMessageA(selector,CB_SETITEMDATA,pos,id);
+            const std::wstring displayLabel=utf8ToWide(label);
+            int pos=(int)SendMessageW(selector,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(displayLabel.c_str()));
+            SendMessageW(selector,CB_SETITEMDATA,pos,id);
             if(id==selectedMonitorId.load())sel=pos;
             count++;
         }
-        int add=(int)SendMessageA(selector,CB_ADDSTRING,0,(LPARAM)"Add New...");
-        SendMessageA(selector,CB_SETITEMDATA,add,0);
-        SendMessageA(selector,CB_SETCURSEL,sel>=0?sel:add,0);
+        int add=(int)SendMessageW(selector,CB_ADDSTRING,0,reinterpret_cast<LPARAM>(L"Add New..."));
+        SendMessageW(selector,CB_SETITEMDATA,add,0);
+        SendMessageW(selector,CB_SETCURSEL,sel>=0?sel:add,0);
         changeMonitorFields(dlg);
         return TRUE;
     }
@@ -2114,11 +2121,11 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             std::string ip=editText(dlg,SETTINGS_IP);
             std::string port=editText(dlg,SETTINGS_PORT);
             if(ip.empty()||port.empty()||port.find_first_not_of("0123456789")!=std::string::npos){
-                MessageBoxA(dlg,"Enter a valid server IP and numeric port.","MonitorClient",MB_ICONWARNING);
+                showUtf8Message(dlg,"Enter a valid server IP and numeric port.","MonitorClient",MB_ICONWARNING);
                 return TRUE;
             }
             int nport=std::atoi(port.c_str());
-            if(nport<1||nport>65535){MessageBoxA(dlg,"Invalid port.","MonitorClient",MB_ICONWARNING);return TRUE;}
+            if(nport<1||nport>65535){showUtf8Message(dlg,"Invalid port.","MonitorClient",MB_ICONWARNING);return TRUE;}
             notificationsEnabled=IsDlgButtonChecked(dlg,SETTINGS_NOTIFY)==BST_CHECKED;
             saveClientSetting("Client","notifications",notificationsEnabled?"1":"0");
             saveClientSetting("Server","username",name);
@@ -2134,39 +2141,39 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
                 {std::lock_guard<std::mutex> guard(authMutex);clientToken.clear();}
                 if(keyboardHook)removeKeyboardHook();
                 EndDialog(dlg,IDOK);
-                MessageBoxA(hMainWindow,"Server connection changed. Sign in to the new server.","MonitorClient",MB_OK|MB_ICONINFORMATION);
+                showUtf8Message(hMainWindow,"Server connection changed. Sign in to the new server.","MonitorClient",MB_OK|MB_ICONINFORMATION);
                 PostMessageA(hMainWindow,WM_COMMAND,MAKEWPARAM(ID_TRAY_SIGN_IN,0),0);
                 return TRUE;
             }
             if(getClientToken().empty()){
                 EndDialog(dlg,IDOK);return TRUE;
             }
-            int index=(int)SendDlgItemMessageA(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
-            int id=index>=0?(int)SendDlgItemMessageA(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,index,0):0;
+            int index=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
+            int id=index>=0?(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,index,0):0;
             Json::Value data;
             data["action"]=id>0?"save_monitor":"request_monitor";
             data["monitor_id"]=id;
             data["label"]=editText(dlg,SETTINGS_LABEL);
-            int osi=(int)SendDlgItemMessageA(dlg,SETTINGS_OS,CB_GETCURSEL,0,0);
+            int osi=(int)SendDlgItemMessageW(dlg,SETTINGS_OS,CB_GETCURSEL,0,0);
             data["os"]=osi==1?"Mac":osi==2?"Ubuntu":"Windows";
-            int machine=(int)SendDlgItemMessageA(dlg,SETTINGS_MACHINE,CB_GETCURSEL,0,0);
+            int machine=(int)SendDlgItemMessageW(dlg,SETTINGS_MACHINE,CB_GETCURSEL,0,0);
             data["machine"]=machine==1?"desktop":"laptop";
             data["remark"]=editText(dlg,SETTINGS_REMARK);
             Json::Value saved=callClientAuth(data);
             if(!saved.get("success",false).asBool()){
                 const std::string msg=saved.get("error","Unable to save monitor settings.").asString();
-                MessageBoxA(dlg,msg.c_str(),"MonitorClient",MB_ICONERROR|MB_OK);
+                showUtf8Message(dlg,msg.c_str(),"MonitorClient",MB_ICONERROR|MB_OK);
                 return TRUE;
             }
             const int selectedId=id>0?id:saved.get("monitor_id",0).asInt();
             if(selectedId<1){
-                MessageBoxA(dlg,"No monitor ID returned.","MonitorClient",MB_ICONERROR);
+                showUtf8Message(dlg,"No monitor ID returned.","MonitorClient",MB_ICONERROR);
                 return TRUE;
             }
             Json::Value req;req["action"]="select";req["monitor_id"]=selectedId;
             Json::Value result=callClientAuth(req);
             if(!result.get("success",false).asBool()){
-                MessageBoxA(dlg,"Monitor not assigned to your account.","MonitorClient",MB_ICONERROR);
+                showUtf8Message(dlg,"Monitor not assigned to your account.","MonitorClient",MB_ICONERROR);
                 return TRUE;
             }
             selectedMonitorId.store(selectedId);
