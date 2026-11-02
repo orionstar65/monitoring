@@ -153,10 +153,12 @@ ConfigDialog::ConfigDialog(QWidget *parent)
     machineSelector->addItems({"Laptop","Desktop"});
     remarkEdit=new QLineEdit();
     remarkEdit->setPlaceholderText("Remark (optional)");
+    monitorIPLabel=new QLabel("—");
     monitorLayout->addRow("Monitor",monitorSelector);
     monitorLayout->addRow("Label",labelEdit);
     monitorLayout->addRow("OS",osSelector);
     monitorLayout->addRow("Machine",machineSelector);
+    monitorLayout->addRow("IP address",monitorIPLabel);
     monitorLayout->addRow("Remark",remarkEdit);
     mainLayout->addWidget(monitorGroup);
     notificationsCheck=new QCheckBox("Show connection and status notifications");
@@ -267,7 +269,7 @@ bool ConfigDialog::testConnection()
     const QUrl url(QString("%1://%2:%3/html/auth/login")
         .arg(port==8924?"http":"https").arg(host).arg(port));
     QNetworkRequest request(url);
-    request.setAttribute(QNetworkRequest::FollowRedirectsAttribute,true);
+    // A 2xx/3xx HTTP response confirms the web portal is reachable.
     QNetworkReply *reply=manager.get(request);
     QEventLoop loop;
     QTimer timeout;
@@ -446,7 +448,7 @@ void ConfigDialog::onMonitorChanged(int)
     const int id=monitorSelector->currentData().toInt();
     saveButton->setText(id>0?"Save":"Add");
     if(!id){
-        labelEdit->clear();remarkEdit->clear();osSelector->setCurrentText("Ubuntu");
+        labelEdit->clear();remarkEdit->clear();monitorIPLabel->setText("New monitor");osSelector->setCurrentText("Ubuntu");
         machineSelector->setCurrentText("Laptop");
         return;
     }
@@ -455,6 +457,7 @@ void ConfigDialog::onMonitorChanged(int)
         if(m.value("id").toInt()!=id)continue;
         labelEdit->setText(m.value("name").toString());
         remarkEdit->setText(m.value("remark").toString());
+        monitorIPLabel->setText(m.value("ip_address").toString("—"));
         osSelector->setCurrentText(m.value("platform").toString("Ubuntu"));
         const QString type=m.value("type").toString().toLower();
         machineSelector->setCurrentText(type=="desktop"?"Desktop":"Laptop");

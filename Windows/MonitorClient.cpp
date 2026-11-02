@@ -2117,7 +2117,15 @@ static void refreshUnifiedMonitors(HWND dlg) {
     SendMessageW(selector,CB_SETITEMDATA,add,0);
     SendMessageW(selector,CB_SETCURSEL,selected<0?add:selected,0);
     changeMonitorFields(dlg);
-    setDlgUtf8Text(dlg,SETTINGS_MONITOR_IP,"");
+    const int chosen=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
+    const int monitorId=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,chosen,0);
+    std::string selectedIP="New monitor";
+    for(const auto& item:settingsMonitors){
+        if(item.get("id",0).asInt()==monitorId){
+            selectedIP=item.get("ip_address","—").asString();break;
+        }
+    }
+    setDlgUtf8Text(dlg,SETTINGS_MONITOR_IP,selectedIP);
 }
 static void updateUnifiedAuthTab(HWND dlg) {
     const bool signup=currentSignupTab(dlg);
@@ -2134,7 +2142,7 @@ static void updateUnifiedVisibility(HWND dlg) {
     const int monitorIds[]={
         SETTINGS_MONITOR_HEADING,SETTINGS_MONITOR_DIVIDER,SETTINGS_MONITOR,
         SETTINGS_LABEL,SETTINGS_OS,SETTINGS_MACHINE,SETTINGS_MONITOR_IP,
-        SETTINGS_REMARK,SETTINGS_NOTIFY,SETTINGS_SAVE,
+        SETTINGS_REMARK,SETTINGS_SAVE,
         4400,4401,4402,4403,4404,4405
     };
     for(int id:monitorIds) {
@@ -2142,6 +2150,8 @@ static void updateUnifiedVisibility(HWND dlg) {
         if(!child)continue;
         ShowWindow(child,signedIn?SW_SHOW:SW_HIDE);
     }
+    // Notification preference is a global setting, not a monitor-only setting.
+    ShowWindow(GetDlgItem(dlg,SETTINGS_NOTIFY),SW_SHOW);
     for(int id:{AUTH_TABS,AUTH_USER,AUTH_PASS,AUTH_CONFIRM,AUTH_FULLNAME,
                 AUTH_CONFIRM_LABEL,AUTH_FULLNAME_LABEL,AUTH_SUBMIT,4407,4408})
         ShowWindow(GetDlgItem(dlg,id),signedIn?SW_HIDE:SW_SHOW);
@@ -2169,9 +2179,14 @@ static void updateUnifiedVisibility(HWND dlg) {
         SetWindowPos(child,nullptr,origin.x,element[1]-offset,0,0,
                      SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
     }
+    if(!signedIn){
+        HWND notify=GetDlgItem(dlg,SETTINGS_NOTIFY);
+        if(notify)SetWindowPos(notify,nullptr,108,394,0,0,
+            SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
+    }
     HWND close=GetDlgItem(dlg,SETTINGS_CLOSE);
-    if(close)SetWindowPos(close,nullptr,331,signedIn?520:405,88,30,SWP_NOZORDER);
-    SetWindowPos(dlg,nullptr,0,0,474,signedIn?590:475,
+    if(close)SetWindowPos(close,nullptr,331,signedIn?520:432,88,30,SWP_NOZORDER);
+    SetWindowPos(dlg,nullptr,0,0,474,signedIn?590:500,
                  SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
 }
 static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp) {
@@ -2392,6 +2407,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             refreshUnifiedMonitors(dlg);
             updateUnifiedVisibility(dlg);
             updateTrayIcon();
+            EndDialog(dlg,IDOK);
             return TRUE;
         }
         break;

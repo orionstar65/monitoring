@@ -77,6 +77,7 @@ private:
     QCheckBox *notificationsCheck;
     QLabel *accountStatusLabel;
     QLabel *connectionStatusLabel;
+    QLabel *monitorIPLabel;
     QPushButton *logoutButton;
     QComboBox *monitorSelector;
     QPushButton *signInButton;
