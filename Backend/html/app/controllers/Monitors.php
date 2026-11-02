@@ -112,7 +112,9 @@ class Monitors extends Base {
             }
         }
         
-        $accounts=$this->db->fetchAll("SELECT id,name,username,user_no FROM users ORDER BY name,username");
+        $accounts=$this->db->fetchAll("SELECT u.id,u.name,u.user_no,
+            (SELECT m.ip_address FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id ORDER BY m.id LIMIT 1) AS ip_address
+            FROM users u ORDER BY u.name,u.id");
         $this->view('monitors/create', ['error' => $error ?? null,'accounts'=>$accounts]);
     }
     
@@ -166,7 +168,9 @@ class Monitors extends Base {
             }
         }
         
-        $accounts=$this->db->fetchAll("SELECT id,name,username,email,user_no FROM users ORDER BY name,username");
+        $accounts=$this->db->fetchAll("SELECT u.id,u.name,u.email,u.user_no,
+            (SELECT m.ip_address FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id ORDER BY m.id LIMIT 1) AS ip_address
+            FROM users u ORDER BY u.name,u.id");
         $this->view('monitors/edit', ['monitor'=>$monitor,'accounts'=>$accounts,'error'=>$error??null]);
     }
     
