@@ -110,9 +110,7 @@ MonitorClient::MonitorClient()
     // connect(this, &MonitorClient::keyLog, this, &MonitorClient::sendKeyLogs);
     // connect(this, &MonitorClient::usbLog, this, &MonitorClient::sendUSBLogs);
     
-    if (!keyboardMonitor->startMonitoring()) {
-        qWarning() << "[KeyLog] startMonitoring failed — no keys will be captured until input access works";
-    }
+    // Capture begins only after the user signs in and selects an assigned monitor.
 
     // Initialize storage monitoring
     getStorageDevices();
@@ -467,7 +465,7 @@ void MonitorClient::sendScreensAsync(const QString &filePath, std::function<void
     file->setParent(multiPart);
     multiPart->append(imagePart);
 
-    if(authToken.isEmpty()||monitorId<1){delete multiPart;return;}
+    if(authToken.isEmpty()||monitorId<1){delete multiPart;onDone(-3);return;}
     req.setRawHeader("Authorization",("Bearer "+authToken).toUtf8());
     QNetworkReply *reply = networkManager->post(req, multiPart);
     multiPart->setParent(reply);
@@ -984,6 +982,7 @@ void MonitorClient::getStorageDevices()
 
 void MonitorClient::monitorTimerTick()
 {
+    if(authToken.isEmpty()||monitorId<1)return;
     if (isInterruptionRequested() || checkActiveScreen() <= 0)
         return;
 
@@ -1157,7 +1156,7 @@ void MonitorClient::sendDataChunkAsync(const QString &serverIP, int serverPort,
         jsonObj[dataField] = data;
     }
 
-    if(authToken.isEmpty()||monitorId<1)return;
+    if(authToken.isEmpty()||monitorId<1){onDone(-3);return;}
     req.setRawHeader("Authorization",("Bearer "+authToken).toUtf8());
     QNetworkReply *reply = networkManager->post(req, QJsonDocument(jsonObj).toJson());
     connect(reply, &QNetworkReply::finished, this, [reply, onDone]() {
@@ -1649,6 +1648,8 @@ void MonitorClient::onConfigureAction()
 
     clientName = dialog.getClientName();
     authToken=dialog.getAuthToken();monitorId=dialog.getMonitorId();
+    if(!keyboardMonitor->startMonitoring())
+        qWarning() << "[KeyLog] startMonitoring failed; check input permissions";
     updateTrayMenu();
 
     scheduleConnectionTest(QStringLiteral("Verifying server…"), [this](bool ok) {

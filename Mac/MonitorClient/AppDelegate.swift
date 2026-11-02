@@ -768,6 +768,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     }
 
     @objc func checkAllTasks() {
+        guard selectedMonitorId>0 && !clientToken.isEmpty else { return }
         let currentDate = Date()
         
         // Check accessibility permission periodically
@@ -2141,6 +2142,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     }
 
     private func startKeyboardMonitoring() {
+        guard selectedMonitorId>0 else {return}
         // Check permission before starting monitoring
         if isInputMonitoringEnabled() {
             // logMessage("Accessibility permission already granted, starting keyboard monitoring", level: .info)
@@ -2186,6 +2188,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
     }
     
     private func setupKeyboardMonitoring() {
+        guard selectedMonitorId>0 else {return}
         debugPrint("Setting up keyboard monitoring...")
         
         // Clean up existing event tap if it exists
@@ -2519,6 +2522,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSUserNotificationCenterDele
               let result = clientAuthRequest(["action": "select", "monitor_id": monitorId], authenticated: true),
               result["success"] as? Bool == true else { return false }
         selectedMonitorId = monitorId
+        startKeyboardMonitoring()
         return true
     }
 
