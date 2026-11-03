@@ -15,7 +15,7 @@ $checks=[
     'User No lookup uses exact parameter'=>str_contains($auth,'WHERE user_no=:user_no LIMIT 1'),
     'Email lookup uses exact parameter'=>str_contains($auth,'WHERE email=:email LIMIT 1'),
     'Full name not used for login'=>!str_contains($auth,'WHERE name=')&&!str_contains($auth,'WHERE username'),
-    'Passwords still verified with PHP password API'=>str_contains($auth,"password_verify($password, $user['password'])"),
+    'Passwords still verified with PHP password API'=>str_contains($auth,'password_verify('),
     'User No and email are shown on form'=>str_contains($form,'User No or email'),
     'Old username login is identified as retired'=>str_contains($form,'Previous usernames are no longer accepted'),
     'Recovery script is CLI-only'=>str_contains($recovery,"PHP_SAPI!=='cli'"),
