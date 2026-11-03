@@ -17,7 +17,10 @@ ob_start();
                     <form method="POST" action="<?php echo BASE_URL; ?>auth/login">
                         <div class="mb-3">
                             <label for="identifier" class="form-label">User No or email</label>
-                            <input type="text" class="form-control" id="identifier" name="identifier" autocomplete="username" required>
+                            <input type="text" class="form-control" id="identifier" name="identifier" autocomplete="username"
+                                   value="<?= htmlspecialchars((string)($_POST['identifier']??''),ENT_QUOTES,'UTF-8') ?>"
+                                   placeholder="e.g. 100001 or you@example.com" required>
+                            <div class="form-text">Previous usernames are no longer accepted. Enter the assigned User No (not the database ID) or your account email.</div>
                         </div>
                         
                         <div class="mb-3">
