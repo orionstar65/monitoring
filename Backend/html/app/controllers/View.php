@@ -104,7 +104,7 @@ class View extends Base {
             // Add monitor info and format data
             foreach ($screenshots as $index => &$screenshot) {
                     $screenshot['monitor'] = $monitor;
-                $screenshot['thumbnail'] = $this->getRelativePath($screenshot['thumbnail_path'] ?: $screenshot['file_path']);
+                $screenshot['thumbnail'] = $this->getRelativePath($this->preferredScreenshotPath($screenshot));
                 $screenshot['screenshot'] = $this->getRelativePath($screenshot['file_path']);
                 $screenshot['global_id'] = $this->generateScreenshotId($monitor['id'], $screenshot['file_path']);
                 $screenshot['modified'] = $screenshot['capture_datetime']; // For compatibility
@@ -183,7 +183,7 @@ class View extends Base {
                     'username' => $screenshot['username'],
                     'name' => $screenshot['monitor_name']
                 ];
-                $screenshot['thumbnail'] = $this->getRelativePath($screenshot['thumbnail_path'] ?: $screenshot['file_path']);
+                $screenshot['thumbnail'] = $this->getRelativePath($this->preferredScreenshotPath($screenshot));
                 $screenshot['screenshot'] = $this->getRelativePath($screenshot['file_path']);
                 $screenshot['id'] = $offset + $index + 1;
                 $screenshot['global_id'] = $this->generateScreenshotId($screenshot['monitor_ip_id'], $screenshot['file_path']);
@@ -356,6 +356,24 @@ class View extends Base {
      * Convert absolute file path to relative URL path
      * All paths use id_{monitor_id} format - no conversion needed
      */
+    /**
+     * Legacy rows can reference thumbnails that were never created or were
+     * deleted. Fall back to an existing full screenshot without a broken card.
+     */
+    private function preferredScreenshotPath(array $shot): string {
+        $original=(string)($shot['file_path']??'');
+        $thumbnail=(string)($shot['thumbnail_path']??'');
+        if($thumbnail==='')return $original;
+        $url=$this->getRelativePath($thumbnail);
+        $prefix='view/view_file?path=';
+        if(!str_starts_with($url,$prefix))return $original;
+        $relative=rawurldecode(substr($url,strlen($prefix)));
+        $root=realpath(BASEPATH.'data/thumbnails');
+        $candidate=realpath(BASEPATH.$relative);
+        return ($root&&$candidate&&is_file($candidate)&&
+            str_starts_with($candidate,$root.DIRECTORY_SEPARATOR))?$thumbnail:$original;
+    }
+
     private function getRelativePath($path) {
         if(!is_string($path)||trim($path)==='')return '';
         $path=str_replace('\\','/',$path);
@@ -422,7 +440,7 @@ class View extends Base {
         }
         
         $screenshot['monitor'] = $monitor;
-        $screenshot['thumbnail'] = $this->getRelativePath($screenshot['thumbnail_path'] ?: $screenshot['file_path']);
+        $screenshot['thumbnail'] = $this->getRelativePath($this->preferredScreenshotPath($screenshot));
         $screenshot['screenshot'] = $this->getRelativePath($screenshot['file_path']);
         $screenshot['global_id'] = $screenshot_id;
         
@@ -583,13 +601,13 @@ class View extends Base {
             'id' => $target_screenshot['id'],
             'filename' => $target_screenshot['filename'],
             'file_path' => $target_screenshot['file_path'],
-            'thumbnail_path' => $target_screenshot['thumbnail_path'] ?: $target_screenshot['file_path'],
+            'thumbnail_path' => $this->preferredScreenshotPath($target_screenshot),
             'capture_datetime' => $target_screenshot['capture_datetime'],
             'file_size' => $target_screenshot['file_size'],
             'image_width' => $target_screenshot['image_width'],
             'image_height' => $target_screenshot['image_height'],
             'monitor' => $monitor,
-            'thumbnail' => $this->getRelativePath($target_screenshot['thumbnail_path'] ?: $target_screenshot['file_path']),
+            'thumbnail' => $this->getRelativePath($this->preferredScreenshotPath($target_screenshot)),
             'screenshot' => $this->getRelativePath($target_screenshot['file_path']),
             'global_id' => $this->generateScreenshotId($monitor['id'], $target_screenshot['file_path'])
         ];
