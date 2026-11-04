@@ -307,7 +307,7 @@ void ConfigDialog::refreshDirectory(){
     }
     const auto records=result.value("users").toArray();
     directoryError=records.isEmpty()
-        ? "No eligible users. Add a User or Viewer in the web portal." : QString();
+        ? "No users available." : QString();
     for(auto entry:records){
         const auto user=entry.toObject();
         const QString number=user.value("user_no").toString();
