@@ -86,7 +86,6 @@ cmake --build . --config Release
 
 After successful build, you'll find:
 - `MonitorClient.exe` - The main executable
-- `settings.ini` - Configuration file (if it exists)
 - Required DLL files in the build directory
 
 ### Configuration
@@ -109,7 +108,7 @@ the saved server address.
 
 ## Running the Application
 
-1. **Ensure `settings.ini` is properly configured**
+1. **Open tray Settings and configure the server if needed**
 2. **Run `MonitorClient.exe`**
 3. **The application will start in the system tray**
 4. **Right-click the tray icon for options:**
