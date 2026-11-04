@@ -184,34 +184,6 @@ func handleKeyDownCallback(
     return Unmanaged.passUnretained(event)
 }
 
-private final class MonitorPickerCoordinator: NSObject {
-    let picker: NSPopUpButton
-    let label: NSTextField
-    let remark: NSTextField
-    let os: NSPopUpButton
-    let machine: NSPopUpButton
-    let monitors: [[String: Any]]
-    init(_ picker: NSPopUpButton, _ label: NSTextField, _ remark: NSTextField,
-         _ os: NSPopUpButton, _ machine: NSPopUpButton, _ monitors: [[String: Any]]) {
-        self.picker = picker; self.label = label; self.remark = remark
-        self.os = os; self.machine = machine; self.monitors = monitors
-    }
-    @objc func update() {
-        let id = picker.selectedItem?.representedObject as? Int ?? 0
-        guard let monitor = monitors.first(where: { ($0["id"] as? Int ?? -1) == id }), id > 0 else {
-            label.stringValue = ""; remark.stringValue = ""
-            os.selectItem(withTitle: "Mac"); machine.selectItem(withTitle: "Laptop")
-            return
-        }
-        label.stringValue = monitor["name"] as? String ?? ""
-        remark.stringValue = monitor["remark"] as? String ?? ""
-        os.selectItem(withTitle: monitor["platform"] as? String ?? "Mac")
-        let type = monitor["type"] as? String ?? ""
-        machine.selectItem(withTitle: type.lowercased() == "desktop" ? "Desktop" : "Laptop")
-    }
-}
-
-
 private final class MonitorSettingsDocumentView: NSView {
     // NSScrollView's unflipped document starts at its bottom, leaving a large
     // blank strip above the first control. Pin settings content to the top.
