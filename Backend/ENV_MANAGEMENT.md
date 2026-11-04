@@ -80,10 +80,16 @@ sudo python3 Backend/with_database_env.py \
 invoking sudo user before launching PHP. The settings last for **that command
 only**. No separate `.env` file is required.
 
-To recover an administrator, first list User Nos, then use the existing
-`recover_web_login.php --reset-user-no=ACTUAL_NUMBER` flow documented in
-[LOGIN_RECOVERY.md](LOGIN_RECOVERY.md). Enter the new password securely; never
-put it in a command argument, GitHub issue, shell history or chat.
+To recover an administrator, first list User Nos, then use the secure prompt:
+
+```bash
+sudo python3 Backend/with_database_env.py --prompt-recovery-password \
+    php Backend/recover_web_login.php --reset-user-no=ACTUAL_NUMBER
+```
+
+Use the User No shown by `--list-admins`, not the database ID. The wrapper
+asks for the new password twice, passing it to PHP without putting it in command
+arguments, Git history or source files. See [LOGIN_RECOVERY.md](LOGIN_RECOVERY.md).
 
 ## 3. User No directory and LAN access
 
