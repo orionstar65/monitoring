@@ -2887,6 +2887,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         var availableMonitors: [[String: Any]] = []
         var locked = false
         var monitorSettingsLocked = false
+        var pendingUserNo: String? = nil
         var directoryError: String? = nil
         func updateMonitorFields() {
             let id = picker.selectedItem?.representedObject as? Int ?? 0
@@ -2951,7 +2952,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             directoryStatus.stringValue = directoryError ?? ""
             directoryStatus.isHidden = directoryError == nil
             let enrolled = !self.clientToken.isEmpty && self.selectedMonitorId > 0
-            monitorPane.isHidden = !enrolled
+            monitorPane.isHidden = !enrolled && pendingUserNo == nil
             unpair.isHidden = !enrolled
             unpair.isEnabled = enrolled && !locked
             users.isEnabled = !enrolled || !locked
@@ -2961,9 +2962,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 notice.textColor = .systemOrange
             }
             let creating = picker.selectedItem?.representedObject as? Int == -1
+            let pendingFirstDevice = pendingUserNo != nil
             save.title = creating ? "Add Monitor" : "Save Monitor"
-            save.isEnabled = enrolled && (creating || !monitorSettingsLocked)
-            lockSettings.isEnabled = enrolled && !creating && !monitorSettingsLocked
+            save.isEnabled = (enrolled || pendingFirstDevice) && (creating || !monitorSettingsLocked)
+            lockSettings.isEnabled = enrolled && !pendingFirstDevice && !creating && !monitorSettingsLocked
             lockSettings.title = monitorSettingsLocked ? "Settings Locked" : "Lock Settings"
             label.isEnabled = !monitorSettingsLocked || creating
             remark.isEnabled = !monitorSettingsLocked || creating
@@ -3005,8 +3007,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         func refreshUserDirectory() {
             // Unauthenticated clients must explicitly choose a user. Do not
             // visually preselect an identity that has no valid session.
-            let previousNo = self.clientToken.isEmpty ? "" :
-                (self.storage.string(forKey: "user_no") ?? "")
+            let previousNo = pendingUserNo ??
+                (self.clientToken.isEmpty ? "" : (self.storage.string(forKey: "user_no") ?? ""))
             let response = self.clientAuthRequest(["action":"directory"])
             let records = response?["users"] as? [[String: Any]] ?? []
             if response?["success"] as? Bool != true {
@@ -3085,12 +3087,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 guard response?["success"] as? Bool == true,
                       let token = response?["token"] as? String, token.count == 64,
                       let id = response?["monitor_id"] as? Int, id > 0 else {
+                    if response?["code"] as? String == "no_monitors" {
+                        pendingUserNo = number
+                        monitorSettingsLocked = false
+                        picker.removeAllItems()
+                        picker.addItem(withTitle: "Add new...")
+                        picker.lastItem?.representedObject = -1
+                        updateMonitorFields()
+                        monitorNote.stringValue = "No devices assigned. Add the first monitor."
+                        updateState()
+                        return
+                    }
                     showError(response?["error"] as? String ?? "Unable to select user.")
                     if changing { refreshMonitors() }
                     else { users.selectItem(at: 0) }
                     updateState()
                     return
                 }
+                pendingUserNo = nil
                 self.clientToken = token
                 self.isServerConnected = true
                 self.selectedMonitorId = id
@@ -3128,6 +3142,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 self.clientToken = ""
                 self.selectedMonitorId = 0
                 self.isServerConnected = false
+                pendingUserNo = nil
                 refreshMonitors()
                 updateState()
             case "lock":
@@ -3148,6 +3163,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 refreshMonitors()
                 updateState()
             case "save":
+                if let number = pendingUserNo {
+                    guard saveServer() else { showError("Enter a valid server address."); return }
+                    let response = self.clientAuthRequest([
+                        "action":"bootstrap_monitor","user_no":number,
+                        "label":label.stringValue,"remark":remark.stringValue,
+                        "os":selectedRadio(osRadios),
+                        "machine":selectedRadio(machineRadios).lowercased()
+                    ])
+                    guard response?["success"] as? Bool == true,
+                          let token = response?["token"] as? String, token.count == 64,
+                          let id = response?["monitor_id"] as? Int, id > 0 else {
+                        showError(response?["error"] as? String ?? "Could not create first monitor.")
+                        return
+                    }
+                    self.clientToken = token
+                    self.keychainSaveToken(token)
+                    self.selectedMonitorId = id
+                    self.storage.set(number, forKey: "user_no")
+                    self.isServerConnected = true
+                    pendingUserNo = nil
+                    refreshMonitors()
+                    refreshUserDirectory()
+                    updateState()
+                    self.startKeyboardMonitoring()
+                    return
+                }
                 guard saveServer(), !self.clientToken.isEmpty,
                       let id = picker.selectedItem?.representedObject as? Int,
                       (id == self.selectedMonitorId || id == -1) else {
