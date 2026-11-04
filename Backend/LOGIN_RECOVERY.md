@@ -5,15 +5,17 @@ The old web **username** field has been removed from the users table. Web sign-i
 ## If your existing sign-in says "Invalid login details"
 
 1. Do **not** recreate the administrator account or rerun `Backend/database_setup.sql`; the latter drops the database.
-2. On the **backend server**, from the repository directory, list the existing administrator accounts:
+2. On the **backend server**, update your checkout, install the helper as root-owned and list administrator accounts:
    ```bash
-   sudo python3 Backend/with_database_env.py \
-       php Backend/recover_web_login.php --list-admins
+   cd /var/monitor
+   git pull --ff-only origin main
+   sudo install -o root -g root -m 700 Backend/with_database_env.py /usr/local/sbin/monitor-with-db-env
+   sudo /usr/local/sbin/monitor-with-db-env php Backend/recover_web_login.php --list-admins
    ```
    This displays only account ID, User No, Full Name, email and whether a recognizable password hash is present. It does not display or change passwords. Use the listed **User No** or email to sign in, **not** the old username or the database ID.
 3. If the password is unknown or its hash is unusable, run the **explicit** admin recovery option locally. Enter a new password without placing it on a command line or in the repository:
    ```bash
-   sudo python3 Backend/with_database_env.py --prompt-recovery-password \
+   sudo /usr/local/sbin/monitor-with-db-env --prompt-recovery-password \
        php Backend/recover_web_login.php --reset-user-no=100001
    ```
    Replace `100001` with the actual User No reported by `--list-admins`. Password must contain at least 12 characters. On success, sign in and change it via the forced password-change form.
@@ -46,7 +48,7 @@ The app and its native build versions remain **v1.5**. Schema revision numbers 1
 ## Environment troubleshooting
 
 If PHP reports `MONITOR_DB_PASSWORD is missing`, it means the SSH shell did
-not inherit Apache's `SetEnv` variables. Use the wrapper above. It reads
+not inherit Apache's `SetEnv` variables. Use the root-owned system helper above. It reads
 `/etc/monitoring/apache-db.conf` with root privileges and drops privileges
 to your regular user before executing the command. See
 [ENV_MANAGEMENT.md](ENV_MANAGEMENT.md) for checks that do not reveal secrets.
