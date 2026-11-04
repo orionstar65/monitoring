@@ -31,14 +31,19 @@ The directory response is intentionally not treated as a successful empty list w
 1. In the settings modal, enter the correct server host and port and click **Test Connection**.
 2. Verify that the PHP backend serving `/client_auth.php` is updated. The web portal login page responding **200** does *not* guarantee the client directory API is reachable.
 3. Use the server's **private LAN IP** on ports 8924 (restricted HTTP) or 8925 (trusted HTTPS), not `127.0.0.1` or a public relay. A direct private-LAN client is now allowed to list/select users without the old enrollment flag. A server behind a reverse proxy needs an explicitly trusted proxy configuration or a tightly restricted `MONITOR_ENABLE_USER_NO_ENROLL=1` deployment opt-in. `MONITOR_DISABLE_USER_NO_ENROLL=1` forces it off.
-4. Test the endpoint from a machine on the trusted network (use HTTPS and the real certificate):
+4. Run the read-only diagnostic directly on the backend host to confirm accounts have User Nos:
+   ```bash
+   php Backend/diagnose_user_directory.php
+   ```
+   This lists User No, Full Name, Role, first assigned IP and monitor count without disclosing password hashes.
+5. Test the endpoint from a machine on the trusted network (use HTTPS and the real certificate):
    ```bash
    curl --fail-with-body --silent --show-error \
      -H 'Content-Type: application/json' \
      -d '{"action":"directory"}' https://SERVER:8925/client_auth.php
    ```
    A valid response has `{"success":true,"users":[...]}`; HTTP 503 means enrollment is disabled, HTTP 426 means HTTPS is required, and a network/TLS failure means the client cannot reach the endpoint securely.
-5. The directory now returns all accounts with a User No, including `admin` accounts. It shows the UserNo/Full Name/IP label; users with no assigned monitor show `—`. A user without an assigned monitor cannot activate desktop monitoring until an administrator assigns one.
+6. The directory now returns all accounts with a User No, including `admin` accounts. It shows the UserNo/Full Name/IP label; users with no assigned monitor show `—`. A user without an assigned monitor cannot activate desktop monitoring until an administrator assigns one.
 6. Users without monitors still appear as `UserNo/Full Name/—`. Assign a monitor before selecting them for monitoring. A complete native build must be installed to see these UI changes; they do not appear by updating only the PHP backend.
 
 **Security:** The directory reveals users' full names and first assigned monitor IP to clients permitted to reach it. Do not expose this unauthenticated endpoint to the internet. A User No alone does not authenticate a client, and the assignment lock does not protect against impersonation from a new installation.
