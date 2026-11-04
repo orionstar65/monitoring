@@ -68,14 +68,14 @@ private:
     bool settingsLocked=false;
     bool monitorEditing=false;
     bool logoutPerformed=false;
-    QLineEdit *serverIPEdit=nullptr,*clientNameEdit=nullptr;
-    QLineEdit *labelEdit=nullptr,*remarkEdit=nullptr;
+    QLineEdit *serverIPEdit=nullptr;
+    QLineEdit *remarkEdit=nullptr;
     QSpinBox *serverPortEdit=nullptr;
     QComboBox *userSelector=nullptr,*monitorSelector=nullptr;
     QButtonGroup *osRadios=nullptr,*machineRadios=nullptr;
     QLabel *connectionStatusLabel=nullptr,*assignmentStatusLabel=nullptr,*monitorIPLabel=nullptr;
-    QLabel *labelInfo=nullptr,*osInfo=nullptr,*machineInfo=nullptr,*remarkInfo=nullptr;
-    QStackedWidget *labelStack=nullptr,*osStack=nullptr,*machineStack=nullptr,*remarkStack=nullptr;
+    QLabel *osInfo=nullptr,*machineInfo=nullptr,*remarkInfo=nullptr;
+    QStackedWidget *osStack=nullptr,*machineStack=nullptr,*remarkStack=nullptr;
     QCheckBox *notificationsCheck=nullptr;
     QGroupBox *monitorGroup=nullptr;
     QPushButton *testButton=nullptr,*logoutButton=nullptr,*saveButton=nullptr,*lockSettingsButton=nullptr,*editButton=nullptr;
