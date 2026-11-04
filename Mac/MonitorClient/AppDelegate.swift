@@ -3118,7 +3118,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     }
                 }.resume()
             case "user":
-                guard let number = users.selectedItem?.representedObject as? String, !number.isEmpty else { return }
+                guard let number = users.selectedItem?.representedObject as? String, !number.isEmpty else {
+                    if pendingUserNo != nil {
+                        pendingUserNo = nil
+                        refreshMonitors()
+                        updateState()
+                    }
+                    return
+                }
+                if pendingUserNo != nil &&
+                   number == self.storage.string(forKey: "user_no") &&
+                   !self.clientToken.isEmpty {
+                    pendingUserNo = nil
+                    refreshMonitors()
+                    updateState()
+                    return
+                }
                 if !self.clientToken.isEmpty && locked {
                     showError("User assignment is locked. Ask your administrator to edit the monitor.")
                     refreshMonitors()
