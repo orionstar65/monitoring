@@ -1952,7 +1952,7 @@ static void changeMonitorFields(HWND dlg) {
     checkSettingsRadio(dlg,SETTINGS_OS,SETTINGS_OS_MAC,SETTINGS_OS_UBUNTU,SETTINGS_OS);
     checkSettingsRadio(dlg,SETTINGS_MACHINE,SETTINGS_MACHINE_DESKTOP,0,SETTINGS_MACHINE);
     if(id<1){
-        setDlgUtf8Text(dlg,SETTINGS_MONITOR_IP,id==-1?"Assigned on creation":"—");
+        setDlgUtf8Text(dlg,SETTINGS_MONITOR_IP,"—");
         return;
     }
     for(const auto &monitor:settingsMonitors){
@@ -2216,6 +2216,8 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
     switch(msg) {
     case WM_INITDIALOG:{
         activeSettingsWindow=dlg;
+        settingsPendingUserNo.clear();
+        settingsEditing=false;
         setWindowUtf8Text(dlg,"MonitorClient v1.5 — Settings");
         HWND logo=addControl(dlg,"STATIC","",SS_ICON,13,10,38,38,4500);
         SendMessageW(logo,STM_SETIMAGE,IMAGE_ICON,(LPARAM)LoadIconW(GetModuleHandleW(nullptr),MAKEINTRESOURCEW(1)));
