@@ -67,23 +67,27 @@ From the repository checkout on the server:
 cd /var/monitor
 git pull --ff-only origin main
 
-sudo python3 Backend/with_database_env.py \
+# Install a root-owned copy: never execute web-writable source as root.
+sudo install -o root -g root -m 700 Backend/with_database_env.py /usr/local/sbin/monitor-with-db-env
+
+sudo /usr/local/sbin/monitor-with-db-env \
     php Backend/recover_web_login.php --list-admins
 
-sudo python3 Backend/with_database_env.py \
+sudo /usr/local/sbin/monitor-with-db-env \
     php Backend/diagnose_user_directory.php
 ```
 
-`with_database_env.py` reads the root-owned Apache include, extracts only
+The installed `monitor-with-db-env` utility reads the root-owned Apache include, extracts only
 `MONITOR_DB_HOST`, `MONITOR_DB_USER`, `MONITOR_DB_PASSWORD` and
 `MONITOR_DB_NAME` without printing them, then drops root privileges to the
 invoking sudo user before launching PHP. The settings last for **that command
-only**. No separate `.env` file is required.
+only**. No separate `.env` file is required. Keep the installed utility
+root-owned and **reinstall it only after reviewing updates** to its source.
 
 To recover an administrator, first list User Nos, then use the secure prompt:
 
 ```bash
-sudo python3 Backend/with_database_env.py --prompt-recovery-password \
+sudo /usr/local/sbin/monitor-with-db-env --prompt-recovery-password \
     php Backend/recover_web_login.php --reset-user-no=ACTUAL_NUMBER
 ```
 
