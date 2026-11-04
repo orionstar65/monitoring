@@ -28,7 +28,7 @@ class Logbrowse extends Base {
     public function api_devices() {
         // OPTIMIZED: Remove SQL CASE statement - status calculation done in PHP for better performance
         $devices = $this->db->fetchAll(
-            "SELECT m.id,m.ip_address,m.mac_address,owner.name AS username,m.name,m.type,m.updated_at
+            "SELECT m.id,m.ip_address,m.mac_address,owner.name AS username,CONCAT('Device #',m.id) AS name,m.type,m.updated_at
              FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
              ORDER BY owner.name ASC,m.ip_address ASC"
         );
@@ -86,7 +86,7 @@ class Logbrowse extends Base {
         $total_pages = ceil($total_entries / $per_page);
         
         // Get paginated data
-        $data_sql = "SELECT b.*, m.ip_address, owner.name AS username, m.name, m.type,
+        $data_sql = "SELECT b.*, m.ip_address, owner.name AS username, CONCAT('Device #',m.id) AS name, m.type,
                             b.created_at as date,
                             b.browser,
                             b.url,
@@ -160,7 +160,7 @@ class Logbrowse extends Base {
         $total_pages = ceil($total_entries / $per_page);
         
         // Get paginated data
-        $data_sql = "SELECT k.*, m.ip_address, owner.name AS username, m.name, m.type,
+        $data_sql = "SELECT k.*, m.ip_address, owner.name AS username, CONCAT('Device #',m.id) AS name, m.type,
                             k.key_date as date,
                             k.application,
                             k.key_pressed as `key`,
@@ -234,7 +234,7 @@ class Logbrowse extends Base {
         $total_pages = ceil($total_entries / $per_page);
         
         // Get paginated data
-        $data_sql = "SELECT u.*, m.ip_address, owner.name AS username, m.name, m.type,
+        $data_sql = "SELECT u.*, m.ip_address, owner.name AS username, CONCAT('Device #',m.id) AS name, m.type,
                             u.device_date as date,
                             u.device_name as device,
                             u.action,
