@@ -659,7 +659,7 @@ class View extends Base {
         
         // Get pagination parameters
         $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
-        $per_page = isset($_GET['per_page']) ? max(1, intval($_GET['per_page'])) : 20;
+        $per_page = isset($_GET['per_page']) ? min(100,max(1,(int)$_GET['per_page'])) : 20;
         $log_type = isset($_GET['log_type']) ? $_GET['log_type'] : 'browser_history';
         $offset = ($page - 1) * $per_page;
         
@@ -672,12 +672,12 @@ class View extends Base {
         $params = ['monitor_id' => $monitor['id']];
         
         if ($start_date) {
-            $where_conditions[] = "created_at >= :start_date";
+            $where_conditions[] = "visit_date >= :start_date";
             $params['start_date'] = $start_date . ' 00:00:00';
         }
         
         if ($end_date) {
-            $where_conditions[] = "created_at <= :end_date";
+            $where_conditions[] = "visit_date <= :end_date";
             $params['end_date'] = $end_date . ' 23:59:59';
         }
         
@@ -705,7 +705,7 @@ class View extends Base {
                 
             case 'key_logs':
                 // Adjust date field for key_logs
-                $key_where = str_replace('created_at', 'key_date', $where_clause);
+                $key_where = str_replace('visit_date', 'key_date', $where_clause);
                 $total_entries = $this->db->fetch(
                     "SELECT COUNT(*) as total FROM key_logs WHERE {$key_where}",
                     $params
@@ -722,7 +722,7 @@ class View extends Base {
                 
             case 'usb_logs':
                 // Adjust date field for usb_logs
-                $usb_where = str_replace('created_at', 'device_date', $where_clause);
+                $usb_where = str_replace('visit_date', 'device_date', $where_clause);
                 $total_entries = $this->db->fetch(
                     "SELECT COUNT(*) as total FROM usb_device_logs WHERE {$usb_where}",
                     $params
