@@ -1629,8 +1629,7 @@ function updateMonitorList(monitors) {
         const status=['online','inactive','offline'].includes(monitor.live_status)
             ?monitor.live_status:'offline';
         const statusText=monitor.status_text||'Offline';
-        const label=escapeViewerText(monitor.name||('Monitor #'+monitor.id));
-        const user=escapeViewerText(monitor.username||'Unassigned');
+        const label=escapeViewerText(monitor.username||'Unassigned');
         const number=escapeViewerText(monitor.user_no||'—');
         const ip=escapeViewerText(monitor.last_seen_ip||monitor.ip_address||'—');
         const platform=escapeViewerText(monitor.platform||'—');
@@ -1649,7 +1648,7 @@ function updateMonitorList(monitors) {
                     </div>
                 </div>
                 <div class="monitor-item-username" title="${user}">
-                    <i class="fas fa-user me-1"></i>${number}: ${user}
+                    <i class="fas fa-desktop me-1"></i>Device #${Number(monitor.id)} · User No ${number}
                 </div>
                 <div class="monitor-item-username">
                     <i class="fas fa-desktop me-1"></i>${platform} · ${machine} · ${ip}
