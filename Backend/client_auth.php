@@ -143,6 +143,12 @@ try {
         $st->bind_param('i',$userId);$st->execute();$user=$st->get_result()->fetch_assoc();$st->close();
         $st=$db->prepare('SELECT id,name,ip_address,platform,type,remark,assignment_locked,settings_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY name,id');
         $st->bind_param('i',$userId);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
+        $monitors=array_map(static function(array $m):array {
+            $m['id']=(int)$m['id'];
+            $m['assignment_locked']=(bool)$m['assignment_locked'];
+            $m['settings_locked']=(bool)$m['settings_locked'];
+            return $m;
+        },$monitors);
         $monitorId=(int)($session['monitor_id']??0);
         if($monitorId && !in_array($monitorId,array_map(static fn($m)=>(int)$m['id'],$monitors),true))$monitorId=0;
         $locked=false;
@@ -154,7 +160,13 @@ try {
     }
     if($action==='monitors'){
         $st=$db->prepare('SELECT id,name,ip_address,platform,type,remark,assignment_locked,settings_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY name,id');
-        $st->bind_param('i',$userId);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);
+        $st->bind_param('i',$userId);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
+        $monitors=array_map(static function(array $m):array {
+            $m['id']=(int)$m['id'];
+            $m['assignment_locked']=(bool)$m['assignment_locked'];
+            $m['settings_locked']=(bool)$m['settings_locked'];
+            return $m;
+        },$monitors);
         echo json_encode(['success'=>true,'monitors'=>$monitors]);exit;
     }
     if($action==='select'){
