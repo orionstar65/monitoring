@@ -32,8 +32,8 @@ $tests=[
  'Monitor table has a single lock column'=>str_contains($listing,'<th>Lock</th>')
     &&!str_contains($listing,'<th>Assignment</th>')&&!str_contains($listing,'<th>Settings</th>'),
  'Client checks effective unified lock'=>str_contains($api,"\$m['settings_locked']=!empty(\$m['settings_locked'])||!empty(\$m['assignment_locked'])"),
- 'Device selection rejects locked source'=>str_contains($api,'\$origin[\'settings_locked\'] || \$origin[\'assignment_locked\']'),
- 'Device creation rejects locked source'=>str_contains($api,'\$current[\'assignment_locked\']||\$current[\'settings_locked\']'),
+ 'Device selection rejects locked source'=>str_contains($api,'$origin[\'settings_locked\'] || $origin[\'assignment_locked\']'),
+ 'Device creation rejects locked source'=>str_contains($api,'$current[\'assignment_locked\']||$current[\'settings_locked\']'),
  'Lock action persists both fields'=>str_contains($api,'settings_locked=1,assignment_locked=1'),
  'Windows prefs use registry'=>str_contains($win,'RegCreateKeyExA(')&&str_contains($win,'RegQueryValueExA('),
  'Windows settings.ini not used'=>!str_contains($win,'GetPrivateProfileIntA(')
