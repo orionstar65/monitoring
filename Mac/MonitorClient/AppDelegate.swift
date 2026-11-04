@@ -2830,10 +2830,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let monitorSelection = NSStackView(views: [picker, edit])
         monitorSelection.orientation = .horizontal
         monitorSelection.spacing = 8
-        let label = entry("Label")
         let remark = entry("Remark")
         let monitorIP = text("—")
-        let labelInfo = text("—")
         let osInfo = text("—")
         let machineInfo = text("—")
         let remarkInfo = text("—")
@@ -2857,15 +2855,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             for button in radios { button.state = button.title == value ? .on : .off }
         }
         monitorPane.addArrangedSubview(line("Monitor", monitorSelection))
-        let nameEditRow = line("Label", label)
-        let nameInfoRow = line("Label", labelInfo)
         let osEditRow = line("OS", osRow)
         let osInfoRow = line("OS", osInfo)
         let machineEditRow = line("Machine", machineRow)
         let machineInfoRow = line("Machine", machineInfo)
         let remarkEditRow = line("Remark", remark)
         let remarkInfoRow = line("Remark", remarkInfo)
-        for row in [nameInfoRow, nameEditRow, osInfoRow, osEditRow,
+        for row in [osInfoRow, osEditRow,
                     machineInfoRow, machineEditRow] { monitorPane.addArrangedSubview(row) }
         monitorPane.addArrangedSubview(line("IP address", monitorIP))
         for row in [remarkInfoRow, remarkEditRow] { monitorPane.addArrangedSubview(row) }
@@ -2918,10 +2914,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let id = picker.selectedItem?.representedObject as? Int ?? 0
             monitorEditing = id == -1
             guard let monitor = availableMonitors.first(where: { ($0["id"] as? Int) == id }) else {
-                label.stringValue = ""
                 remark.stringValue = ""
                 monitorIP.stringValue = "—"
-                labelInfo.stringValue = "—"
                 osInfo.stringValue = "—"
                 machineInfo.stringValue = "—"
                 remarkInfo.stringValue = "—"
@@ -2929,13 +2923,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 updateState()
                 return
             }
-            let name = monitor["name"] as? String ?? ""
             let details = monitor["remark"] as? String ?? ""
             let platform = monitor["platform"] as? String ?? "Mac"
             let machineType = (monitor["type"] as? String ?? "").lowercased() == "desktop" ? "Desktop" : "Laptop"
-            label.stringValue = name
             remark.stringValue = details
-            labelInfo.stringValue = name.isEmpty ? "—" : name
             remarkInfo.stringValue = details.isEmpty ? "—" : details
             osInfo.stringValue = platform
             machineInfo.stringValue = machineType
@@ -2973,11 +2964,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             picker.removeAllItems()
             for monitor in availableMonitors {
                 let id = monitor["id"] as? Int ?? 0
-                let name = monitor["name"] as? String ?? "Monitor"
                 let platform = monitor["platform"] as? String ?? "—"
                 let type = monitor["type"] as? String ?? "Desktop"
                 let ip = monitor["ip_address"] as? String ?? "—"
-                picker.addItem(withTitle: "\(name) · \(platform) · \(type) · \(ip)")
+                picker.addItem(withTitle: "Device #\(id) · \(platform) · \(type) · \(ip)")
                 picker.lastItem?.representedObject = id
             }
             picker.addItem(withTitle: "Add new...")
@@ -3009,10 +2999,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let creating = picker.selectedItem?.representedObject as? Int == -1
             let pendingFirstDevice = pendingUserNo != nil
             let editable = !isLocked && (creating || monitorEditing)
-            for row in [nameEditRow, osEditRow, machineEditRow, remarkEditRow] {
+            for row in [osEditRow, machineEditRow, remarkEditRow] {
                 row.isHidden = !editable
             }
-            for row in [nameInfoRow, osInfoRow, machineInfoRow, remarkInfoRow] {
+            for row in [osInfoRow, machineInfoRow, remarkInfoRow] {
                 row.isHidden = editable
             }
             edit.isHidden = !enrolled || creating || isLocked
@@ -3241,7 +3231,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 guard warning.runModal() == .alertFirstButtonReturn else { return }
                 let payload: [String: Any] = [
                     "action":"lock_settings",
-                    "label":label.stringValue,"remark":remark.stringValue,
+                    "remark":remark.stringValue,
                     "os":selectedRadio(osRadios),
                     "machine":selectedRadio(machineRadios).lowercased()
                 ]
@@ -3257,7 +3247,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     guard saveServer() else { showError("Enter a valid server address."); return }
                     let response = self.clientAuthRequest([
                         "action":"bootstrap_monitor","user_no":number,
-                        "label":label.stringValue,"remark":remark.stringValue,
+                        "remark":remark.stringValue,
                         "os":selectedRadio(osRadios),
                         "machine":selectedRadio(machineRadios).lowercased()
                     ])
@@ -3292,7 +3282,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 }
                 var request: [String: Any] = [
                     "action":id == -1 ? "create_monitor" : "save_monitor",
-                    "label":label.stringValue,"remark":remark.stringValue,
+                    "remark":remark.stringValue,
                     "os":selectedRadio(osRadios),
                     "machine":selectedRadio(machineRadios).lowercased()
                 ]
