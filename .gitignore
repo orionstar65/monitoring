@@ -35,3 +35,6 @@ qrc_*.cpp
 
 # Debug logs
 *.log
+
+# Legacy per-device config files (no longer used by v1.5)
+**/settings.ini
