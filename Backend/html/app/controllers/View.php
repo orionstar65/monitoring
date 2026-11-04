@@ -17,7 +17,7 @@ class View extends Base {
     public function index() {
         // Get monitors from database only (no expensive file scanning)
         $monitors = $this->db->fetchAll(
-            "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY m.name ASC"
+            "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.id ASC"
         );
         
         // Add basic status based on database data only
@@ -146,7 +146,7 @@ class View extends Base {
             // This is MUCH faster than the correlated subquery approach
             // Include MAC address in JOIN for path resolution
             $latest_screenshots = $this->db->fetchAll(
-                "SELECT s.*, m.id as monitor_id, m.ip_address, m.mac_address, owner.name AS username, m.name as monitor_name
+                "SELECT s.*, m.id as monitor_id, m.ip_address, m.mac_address, owner.name AS username, CONCAT('Device #',m.id) as monitor_name
                  FROM (
                      SELECT monitor_ip_id, MAX(id) as max_id
                      FROM screenshot_metadata
@@ -277,9 +277,9 @@ class View extends Base {
         // OPTIMIZED: Only select fields needed for status calculation and response
         $monitors = $this->db->fetchAll(
             "SELECT m.id,m.ip_address,m.last_seen_ip,m.mac_address,m.platform,
-                    owner.name AS username,owner.user_no,m.name,m.type,m.last_monitor_tic,m.updated_at,m.created_at
+                    owner.name AS username,owner.user_no,CONCAT('Device #',m.id) AS name,m.type,m.last_monitor_tic,m.updated_at,m.created_at
              FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
-             ORDER BY m.name ASC"
+             ORDER BY owner.name ASC,m.id ASC"
         );
         
         // Add status based on database data only
@@ -571,7 +571,7 @@ class View extends Base {
     public function logs() {
         // Get monitors from database
         $monitors = $this->db->fetchAll(
-            "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY m.name ASC"
+            "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.id ASC"
         );
         
         // Add basic status based on database data only
