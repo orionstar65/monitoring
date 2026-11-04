@@ -58,6 +58,7 @@ private:
 
     QString authToken;
     QString activeUserNo;
+    QString pendingUserNo;
     QString directoryError;
     QJsonArray assignedMonitors;
     int monitorId=0;
