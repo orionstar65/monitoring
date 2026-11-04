@@ -26,7 +26,7 @@ ob_start();
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
     <div>
       <div class="d-flex flex-wrap gap-2 align-items-center mb-1">
-        <h3 class="mb-0"><?= $e($monitor['name']??'Monitor') ?></h3>
+        <h3 class="mb-0">Monitor #<?= (int)$monitor['id'] ?></h3>
         <span class="badge bg-<?= $statusClass ?>"><?= $status ?></span>
         <?php if($locked): ?><span class="badge text-bg-secondary"><i class="fas fa-lock me-1"></i>Locked</span><?php endif; ?>
       </div>
@@ -42,10 +42,6 @@ ob_start();
         <div class="card-body">
           <form method="post" action="<?= BASE_URL ?>monitors/edit/<?= (int)$monitor['id'] ?>" id="monitor-edit-form">
             <div class="row g-3">
-              <div class="col-12">
-                <label class="form-label" for="name">Label</label>
-                <input class="form-control" id="name" name="name" maxlength="100" required value="<?= $e($_POST['name']??$monitor['name']??'') ?>">
-              </div>
               <div class="col-12">
                 <label class="form-label" for="owner_user_id">Assigned user</label>
                 <select class="form-select" id="owner_user_id" name="owner_user_id">
