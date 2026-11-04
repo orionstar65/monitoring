@@ -2207,8 +2207,8 @@ static void updateUnifiedVisibility(HWND dlg) {
         {SETTINGS_INFO_OS,108,410},
         {4403,13,443},{SETTINGS_MACHINE,108,440},{SETTINGS_MACHINE_DESKTOP,220,440},
         {SETTINGS_INFO_MACHINE,108,443},
-        {4404,13,509},{SETTINGS_MONITOR_IP,108,509},
-        {4405,13,542},{SETTINGS_REMARK,108,539},{SETTINGS_INFO_REMARK,108,542}
+        {4404,13,476},{SETTINGS_MONITOR_IP,108,476},
+        {4405,13,509},{SETTINGS_REMARK,108,506},{SETTINGS_INFO_REMARK,108,509}
     };
     for(const auto& item:monitorLayout)
         SetWindowPos(GetDlgItem(dlg,item.id),nullptr,item.x,item.y-offset,0,0,
