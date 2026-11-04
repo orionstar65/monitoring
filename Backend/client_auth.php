@@ -87,12 +87,8 @@ try {
                 echo json_encode(['error'=>'Selected user was not found']);exit;
             }
             $uid=(int)$user['id'];
-            $st=$db->prepare('SELECT id FROM tbl_monitor_ips WHERE owner_user_id=? LIMIT 1');
-            $st->bind_param('i',$uid);$st->execute();$exists=$st->get_result()->fetch_assoc();$st->close();
-            if($exists){
-                $db->rollback();http_response_code(409);
-                echo json_encode(['error'=>'This user already has devices. Select an existing device to add another.']);exit;
-            }
+            // A User No may own many independent monitors. A lock belongs
+            // only to its monitor, never to the user or a new installation.
             $ip=(string)($_SERVER['REMOTE_ADDR']??'');
             if(!filter_var($ip,FILTER_VALIDATE_IP))throw new RuntimeException('Invalid client address');
             $mac=null;$unlocked=0;
@@ -107,40 +103,27 @@ try {
             echo json_encode(['success'=>true,'token'=>$token,'monitor_id'=>$mid,'user_no'=>$userNo]);exit;
         }catch(Throwable $failure){$db->rollback();throw $failure;}
     }
-    // User No selection registers a monitor-bound device session. The server issues
-    // a monitor-bound session; the client cannot choose another user's monitor.
+    // A fresh machine must register its OWN monitor. Never silently bind its
+    // session to the user's first device (which may be locked on another
+    // physical machine), or inherit somebody else's screenshots and logs.
+    // The existing clients understand no_monitors as Add new... mode.
     if($action==='enroll'){
         $userNo=trim((string)($data['user_no']??''));
-        if(!preg_match('/^[1-9][0-9]{0,14}$/',$userNo)){
-            http_response_code(400);echo json_encode(['error'=>'Select a valid User No']);exit;
+        if(!preg_match('/^[1-9][0-9]{0,14}$/D',$userNo)){
+            http_response_code(400);echo json_encode(['error'=>'Invalid User No']);exit;
         }
-        $attemptKey=hash('sha256',($_SERVER['REMOTE_ADDR']??'').'|enroll');
+        $key=hash('sha256',($_SERVER['REMOTE_ADDR']??'').'|enroll');
         $st=$db->prepare('SELECT COUNT(*) AS hits FROM login_attempts WHERE attempt_key=? AND attempted_at>DATE_SUB(NOW(),INTERVAL 15 MINUTE)');
-        $st->bind_param('s',$attemptKey);$st->execute();$hits=(int)$st->get_result()->fetch_assoc()['hits'];$st->close();
-        if($hits>=30){http_response_code(429);echo json_encode(['error'=>'Too many selections. Try again later']);exit;}
+        $st->bind_param('s',$key);$st->execute();$hits=(int)$st->get_result()->fetch_assoc()['hits'];$st->close();
+        if($hits>=30){http_response_code(429);echo json_encode(['error'=>'Too many enrollment attempts']);exit;}
         $st=$db->prepare('INSERT INTO login_attempts (attempt_key) VALUES (?)');
-        $st->bind_param('s',$attemptKey);$st->execute();$st->close();
-        $db->begin_transaction();
-        try {
-            $st=$db->prepare("SELECT u.id AS user_id,m.id AS monitor_id,m.assignment_locked,m.settings_locked FROM users u JOIN tbl_monitor_ips m ON m.owner_user_id=u.id WHERE u.user_no=? AND u.role IN ('admin','user','viewer') ORDER BY m.id LIMIT 1 FOR UPDATE");
-            $st->bind_param('s',$userNo);$st->execute();$monitor=$st->get_result()->fetch_assoc();$st->close();
-            if(!$monitor){
-                $db->rollback();http_response_code(404);
-                echo json_encode(['error'=>'No monitors assigned.','code'=>'no_monitors','user_no'=>$userNo]);exit;
-            }
-            if(!empty($monitor['settings_locked'])||!empty($monitor['assignment_locked'])){
-                $db->rollback();http_response_code(423);
-                echo json_encode(['error'=>'Settings are locked. Ask your administrator.','code'=>'settings_locked']);exit;
-            }
-            $mid=(int)$monitor['monitor_id'];$uid=(int)$monitor['user_id'];
-            $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);
-            $st=$db->prepare("INSERT INTO client_sessions (token_hash,user_id,monitor_id,session_type,expires_at) VALUES (?,?,?,'device',NULL)");
-            $st->bind_param('sii',$hash,$uid,$mid);$st->execute();$st->close();
-            $db->commit();
-            echo json_encode(['success'=>true,'token'=>$token,'monitor_id'=>$mid,'user_no'=>$userNo,
-                'settings_locked'=>!empty($monitor['assignment_locked'])||!empty($monitor['settings_locked']),
-                'assignment_locked'=>!empty($monitor['assignment_locked'])||!empty($monitor['settings_locked'])]);exit;
-        } catch(Throwable $failure){$db->rollback();throw $failure;}
+        $st->bind_param('s',$key);$st->execute();$st->close();
+        $st=$db->prepare('SELECT id FROM users WHERE user_no=? LIMIT 1');
+        $st->bind_param('s',$userNo);$st->execute();$user=$st->get_result()->fetch_assoc();$st->close();
+        if(!$user){http_response_code(404);echo json_encode(['error'=>'User No not found']);exit;}
+        http_response_code(409);
+        echo json_encode(['success'=>false,'code'=>'no_monitors',
+            'error'=>'Create a monitor for this installation.','user_no'=>$userNo]);exit;
     }
     if($action==='signup'||$action==='login'){
         http_response_code(410);
@@ -171,23 +154,14 @@ try {
                 $db->rollback();http_response_code(423);
                 echo json_encode(['error'=>'Settings are locked. Ask your administrator.','code'=>'settings_locked']);exit;
             }
-            $st=$db->prepare("SELECT u.id AS user_id,m.id AS monitor_id FROM users u
-                JOIN tbl_monitor_ips m ON m.owner_user_id=u.id
-                WHERE u.user_no=? ORDER BY m.id LIMIT 1");
+            $st=$db->prepare('SELECT id FROM users WHERE user_no=? LIMIT 1');
             $st->bind_param('s',$newNo);$st->execute();$target=$st->get_result()->fetch_assoc();$st->close();
-            if(!$target){
-                $db->rollback();http_response_code(404);
-                echo json_encode(['error'=>'No monitors assigned.','code'=>'no_monitors','user_no'=>$newNo]);exit;
-            }
-            $targetUser=(int)$target['user_id'];$targetMonitor=(int)$target['monitor_id'];
-            $st=$db->prepare('UPDATE client_sessions SET revoked_at=NOW() WHERE id=? AND user_id=?');
-            $st->bind_param('ii',$session['id'],$userId);$st->execute();$st->close();
-            $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);
-            $st=$db->prepare("INSERT INTO client_sessions(token_hash,user_id,monitor_id,session_type,expires_at)
-                 VALUES(?,?,?,'device',NULL)");
-            $st->bind_param('sii',$hash,$targetUser,$targetMonitor);$st->execute();$st->close();
-            $db->commit();
-            echo json_encode(['success'=>true,'token'=>$token,'user_no'=>$newNo,'monitor_id'=>$targetMonitor]);exit;
+            $db->rollback();
+            if(!$target){http_response_code(404);echo json_encode(['error'=>'User No not found']);exit;}
+            // Do not switch to another machine's existing monitor.
+            http_response_code(409);
+            echo json_encode(['success'=>false,'code'=>'no_monitors',
+                'error'=>'Create a monitor for this installation.','user_no'=>$newNo]);exit;
         }catch(Throwable $failure){$db->rollback();throw $failure;}
     }
     if($action==='restore'){
@@ -234,9 +208,13 @@ try {
             }
         }
         // Only a monitor owned by this session's user may be activated.
-        $st=$db->prepare('SELECT id FROM tbl_monitor_ips WHERE id=? AND owner_user_id=?');
+        $st=$db->prepare('SELECT id,settings_locked,assignment_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=?');
         $st->bind_param('ii',$monitorId,$userId);$st->execute();$owned=$st->get_result()->fetch_assoc();$st->close();
         if(!$owned){http_response_code(403);echo json_encode(['error'=>'Monitor not assigned to your account']);exit;}
+        if($currentId!==$monitorId && ($owned['settings_locked']||$owned['assignment_locked'])){
+            http_response_code(423);
+            echo json_encode(['error'=>'The selected monitor is locked on another installation.','code'=>'settings_locked']);exit;
+        }
         $st=$db->prepare('UPDATE client_sessions SET monitor_id=? WHERE id=? AND user_id=?');
         $st->bind_param('iii',$monitorId,$session['id'],$userId);$st->execute();$st->close();
         echo json_encode(['success'=>true,'monitor_id'=>(int)$monitorId]);exit;
