@@ -20,6 +20,7 @@ $ubuntu=$read('Ubuntu/ConfigDialog.cpp');
 $view=$read('Backend/html/app/controllers/View.php');
 $page=$read('Backend/html/app/views/view/index.php');
 $legacy=$read('Backend/migrate_legacy_monitor_data_once.php');
+$media=$read('Backend/html/app/services/MonitorMediaPaths.php');
 
 $tests=[
  'Login uses exact User No'=>str_contains($auth,'WHERE user_no=:user_no LIMIT 1'),
@@ -52,7 +53,8 @@ $tests=[
  'Live page does not call removed log modals'=>!str_contains($page,'currentLogData')
      &&!str_contains($page,'loadLogsForMonitor('),
  'Live page escapes device metadata'=>str_contains($page,'function escapeViewerText(value)'),
- 'Live media paths handle legacy prefixes'=>str_contains($view,"\$marker='/html/data/'"),
+ 'Live media paths handle legacy prefixes'=>str_contains($media,'monitorPublicMediaPath(')&&str_contains($media,"'/html/data/'"),
+ 'Media route uses canonical resolver'=>str_contains($view,'monitorResolveMediaPath($requested)'),
  'Missing thumbnails use original screenshots'=>str_contains($view,'private function preferredScreenshotPath('),
  'Log API uses browser event date'=>str_contains($view,'"visit_date >= :start_date"'),
  'Legacy migration CLI only'=>str_contains($legacy,"PHP_SAPI!=='cli'"),
@@ -60,6 +62,10 @@ $tests=[
  'Legacy apply requires SQL backup'=>str_contains($legacy,'filesize($backup)<1024'),
  'Legacy migration does not rename files'=>!str_contains($legacy,'rename(')&&!str_contains($legacy,'unlink('),
  'Legacy migration does not reassign monitors'=>!str_contains($legacy,'UPDATE screenshot_metadata SET monitor_ip_id'),
+ 'Monitor label migration exists'=>str_contains($read('Backend/migrations/2026_11_04_drop_monitor_name_v15.sql'),'DROP COLUMN name'),
+ 'Fresh machines do not bind existing monitor'=>str_contains($api,"if(\$action==='enroll')")&&str_contains($api,"'code'=>'no_monitors'"),
+ 'New monitor bootstrap supports existing users'=>!str_contains($api,'This user already has devices.'),
+ 'Lock is monitor-scoped not user-scoped'=>str_contains($api,'SELECT owner_user_id,assignment_locked,settings_locked FROM tbl_monitor_ips'),
  'Windows v1.5'=>str_contains($read('Windows/CMakeLists.txt'),'VERSION 1.5'),
  'macOS v1.5'=>str_contains($read('Mac/MonitorClient.xcodeproj/project.pbxproj'),'MARKETING_VERSION = 1.5;'),
  'Ubuntu v1.5'=>str_contains($read('Ubuntu/version.h'),'MONITORAPP_VERSION "1.5"'),
