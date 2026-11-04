@@ -98,7 +98,6 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     monitorGroup=new QGroupBox("Monitor Settings",page);
     auto *monitorForm=new QFormLayout(monitorGroup);
     monitorSelector=new QComboBox(monitorGroup);
-    labelEdit=new QLineEdit(monitorGroup);
     osRadios=new QButtonGroup(monitorGroup);
     auto *osRow=new QWidget(monitorGroup);
     auto *osLayout=new QHBoxLayout(osRow);osLayout->setContentsMargins(0,0,0,0);
@@ -119,22 +118,17 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     }
     monitorIPLabel=new QLabel("—",monitorGroup);
     remarkEdit=new QLineEdit(monitorGroup);
-    labelInfo=new QLabel("—",monitorGroup);
     osInfo=new QLabel("—",monitorGroup);
     machineInfo=new QLabel("—",monitorGroup);
     remarkInfo=new QLabel("—",monitorGroup);
     remarkInfo->setWordWrap(true);
-    labelInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
     remarkInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    labelStack=new QStackedWidget(monitorGroup);
-    labelStack->addWidget(labelInfo);labelStack->addWidget(labelEdit);
     osStack=new QStackedWidget(monitorGroup);
     osStack->addWidget(osInfo);osStack->addWidget(osRow);
     machineStack=new QStackedWidget(monitorGroup);
     machineStack->addWidget(machineInfo);machineStack->addWidget(machineRow);
     remarkStack=new QStackedWidget(monitorGroup);
     remarkStack->addWidget(remarkInfo);remarkStack->addWidget(remarkEdit);
-    clientNameEdit=labelEdit;
     editButton=new QPushButton("Edit",monitorGroup);
     auto *selectionRow=new QWidget(monitorGroup);
     auto *selectionLayout=new QHBoxLayout(selectionRow);
@@ -142,7 +136,6 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     selectionLayout->addWidget(monitorSelector,1);
     selectionLayout->addWidget(editButton);
     monitorForm->addRow("Monitor",selectionRow);
-    monitorForm->addRow("Label",labelStack);
     monitorForm->addRow("OS",osStack);
     monitorForm->addRow("Machine",machineStack);
     monitorForm->addRow("IP address",monitorIPLabel);
@@ -180,14 +173,13 @@ QString ConfigDialog::settingsPath() const {
 }
 QString ConfigDialog::getServerIP() const {return serverIPEdit->text().trimmed();}
 int ConfigDialog::getServerPort() const {return serverPortEdit->value();}
-QString ConfigDialog::getClientName() const {return clientNameEdit->text().trimmed();}
+QString ConfigDialog::getClientName() const {return "Device #"+QString::number(monitorId);}
 void ConfigDialog::loadSettings(){
     QString path=settingsPath();
     if(!QFile::exists(path))path="settings.ini";
     QSettings cfg(path,QSettings::IniFormat);
     serverIPEdit->setText(cfg.value("Server/ip","192.168.1.45").toString());
     serverPortEdit->setValue(cfg.value("Server/port",8924).toInt());
-    labelEdit->setText(cfg.value("Client/name","Monitor").toString());
     notificationsCheck->setChecked(cfg.value("Notifications/enabled",true).toBool());
 }
 void ConfigDialog::saveSettings(){
@@ -196,7 +188,6 @@ void ConfigDialog::saveSettings(){
         QSettings cfg(path,QSettings::IniFormat);
         cfg.setValue("Server/ip",getServerIP());
         cfg.setValue("Server/port",getServerPort());
-        cfg.setValue("Client/name",labelEdit->text());
         cfg.setValue("Notifications/enabled",notificationsCheck->isChecked());
         cfg.setValue("Monitor/id",monitorId);
         cfg.setValue("User/no",userSelector->currentData().toString());
@@ -343,7 +334,7 @@ void ConfigDialog::updateMonitorList(const QJsonArray &items){
     for(const auto &value:items){
         const QJsonObject m=value.toObject();
         monitorSelector->addItem(QString("%1 · %2 · %3 · %4").arg(
-            m.value("name").toString("Monitor"),m.value("platform").toString("—"),
+            QString("Device #%1").arg(m.value("id").toInt()),m.value("platform").toString("—"),
             m.value("type").toString("Desktop"),m.value("ip_address").toString("—")),
             m.value("id").toInt());
     }
@@ -361,7 +352,7 @@ void ConfigDialog::onMonitorChanged(int){
     }
     if(id==-1){
         monitorEditing=true;
-        labelEdit->clear();remarkEdit->clear();
+        remarkEdit->clear();
         monitorIPLabel->setText("—");
         settingsLocked=false;
         updateUI();return;
@@ -390,11 +381,8 @@ void ConfigDialog::onMonitorChanged(int){
     for(const auto &value:assignedMonitors){
         const QJsonObject m=value.toObject();
         if(m.value("id").toInt()!=id)continue;
-        const QString label=m.value("name").toString();
         const QString remark=m.value("remark").toString();
-        labelEdit->setText(label);
         remarkEdit->setText(remark);
-        labelInfo->setText(label.isEmpty()?"—":label);
         remarkInfo->setText(remark.isEmpty()?"—":remark);
         const QString platform=m.value("platform").toString("Ubuntu");
         osInfo->setText(platform);
@@ -452,7 +440,6 @@ void ConfigDialog::updateUI(){
     const bool adding=(enrolled||pending)&&selectedId==-1&&!locked;
     const bool existing=enrolled&&selectedId>0;
     const bool editing=!locked&&(adding||(existing&&monitorEditing));
-    labelStack->setCurrentIndex(editing?1:0);
     osStack->setCurrentIndex(editing?1:0);
     machineStack->setCurrentIndex(editing?1:0);
     remarkStack->setCurrentIndex(editing?1:0);
@@ -555,8 +542,7 @@ void ConfigDialog::onLockSettingsClicked(){
         "Lock monitor settings now? Only an administrator can unlock this monitor in the web portal.")
        !=QMessageBox::Yes)return;
     const auto reply=authRequest({
-        {"action","lock_settings"},{"label",labelEdit->text().trimmed()},
-        {"remark",remarkEdit->text().trimmed()},
+        {"action","lock_settings"},{"remark",remarkEdit->text().trimmed()},
         {"os",osRadios->checkedButton()?osRadios->checkedButton()->text():"Ubuntu"},
         {"machine",machineRadios->checkedButton()?machineRadios->checkedButton()->text().toLower():"desktop"}
     },true);
@@ -571,7 +557,7 @@ void ConfigDialog::onSaveClicked(){
     if(!saveServerIfChanged())return;
     if(!pendingUserNo.isEmpty()){
         QJsonObject request={{"action","bootstrap_monitor"},{"user_no",pendingUserNo},
-            {"label",labelEdit->text().trimmed()},{"remark",remarkEdit->text().trimmed()},
+            {"remark",remarkEdit->text().trimmed()},
             {"os",osRadios->checkedButton()?osRadios->checkedButton()->text():"Ubuntu"},
             {"machine",machineRadios->checkedButton()?machineRadios->checkedButton()->text().toLower():"desktop"}};
         const auto result=authRequest(request,false);
@@ -600,7 +586,7 @@ void ConfigDialog::onSaveClicked(){
     const QString os=osRadios->checkedButton()?osRadios->checkedButton()->text():"Ubuntu";
     const QString machine=machineRadios->checkedButton()?machineRadios->checkedButton()->text().toLower():"desktop";
     QJsonObject request={{"action",id==-1?"create_monitor":"save_monitor"},
-        {"label",labelEdit->text().trimmed()},{"remark",remarkEdit->text().trimmed()},
+        {"remark",remarkEdit->text().trimmed()},
         {"os",os},{"machine",machine}};
     if(id>0)request.insert("monitor_id",id);
     if(id>0&&id!=monitorId){
