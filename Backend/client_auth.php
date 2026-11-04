@@ -2,18 +2,15 @@
 require_once __DIR__.'/services/ClientIdentity.php';
 requireSecureRequest();
 function clientMonitorFields(array $data): array {
-    $name=trim((string)($data['label']??$data['name']??''));
     $remark=trim((string)($data['remark']??''));
     $os=trim((string)($data['os']??$data['platform']??''));
     $type=strtolower(trim((string)($data['machine']??$data['type']??'desktop')));
     $map=['win'=>'Windows','windows'=>'Windows','mac'=>'Mac','macos'=>'Mac','ubuntu'=>'Ubuntu'];
     $platform=$map[strtolower($os)]??'';
-    if($name==='')$name='Monitor';
-    if(strlen($name)>100||preg_match('/[<>\\x00-\\x1f]/',$name))return ['error'=>'Invalid monitor label'];
-    if(strlen($remark)>500||preg_match('/[<>\\x00-\\x1f]/',$remark))return ['error'=>'Invalid remark'];
+     if(strlen($remark)>500||preg_match('/[<>\\x00-\\x1f]/',$remark))return ['error'=>'Invalid remark'];
     if(!$platform)return ['error'=>'Select Windows, Mac or Ubuntu'];
     if(!in_array($type,['laptop','desktop'],true))return ['error'=>'Select Laptop or Desktop'];
-    return ['name'=>$name,'platform'=>$platform,'type'=>$type,'remark'=>$remark];
+    return ['platform'=>$platform,'type'=>$type,'remark'=>$remark];
 }
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
@@ -92,9 +89,9 @@ try {
             $ip=(string)($_SERVER['REMOTE_ADDR']??'');
             if(!filter_var($ip,FILTER_VALIDATE_IP))throw new RuntimeException('Invalid client address');
             $mac=null;$unlocked=0;
-            $name=$fields['name'];$platform=$fields['platform'];$type=$fields['type'];$remark=$fields['remark'];
-            $st=$db->prepare('INSERT INTO tbl_monitor_ips(name,ip_address,mac_address,owner_user_id,platform,type,remark,assignment_locked,settings_locked) VALUES (?,?,?,?,?,?,?,?,?)');
-            $st->bind_param('sssisssii',$name,$ip,$mac,$uid,$platform,$type,$remark,$unlocked,$unlocked);
+            $platform=$fields['platform'];$type=$fields['type'];$remark=$fields['remark'];
+            $st=$db->prepare('INSERT INTO tbl_monitor_ips(ip_address,mac_address,owner_user_id,platform,type,remark,assignment_locked,settings_locked) VALUES (?,?,?,?,?,?,?,?)');
+            $st->bind_param('ssisssii',$ip,$mac,$uid,$platform,$type,$remark,$unlocked,$unlocked);
             $st->execute();$mid=(int)$db->insert_id;$st->close();
             $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);
             $st=$db->prepare("INSERT INTO client_sessions(token_hash,user_id,monitor_id,session_type,expires_at) VALUES (?,?,?,'device',NULL)");
@@ -167,7 +164,7 @@ try {
     if($action==='restore'){
         $st=$db->prepare('SELECT id,name,user_no FROM users WHERE id=?');
         $st->bind_param('i',$userId);$st->execute();$user=$st->get_result()->fetch_assoc();$st->close();
-        $st=$db->prepare('SELECT id,name,ip_address,platform,type,remark,assignment_locked,settings_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY name,id');
+        $st=$db->prepare('SELECT id,CONCAT('Device #',id) AS name,ip_address,platform,type,remark,assignment_locked,settings_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY id');
         $st->bind_param('i',$userId);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
         $monitors=array_map(static function(array $m):array {
             $m['id']=(int)$m['id'];
@@ -185,7 +182,7 @@ try {
             'monitor_id'=>$monitorId,'settings_locked'=>$locked,'assignment_locked'=>$locked]);exit;
     }
     if($action==='monitors'){
-        $st=$db->prepare('SELECT id,name,ip_address,platform,type,remark,assignment_locked,settings_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY name,id');
+        $st=$db->prepare('SELECT id,CONCAT('Device #',id) AS name,ip_address,platform,type,remark,assignment_locked,settings_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY id');
         $st->bind_param('i',$userId);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
         $monitors=array_map(static function(array $m):array {
             $m['id']=(int)$m['id'];
@@ -239,9 +236,9 @@ try {
             }
             if(!(int)$row['settings_locked']&&!(int)$row['assignment_locked']){
                 if($hasFields){
-                    $name=$fields['name'];$platform=$fields['platform'];$type=$fields['type'];$remark=$fields['remark'];
-                    $st=$db->prepare('UPDATE tbl_monitor_ips SET name=?,platform=?,type=?,remark=?,settings_locked=1,assignment_locked=1 WHERE id=? AND owner_user_id=?');
-                    $st->bind_param('ssssii',$name,$platform,$type,$remark,$mid,$userId);
+                    $platform=$fields['platform'];$type=$fields['type'];$remark=$fields['remark'];
+                    $st=$db->prepare('UPDATE tbl_monitor_ips SET platform=?,type=?,remark=?,settings_locked=1,assignment_locked=1 WHERE id=? AND owner_user_id=?');
+                    $st->bind_param('sssii',$platform,$type,$remark,$mid,$userId);
                 }else{
                     $st=$db->prepare('UPDATE tbl_monitor_ips SET settings_locked=1,assignment_locked=1 WHERE id=? AND owner_user_id=?');
                     $st->bind_param('ii',$mid,$userId);
@@ -280,8 +277,8 @@ try {
             $st->bind_param('i',$userId);$st->execute();$owner=$st->get_result()->fetch_assoc();$st->close();
             if(!$owner)throw new RuntimeException('Account not found');
             $mac=null;$locked=0;
-            $st=$db->prepare('INSERT INTO tbl_monitor_ips (name,ip_address,mac_address,owner_user_id,platform,type,remark,assignment_locked,settings_locked) VALUES (?,?,?,?,?,?,?,?,?)');
-            $st->bind_param('sssisssii',$fields['name'],$ip,$mac,$userId,$fields['platform'],$fields['type'],$fields['remark'],$locked,$locked);
+            $st=$db->prepare('INSERT INTO tbl_monitor_ips (ip_address,mac_address,owner_user_id,platform,type,remark,assignment_locked,settings_locked) VALUES (?,?,?,?,?,?,?,?)');
+            $st->bind_param('ssisssii',$ip,$mac,$userId,$fields['platform'],$fields['type'],$fields['remark'],$locked,$locked);
             $st->execute();$newId=(int)$db->insert_id;$st->close();
             $db->commit();
             echo json_encode(['success'=>true,'monitor_id'=>$newId]);exit;
@@ -303,8 +300,8 @@ try {
         if(isset($fields['error'])){http_response_code(400);echo json_encode(['error'=>$fields['error']]);exit;}
         // Make the lock condition part of the UPDATE, eliminating the
         // check-then-update race with an administrator locking this monitor.
-        $st=$db->prepare('UPDATE tbl_monitor_ips SET name=?,platform=?,type=?,remark=? WHERE id=? AND owner_user_id=? AND assignment_locked=0 AND settings_locked=0');
-        $st->bind_param('ssssii',$fields['name'],$fields['platform'],$fields['type'],$fields['remark'],$monitorId,$userId);
+        $st=$db->prepare('UPDATE tbl_monitor_ips SET platform=?,type=?,remark=? WHERE id=? AND owner_user_id=? AND assignment_locked=0 AND settings_locked=0');
+        $st->bind_param('sssii',$fields['platform'],$fields['type'],$fields['remark'],$monitorId,$userId);
         $st->execute();$changed=$st->affected_rows;$st->close();
         if($changed===0){
             // A no-op edit is valid; a newly locked record is not.
