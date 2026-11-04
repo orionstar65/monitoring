@@ -32,19 +32,25 @@ try {
         http_response_code(400);echo json_encode(['error'=>'Invalid JSON request']);exit;
     }
     $action=$data['action'];
-    // No-code enrollment is a deliberate trust decision. Require the server
-    // administrator to opt in before publishing a User No directory or issuing
-    // monitor-bound bearer credentials without a separate identity proof.
-    if(($action==='directory'||$action==='enroll') && getenv('MONITOR_ENABLE_USER_NO_ENROLL')!=='1'){
+    // This unauthenticated directory/enrollment flow is allowed only after
+    // explicit setup. A one-time DB flag enables trusted-LAN requests;
+    // deployments that require remote access may still use the explicit env
+    // opt-in and must separately restrict public access by firewall/VPN.
+    if(in_array($action,['directory','enroll'],true)
+       && !monitoringNoCodeEnrollmentAllowed($db)){
         http_response_code(503);
-        echo json_encode(['error'=>'User list disabled. Ask admin to set MONITOR_ENABLE_USER_NO_ENROLL=1 on trusted LAN/VPN.']);exit;
+        echo json_encode([
+            'success'=>false,
+            'code'=>'directory_disabled',
+            'error'=>'User list disabled on this connection. Run the one-time backend setup, then connect from a trusted LAN/VPN.'
+        ]);exit;
     }
     // Restricted to explicitly enabled, trusted deployments: return each eligible
     // user's number, display name and the IP of their first assigned monitor.
     if($action==='directory'){
         $st=$db->prepare("SELECT u.user_no,u.name,
                (SELECT m.ip_address FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id ORDER BY m.id LIMIT 1) AS ip_address
-               FROM users u WHERE u.role IN ('user','viewer') AND u.user_no IS NOT NULL
+               FROM users u WHERE u.user_no IS NOT NULL
                ORDER BY u.user_no LIMIT 10000");
         $st->execute();$rows=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
         echo json_encode(['success'=>true,'users'=>array_map(static fn($u)=>[
@@ -68,7 +74,7 @@ try {
         $st->bind_param('s',$attemptKey);$st->execute();$st->close();
         $db->begin_transaction();
         try {
-            $st=$db->prepare("SELECT u.id AS user_id,m.id AS monitor_id,m.assignment_locked FROM users u JOIN tbl_monitor_ips m ON m.owner_user_id=u.id WHERE u.user_no=? AND u.role IN ('user','viewer') ORDER BY m.id LIMIT 1 FOR UPDATE");
+            $st=$db->prepare("SELECT u.id AS user_id,m.id AS monitor_id,m.assignment_locked FROM users u JOIN tbl_monitor_ips m ON m.owner_user_id=u.id WHERE u.user_no=? AND u.role IN ('admin','user','viewer') ORDER BY m.id LIMIT 1 FOR UPDATE");
             $st->bind_param('s',$userNo);$st->execute();$monitor=$st->get_result()->fetch_assoc();$st->close();
             if(!$monitor){
                 $db->rollback();http_response_code(404);
@@ -103,7 +109,7 @@ try {
             $st->bind_param('i',$mid);$st->execute();$monitor=$st->get_result()->fetch_assoc();$st->close();
             if(!$monitor||(int)$monitor['owner_user_id']!==$userId){$db->rollback();http_response_code(403);echo json_encode(['error'=>'Assignment changed. Select the user again or ask your administrator.']);exit;}
             if((int)$monitor['assignment_locked']===1){$db->rollback();http_response_code(423);echo json_encode(['error'=>'User assignment is locked. Ask your administrator to edit the monitor.','code'=>'assignment_locked']);exit;}
-            $st=$db->prepare("SELECT id FROM users WHERE user_no=? AND role IN ('user','viewer') LIMIT 1");
+            $st=$db->prepare("SELECT id FROM users WHERE user_no=? AND role IN ('admin','user','viewer') LIMIT 1");
             $st->bind_param('s',$newNo);$st->execute();$target=$st->get_result()->fetch_assoc();$st->close();
             if(!$target){$db->rollback();http_response_code(404);echo json_encode(['error'=>'User No not found']);exit;}
             $newId=(int)$target['id'];
