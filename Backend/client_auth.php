@@ -164,7 +164,7 @@ try {
     if($action==='restore'){
         $st=$db->prepare('SELECT id,name,user_no FROM users WHERE id=?');
         $st->bind_param('i',$userId);$st->execute();$user=$st->get_result()->fetch_assoc();$st->close();
-        $st=$db->prepare('SELECT id,CONCAT('Device #',id) AS name,ip_address,platform,type,remark,assignment_locked,settings_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY id');
+        $st=$db->prepare("SELECT id,CONCAT('Device #',id) AS name,ip_address,platform,type,remark,assignment_locked,settings_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY id");
         $st->bind_param('i',$userId);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
         $monitors=array_map(static function(array $m):array {
             $m['id']=(int)$m['id'];
@@ -182,7 +182,7 @@ try {
             'monitor_id'=>$monitorId,'settings_locked'=>$locked,'assignment_locked'=>$locked]);exit;
     }
     if($action==='monitors'){
-        $st=$db->prepare('SELECT id,CONCAT('Device #',id) AS name,ip_address,platform,type,remark,assignment_locked,settings_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY id');
+        $st=$db->prepare("SELECT id,CONCAT('Device #',id) AS name,ip_address,platform,type,remark,assignment_locked,settings_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY id");
         $st->bind_param('i',$userId);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
         $monitors=array_map(static function(array $m):array {
             $m['id']=(int)$m['id'];
