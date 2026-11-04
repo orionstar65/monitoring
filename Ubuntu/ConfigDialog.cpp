@@ -354,6 +354,11 @@ void ConfigDialog::updateMonitorList(const QJsonArray &items){
 }
 void ConfigDialog::onMonitorChanged(int){
     const int id=monitorSelector->currentData().toInt();
+    if((settingsLocked||assignmentLocked)&&id!=monitorId&&!authToken.isEmpty()){
+        const QSignalBlocker blocked(monitorSelector);
+        monitorSelector->setCurrentIndex(monitorSelector->findData(monitorId));
+        return;
+    }
     if(id==-1){
         monitorEditing=true;
         labelEdit->clear();remarkEdit->clear();
@@ -414,7 +419,7 @@ void ConfigDialog::onUserChanged(int){
         return;
     }
     if(number.isEmpty()||number==activeUserNo)return;
-    if(assignmentLocked&&!authToken.isEmpty()){
+    if((assignmentLocked||settingsLocked)&&!authToken.isEmpty()){
         QMessageBox::warning(this,"Assignment locked",
             "User assignment is locked. Ask your administrator to edit this monitor.");
         const QSignalBlocker blocked(userSelector);
@@ -428,32 +433,37 @@ void ConfigDialog::onUserChanged(int){
 void ConfigDialog::updateUI(){
     const bool enrolled=!authToken.isEmpty()&&monitorId>0;
     const bool pending=!pendingUserNo.isEmpty();
+    const bool locked=enrolled&&(settingsLocked||assignmentLocked);
     monitorGroup->setVisible(enrolled||pending);
     logoutButton->setVisible(enrolled);
-    logoutButton->setEnabled(enrolled&&!assignmentLocked);
-    userSelector->setEnabled(!enrolled||!assignmentLocked);
-    const bool hasLock=enrolled&&assignmentLocked;
+    logoutButton->setEnabled(enrolled&&!locked);
+    userSelector->setEnabled(!locked);
+    monitorSelector->setEnabled(!locked);
+    serverIPEdit->setEnabled(!locked);
+    serverPortEdit->setEnabled(!locked);
+    testButton->setEnabled(!locked);
+    const bool hasLock=locked;
     assignmentStatusLabel->setVisible(hasLock||!directoryError.isEmpty());
     if(hasLock)
         assignmentStatusLabel->setText("User selection is locked. Ask your administrator to edit.");
     else if(!directoryError.isEmpty())
         assignmentStatusLabel->setText(directoryError);
     const int selectedId=monitorSelector->currentData().toInt();
-    const bool adding=(enrolled||pending)&&selectedId==-1;
+    const bool adding=(enrolled||pending)&&selectedId==-1&&!locked;
     const bool existing=enrolled&&selectedId>0;
-    const bool editing=adding||(existing&&monitorEditing&&!settingsLocked);
+    const bool editing=!locked&&(adding||(existing&&monitorEditing));
     labelStack->setCurrentIndex(editing?1:0);
     osStack->setCurrentIndex(editing?1:0);
     machineStack->setCurrentIndex(editing?1:0);
     remarkStack->setCurrentIndex(editing?1:0);
-    editButton->setVisible(existing&&!settingsLocked);
+    editButton->setVisible(existing&&!locked);
     editButton->setText(editing?"Cancel":"Edit");
     saveButton->setText(adding?"Add Monitor":enrolled?"Save Monitor":"Save Server");
     saveButton->setVisible((!enrolled&&!pending)||editing);
     saveButton->setEnabled((!enrolled&&!pending)||editing);
     lockSettingsButton->setVisible(existing);
-    lockSettingsButton->setEnabled(existing&&!settingsLocked);
-    lockSettingsButton->setText(settingsLocked?"Settings Locked":"Lock Settings");
+    lockSettingsButton->setEnabled(existing&&!locked);
+    lockSettingsButton->setText(locked?"Settings Locked":"Lock Settings");
 }
 void ConfigDialog::onPairClicked(){
     if(!saveServerIfChanged())return;
@@ -495,7 +505,7 @@ void ConfigDialog::onPairClicked(){
 }
 void ConfigDialog::onSwitchClicked(){
     if(!saveServerIfChanged())return;
-    if(assignmentLocked){QMessageBox::warning(this,"Assignment locked","Ask your administrator to edit this monitor.");return;}
+    if(assignmentLocked||settingsLocked){QMessageBox::warning(this,"Assignment locked","Ask your administrator to edit this monitor.");return;}
     const auto result=authRequest({{"action","switch_user"},{"user_no",userSelector->currentData().toString()}},true);
     if(!result.value("success").toBool()){
         if(result.value("code").toString()=="no_monitors"){
@@ -514,7 +524,7 @@ void ConfigDialog::onSwitchClicked(){
     emit sessionStateChanged();
 }
 void ConfigDialog::onLogoutClicked(){
-    if(assignmentLocked){
+    if(assignmentLocked||settingsLocked){
         QMessageBox::warning(this,"Assignment locked","Ask your administrator to edit this monitor.");
         return;
     }
@@ -530,7 +540,7 @@ void ConfigDialog::onLogoutClicked(){
 }
 void ConfigDialog::onEditClicked(){
     const int id=monitorSelector->currentData().toInt();
-    if(id<1||settingsLocked)return;
+    if(id<1||settingsLocked||assignmentLocked)return;
     if(monitorEditing){
         onMonitorChanged(monitorSelector->currentIndex()); // discard unsaved edits
     }else{
@@ -540,7 +550,7 @@ void ConfigDialog::onEditClicked(){
 }
 
 void ConfigDialog::onLockSettingsClicked(){
-    if(authToken.isEmpty()||settingsLocked)return;
+    if(authToken.isEmpty()||settingsLocked||assignmentLocked)return;
     if(QMessageBox::question(this,"Lock monitor settings",
         "Lock monitor settings now? Only an administrator can unlock this monitor in the web portal.")
        !=QMessageBox::Yes)return;
@@ -581,7 +591,7 @@ void ConfigDialog::onSaveClicked(){
     if(authToken.isEmpty()){connectionStatusLabel->setText("● Server saved · select User No");return;}
     const int id=monitorSelector->currentData().toInt();
     if(id>0&&!monitorEditing)return;
-    if(settingsLocked&&id!=-1){
+    if((settingsLocked||assignmentLocked)&&id!=-1){
         QMessageBox::warning(this,"Settings locked","Ask your administrator to unlock this monitor.");return;
     }
     if(id<1 && id!=-1){
