@@ -114,7 +114,7 @@ class Monitors extends Base {
         }
         
         $accounts=$this->db->fetchAll("SELECT u.id,u.name,u.user_no,
-            (SELECT m.ip_address FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id ORDER BY m.id LIMIT 1) AS ip_address
+            (SELECT COUNT(*) FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id) AS device_count
             FROM users u ORDER BY u.name,u.id");
         $this->view('monitors/create', ['error' => $error ?? null,'accounts'=>$accounts]);
     }
