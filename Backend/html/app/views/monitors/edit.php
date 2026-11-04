@@ -150,6 +150,16 @@ ob_start();
                         <div class="form-text">While locked, the desktop app cannot change its selected user. Only administrators can reassign or unlock this monitor.</div>
                     </div>
                     <div class="mb-3">
+                        <label class="form-label" for="settings_locked">Monitor settings lock</label>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch"
+                                name="settings_locked" id="settings_locked" value="1"
+                                <?= !empty($monitor['settings_locked'])?'checked':'' ?>>
+                            <label class="form-check-label" for="settings_locked">Lock monitor settings</label>
+                        </div>
+                        <div class="form-text">A locked device cannot change its monitor label, OS, machine type or remark. Only an administrator can unlock it here.</div>
+                    </div>
+                    <div class="mb-3">
                         <label for="slack_id" class="form-label">
                             <i class="fab fa-slack me-1"></i>Slack ID
                         </label>
