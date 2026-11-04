@@ -11,6 +11,16 @@ schema and native client behavior; the desktop build/version numbers are not bum
   **Switching user does not transfer existing monitor ownership.**
 - Monitor selector includes **Add new...**. Saving that choice creates a monitor
   owned by the selected user and selects it for this device session.
+- An existing monitor initially displays its **Label, OS, Machine, IP and
+  Remark as read-only information**. Click **Edit** to show input fields and
+  radio buttons; **Cancel** restores the previous values. **Add new...**
+  enters edit mode automatically.
+- **Lock Settings** appears in the bottom action row immediately to the
+  left of **Close** on Windows, macOS and Ubuntu. The Save action is displayed
+  only when editing or adding a monitor (or saving initial server settings).
+- The desktop clients clear the temporary first-device state when the user
+  selector changes or returns to the previously authenticated user; no
+  instructional banners appear for accounts with zero monitors.
 - A user with zero devices can choose **Add new...** and explicitly create their
   first monitor. This uses the existing trusted-LAN enrollment gate.
 - OS is a radio group (Windows / Mac / Ubuntu); Machine is a separate radio
