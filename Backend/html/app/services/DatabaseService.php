@@ -1012,7 +1012,7 @@ class DatabaseService {
                 FROM usb_device_logs 
                 GROUP BY monitor_ip_id
             ) u ON m.id = u.monitor_ip_id
-            ORDER BY COALESCE(m.slack_id, owner.name), m.name
+            ORDER BY COALESCE(m.slack_id, owner.name), m.id
         ");
         
         $stmt->execute();
@@ -1054,7 +1054,7 @@ class DatabaseService {
             SELECT 
                 m.id,
                 m.ip_address,
-                m.name,
+                CONCAT('Device #',m.id) AS name,
                 owner.name AS username,
                 m.last_monitor_tic,
                 m.last_browser_tic,
