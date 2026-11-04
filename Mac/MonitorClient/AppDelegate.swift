@@ -2825,10 +2825,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         let monitorPane = section("Monitor Settings")
         let picker = NSPopUpButton()
-        picker.widthAnchor.constraint(equalToConstant: 330).isActive = true
+        picker.widthAnchor.constraint(equalToConstant: 246).isActive = true
+        let edit = action("Edit", "edit")
+        let monitorSelection = NSStackView(views: [picker, edit])
+        monitorSelection.orientation = .horizontal
+        monitorSelection.spacing = 8
         let label = entry("Label")
         let remark = entry("Remark")
         let monitorIP = text("—")
+        let labelInfo = text("—")
+        let osInfo = text("—")
+        let machineInfo = text("—")
+        let remarkInfo = text("—")
         func radioRow(_ choices: [String], selected: String) -> (NSStackView, [NSButton]) {
             let radios = choices.map { title -> NSButton in
                 let button = NSButton(radioButtonWithTitle: title, target: nil, action: nil)
@@ -2848,34 +2856,39 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         func chooseRadio(_ radios: [NSButton], value: String) {
             for button in radios { button.state = button.title == value ? .on : .off }
         }
-        monitorPane.addArrangedSubview(line("Monitor", picker))
-        monitorPane.addArrangedSubview(line("Label", label))
-        monitorPane.addArrangedSubview(line("OS", osRow))
-        monitorPane.addArrangedSubview(line("Machine", machineRow))
+        monitorPane.addArrangedSubview(line("Monitor", monitorSelection))
+        let nameEditRow = line("Label", label)
+        let nameInfoRow = line("Label", labelInfo)
+        let osEditRow = line("OS", osRow)
+        let osInfoRow = line("OS", osInfo)
+        let machineEditRow = line("Machine", machineRow)
+        let machineInfoRow = line("Machine", machineInfo)
+        let remarkEditRow = line("Remark", remark)
+        let remarkInfoRow = line("Remark", remarkInfo)
+        for row in [nameInfoRow, nameEditRow, osInfoRow, osEditRow,
+                    machineInfoRow, machineEditRow] { monitorPane.addArrangedSubview(row) }
         monitorPane.addArrangedSubview(line("IP address", monitorIP))
-        monitorPane.addArrangedSubview(line("Remark", remark))
+        for row in [remarkInfoRow, remarkEditRow] { monitorPane.addArrangedSubview(row) }
         let save = action("Save Monitor", "save")
-        let lockSettings = action("Lock Settings", "lock")
-        let monitorActions = NSStackView(views: [save, lockSettings])
-        monitorActions.orientation = .horizontal
-        monitorActions.spacing = 10
-        monitorPane.addArrangedSubview(line("", monitorActions))
-        let monitorNote = text("Monitor assignment is controlled by the server.")
-        monitorNote.textColor = .secondaryLabelColor
-        monitorPane.addArrangedSubview(monitorNote)
+        monitorPane.addArrangedSubview(line("", save))
         stack.addArrangedSubview(monitorPane)
         rule()
         let notifications = NSButton(checkboxWithTitle: "Show status notifications",
                                      target: nil, action: nil)
         notifications.state = self.notificationsEnabled ? .on : .off
         stack.addArrangedSubview(notifications)
+        let lockSettings = action("Lock Settings", "lock")
         let close = action("Close", "close")
-        stack.addArrangedSubview(close)
+        let footer = NSStackView(views: [lockSettings, close])
+        footer.orientation = .horizontal
+        footer.spacing = 8
+        footer.alignment = .centerY
+        stack.addArrangedSubview(footer)
 
         let coordinator = UnifiedWindowActions()
         coordinator.window = window
         window.delegate = coordinator
-        for button in [test, unpair, save, lockSettings, close] {
+        for button in [test, unpair, edit, save, lockSettings, close] {
             button.target = coordinator
             button.action = #selector(UnifiedWindowActions.activate(_:))
         }
@@ -2887,23 +2900,37 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         var availableMonitors: [[String: Any]] = []
         var locked = false
         var monitorSettingsLocked = false
+        var monitorEditing = false
         var pendingUserNo: String? = nil
         var directoryError: String? = nil
         func updateMonitorFields() {
             let id = picker.selectedItem?.representedObject as? Int ?? 0
+            monitorEditing = id == -1
             guard let monitor = availableMonitors.first(where: { ($0["id"] as? Int) == id }) else {
                 label.stringValue = ""
                 remark.stringValue = ""
-                monitorIP.stringValue = id == -1 ? "Assigned on creation" : "—"
+                monitorIP.stringValue = "—"
+                labelInfo.stringValue = "—"
+                osInfo.stringValue = "—"
+                machineInfo.stringValue = "—"
+                remarkInfo.stringValue = "—"
                 monitorSettingsLocked = false
                 updateState()
                 return
             }
-            label.stringValue = monitor["name"] as? String ?? ""
-            remark.stringValue = monitor["remark"] as? String ?? ""
+            let name = monitor["name"] as? String ?? ""
+            let details = monitor["remark"] as? String ?? ""
+            let platform = monitor["platform"] as? String ?? "Mac"
+            let machineType = (monitor["type"] as? String ?? "").lowercased() == "desktop" ? "Desktop" : "Laptop"
+            label.stringValue = name
+            remark.stringValue = details
+            labelInfo.stringValue = name.isEmpty ? "—" : name
+            remarkInfo.stringValue = details.isEmpty ? "—" : details
+            osInfo.stringValue = platform
+            machineInfo.stringValue = machineType
             monitorIP.stringValue = monitor["ip_address"] as? String ?? "—"
-            chooseRadio(osRadios, value: monitor["platform"] as? String ?? "Mac")
-            chooseRadio(machineRadios, value: (monitor["type"] as? String ?? "").lowercased() == "desktop" ? "Desktop" : "Laptop")
+            chooseRadio(osRadios, value: platform)
+            chooseRadio(machineRadios, value: machineType)
             monitorSettingsLocked = monitor["settings_locked"] as? Bool ??
                 ((monitor["settings_locked"] as? Int ?? 0) == 1)
             updateState()
@@ -2963,14 +2990,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             }
             let creating = picker.selectedItem?.representedObject as? Int == -1
             let pendingFirstDevice = pendingUserNo != nil
+            let editable = creating || (monitorEditing && !monitorSettingsLocked)
+            for row in [nameEditRow, osEditRow, machineEditRow, remarkEditRow] {
+                row.isHidden = !editable
+            }
+            for row in [nameInfoRow, osInfoRow, machineInfoRow, remarkInfoRow] {
+                row.isHidden = editable
+            }
+            edit.isHidden = !enrolled || creating || monitorSettingsLocked
+            edit.title = editable ? "Cancel" : "Edit"
+            save.isHidden = !editable
             save.title = creating ? "Add Monitor" : "Save Monitor"
-            save.isEnabled = (enrolled || pendingFirstDevice) && (creating || !monitorSettingsLocked)
-            lockSettings.isEnabled = enrolled && !pendingFirstDevice && !creating && !monitorSettingsLocked
+            save.isEnabled = editable && (enrolled || pendingFirstDevice)
+            lockSettings.isHidden = !enrolled || creating
+            lockSettings.isEnabled = enrolled && !monitorSettingsLocked
             lockSettings.title = monitorSettingsLocked ? "Settings Locked" : "Lock Settings"
-            label.isEnabled = !monitorSettingsLocked || creating
-            remark.isEnabled = !monitorSettingsLocked || creating
-            osRadios.forEach { $0.isEnabled = !monitorSettingsLocked || creating }
-            machineRadios.forEach { $0.isEnabled = !monitorSettingsLocked || creating }
             status.stringValue = self.isServerConnected ? "Server reachable" : "Offline / Not configured"
             self.updateTrayStatusDot()
         }
@@ -3094,7 +3128,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                         picker.addItem(withTitle: "Add new...")
                         picker.lastItem?.representedObject = -1
                         updateMonitorFields()
-                        monitorNote.stringValue = "No devices assigned. Add the first monitor."
                         updateState()
                         return
                     }
@@ -3128,7 +3161,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     refreshMonitors()
                     updateState()
                 }
-                monitorNote.stringValue = "Monitor assigned to this installation."
                 updateState()
             case "disconnect":
                 guard !locked else { showError("User assignment is locked. Ask your administrator to edit the monitor."); return }
@@ -3145,6 +3177,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 pendingUserNo = nil
                 refreshMonitors()
                 updateState()
+            case "edit":
+                guard !monitorSettingsLocked, self.selectedMonitorId > 0,
+                      picker.selectedItem?.representedObject as? Int == self.selectedMonitorId else { return }
+                if monitorEditing {
+                    updateMonitorFields() // Cancel: restore server values
+                } else {
+                    monitorEditing = true
+                    updateState()
+                }
             case "lock":
                 guard !self.clientToken.isEmpty,
                       picker.selectedItem?.representedObject as? Int == self.selectedMonitorId,
@@ -3197,7 +3238,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 }
                 guard saveServer(), !self.clientToken.isEmpty,
                       let id = picker.selectedItem?.representedObject as? Int,
-                      (id == self.selectedMonitorId || id == -1) else {
+                      (id == self.selectedMonitorId || id == -1),
+                      (id == -1 || monitorEditing) else {
                     showError("Select one of your assigned monitors.")
                     return
                 }
