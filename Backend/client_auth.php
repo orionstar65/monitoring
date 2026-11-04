@@ -60,6 +60,53 @@ try {
             'device_count'=>(int)$u['device_count']
         ],$rows)]);exit;
     }
+    // First-device enrollment is available only to clients satisfying the
+    // same restricted-LAN access gate as the User No directory. It can only
+    // create a monitor for a user who currently owns none.
+    if($action==='bootstrap_monitor'){
+        $userNo=trim((string)($data['user_no']??''));
+        if(!preg_match('/^[1-9][0-9]{0,14}$/D',$userNo)){
+            http_response_code(400);echo json_encode(['error'=>'Select a valid User No']);exit;
+        }
+        $fields=clientMonitorFields($data);
+        if(isset($fields['error'])){
+            http_response_code(400);echo json_encode(['error'=>$fields['error']]);exit;
+        }
+        $key=hash('sha256',($_SERVER['REMOTE_ADDR']??'').'|enroll');
+        $st=$db->prepare('SELECT COUNT(*) AS hits FROM login_attempts WHERE attempt_key=? AND attempted_at>DATE_SUB(NOW(),INTERVAL 15 MINUTE)');
+        $st->bind_param('s',$key);$st->execute();$hits=(int)$st->get_result()->fetch_assoc()['hits'];$st->close();
+        if($hits>=30){http_response_code(429);echo json_encode(['error'=>'Too many enrollment attempts']);exit;}
+        $st=$db->prepare('INSERT INTO login_attempts(attempt_key) VALUES (?)');
+        $st->bind_param('s',$key);$st->execute();$st->close();
+        $db->begin_transaction();
+        try{
+            $st=$db->prepare('SELECT id FROM users WHERE user_no=? FOR UPDATE');
+            $st->bind_param('s',$userNo);$st->execute();$user=$st->get_result()->fetch_assoc();$st->close();
+            if(!$user){
+                $db->rollback();http_response_code(404);
+                echo json_encode(['error'=>'Selected user was not found']);exit;
+            }
+            $uid=(int)$user['id'];
+            $st=$db->prepare('SELECT id FROM tbl_monitor_ips WHERE owner_user_id=? LIMIT 1');
+            $st->bind_param('i',$uid);$st->execute();$exists=$st->get_result()->fetch_assoc();$st->close();
+            if($exists){
+                $db->rollback();http_response_code(409);
+                echo json_encode(['error'=>'This user already has devices. Select an existing device to add another.']);exit;
+            }
+            $ip=(string)($_SERVER['REMOTE_ADDR']??'');
+            if(!filter_var($ip,FILTER_VALIDATE_IP))throw new RuntimeException('Invalid client address');
+            $mac=null;$unlocked=0;
+            $name=$fields['name'];$platform=$fields['platform'];$type=$fields['type'];$remark=$fields['remark'];
+            $st=$db->prepare('INSERT INTO tbl_monitor_ips(name,ip_address,mac_address,owner_user_id,platform,type,remark,assignment_locked,settings_locked) VALUES (?,?,?,?,?,?,?,?,?)');
+            $st->bind_param('sssisssii',$name,$ip,$mac,$uid,$platform,$type,$remark,$unlocked,$unlocked);
+            $st->execute();$mid=(int)$db->insert_id;$st->close();
+            $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);
+            $st=$db->prepare("INSERT INTO client_sessions(token_hash,user_id,monitor_id,session_type,expires_at) VALUES (?,?,?,'device',NULL)");
+            $st->bind_param('sii',$hash,$uid,$mid);$st->execute();$st->close();
+            $db->commit();
+            echo json_encode(['success'=>true,'token'=>$token,'monitor_id'=>$mid,'user_no'=>$userNo]);exit;
+        }catch(Throwable $failure){$db->rollback();throw $failure;}
+    }
     // User No selection registers a monitor-bound device session. The server issues
     // a monitor-bound session; the client cannot choose another user's monitor.
     if($action==='enroll'){
@@ -79,7 +126,7 @@ try {
             $st->bind_param('s',$userNo);$st->execute();$monitor=$st->get_result()->fetch_assoc();$st->close();
             if(!$monitor){
                 $db->rollback();http_response_code(404);
-                echo json_encode(['error'=>'No monitors are assigned to this User No. Ask your administrator to assign a monitor.']);exit;
+                echo json_encode(['error'=>'No monitors assigned. Choose Add new... to create the first device.','code'=>'no_monitors','user_no'=>$userNo]);exit;
             }
             $mid=(int)$monitor['monitor_id'];$uid=(int)$monitor['user_id'];
             $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);
@@ -125,7 +172,7 @@ try {
             $st->bind_param('s',$newNo);$st->execute();$target=$st->get_result()->fetch_assoc();$st->close();
             if(!$target){
                 $db->rollback();http_response_code(404);
-                echo json_encode(['error'=>'This user has no monitors. Add one from the admin web portal.']);exit;
+                echo json_encode(['error'=>'No monitors assigned. Choose Add new... to create the first device.','code'=>'no_monitors','user_no'=>$newNo]);exit;
             }
             $targetUser=(int)$target['user_id'];$targetMonitor=(int)$target['monitor_id'];
             $st=$db->prepare('UPDATE client_sessions SET revoked_at=NOW() WHERE id=? AND user_id=?');
