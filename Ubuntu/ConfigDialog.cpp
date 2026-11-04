@@ -23,6 +23,9 @@
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QRadioButton>
+#include <QButtonGroup>
 
 ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     setWindowTitle("MonitorClient v1.5 — Settings");
@@ -95,17 +98,35 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     auto *monitorForm=new QFormLayout(monitorGroup);
     monitorSelector=new QComboBox(monitorGroup);
     labelEdit=new QLineEdit(monitorGroup);
-    osSelector=new QComboBox(monitorGroup);osSelector->addItems({"Windows","Mac","Ubuntu"});
-    machineSelector=new QComboBox(monitorGroup);machineSelector->addItems({"Laptop","Desktop"});
+    osRadios=new QButtonGroup(monitorGroup);
+    auto *osRow=new QWidget(monitorGroup);
+    auto *osLayout=new QHBoxLayout(osRow);osLayout->setContentsMargins(0,0,0,0);
+    for(const auto &value:QStringList{"Windows","Mac","Ubuntu"}){
+        auto *radio=new QRadioButton(value,osRow);
+        osRadios->addButton(radio);
+        osLayout->addWidget(radio);
+        if(value=="Ubuntu")radio->setChecked(true);
+    }
+    machineRadios=new QButtonGroup(monitorGroup);
+    auto *machineRow=new QWidget(monitorGroup);
+    auto *machineLayout=new QHBoxLayout(machineRow);machineLayout->setContentsMargins(0,0,0,0);
+    for(const auto &value:QStringList{"Laptop","Desktop"}){
+        auto *radio=new QRadioButton(value,machineRow);
+        machineRadios->addButton(radio);
+        machineLayout->addWidget(radio);
+        if(value=="Desktop")radio->setChecked(true);
+    }
     monitorIPLabel=new QLabel("—",monitorGroup);
     remarkEdit=new QLineEdit(monitorGroup);
     clientNameEdit=labelEdit;
     monitorForm->addRow("Monitor",monitorSelector);
     monitorForm->addRow("Label",labelEdit);
-    monitorForm->addRow("OS",osSelector);
-    monitorForm->addRow("Machine",machineSelector);
+    monitorForm->addRow("OS",osRow);
+    monitorForm->addRow("Machine",machineRow);
     monitorForm->addRow("IP address",monitorIPLabel);
     monitorForm->addRow("Remark",remarkEdit);
+    lockSettingsButton=new QPushButton("Lock Settings",monitorGroup);
+    monitorForm->addRow("",lockSettingsButton);
     content->addWidget(monitorGroup);
     divider();
 
@@ -121,6 +142,7 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     connect(userSelector,QOverload<int>::of(&QComboBox::currentIndexChanged),this,&ConfigDialog::onUserChanged);
     connect(monitorSelector,QOverload<int>::of(&QComboBox::currentIndexChanged),this,&ConfigDialog::onMonitorChanged);
     connect(saveButton,&QPushButton::clicked,this,&ConfigDialog::onSaveClicked);
+    connect(lockSettingsButton,&QPushButton::clicked,this,&ConfigDialog::onLockSettingsClicked);
     connect(closeButton,&QPushButton::clicked,this,&ConfigDialog::reject);
     loadSettings();
     loadRememberedSession();
@@ -265,8 +287,9 @@ void ConfigDialog::refreshDirectory(){
         const auto user=entry.toObject();
         const QString number=user.value("user_no").toString();
         if(number.isEmpty())continue;
-        const QString label=number+"/"+user.value("full_name").toString()+
-            "/"+user.value("ip_address").toString("—");
+        const int n=user.value("device_count").toInt();
+        const QString label=QString("%1: %2 (%3 Devices)")
+            .arg(number,user.value("full_name").toString()).arg(n);
         userSelector->addItem(label,number);
     }
     const int ix=userSelector->findData(current);
@@ -281,6 +304,7 @@ void ConfigDialog::refreshMonitors(){
     }
     monitorId=result.value("monitor_id").toInt();
     assignmentLocked=result.value("assignment_locked").toBool();
+    settingsLocked=false;
     activeUserNo=result.value("user").toObject().value("user_no").toString();
     const QSignalBlocker blocked(userSelector);
     const int ix=userSelector->findData(activeUserNo);
@@ -298,12 +322,18 @@ void ConfigDialog::updateMonitorList(const QJsonArray &items){
             m.value("type").toString("Desktop"),m.value("ip_address").toString("—")),
             m.value("id").toInt());
     }
+    monitorSelector->addItem("Add new...",-1);
     const int ix=monitorSelector->findData(monitorId);
     monitorSelector->setCurrentIndex(ix>=0?ix:(monitorSelector->count()?0:-1));
     onMonitorChanged(monitorSelector->currentIndex());
 }
 void ConfigDialog::onMonitorChanged(int){
     const int id=monitorSelector->currentData().toInt();
+    if(id==-1){
+        labelEdit->clear();remarkEdit->clear();
+        monitorIPLabel->setText("Assigned on creation");
+        settingsLocked=false;updateUI();return;
+    }
     if(id>0 && !authToken.isEmpty() && id!=monitorId){
         const auto response=authRequest({{"action","select"},{"monitor_id",id}},true);
         if(!response.value("success").toBool()){
@@ -317,6 +347,7 @@ void ConfigDialog::onMonitorChanged(int){
             const auto monitor=value.toObject();
             if(monitor.value("id").toInt()==id){
                 assignmentLocked=monitor.value("assignment_locked").toBool();
+                settingsLocked=monitor.value("settings_locked").toBool();
                 break;
             }
         }
@@ -328,12 +359,17 @@ void ConfigDialog::onMonitorChanged(int){
         if(m.value("id").toInt()!=id)continue;
         labelEdit->setText(m.value("name").toString());
         remarkEdit->setText(m.value("remark").toString());
-        osSelector->setCurrentText(m.value("platform").toString("Ubuntu"));
-        machineSelector->setCurrentText(m.value("type").toString().toLower()=="desktop"?"Desktop":"Laptop");
+        const QString platform=m.value("platform").toString("Ubuntu");
+        for(auto *button:osRadios->buttons())
+            if(button->text()==platform)button->setChecked(true);
+        const QString type=m.value("type").toString().toLower()=="desktop"?"Desktop":"Laptop";
+        for(auto *button:machineRadios->buttons())
+            if(button->text()==type)button->setChecked(true);
+        settingsLocked=m.value("settings_locked").toBool();
         monitorIPLabel->setText(m.value("ip_address").toString("—"));
         break;
     }
-    saveButton->setEnabled(authToken.isEmpty()||id==monitorId);
+    saveButton->setEnabled(!settingsLocked && (authToken.isEmpty()||id==monitorId||id==-1));
     if(id!=monitorId && monitorId>0)
         assignmentStatusLabel->setText("Select one of the assigned monitors.");
     else
@@ -365,8 +401,16 @@ void ConfigDialog::updateUI(){
         assignmentStatusLabel->setText("User selection is locked. Ask your administrator to edit.");
     else if(!directoryError.isEmpty())
         assignmentStatusLabel->setText(directoryError);
-    saveButton->setText(enrolled?"Save Monitor":"Save Server");
-    saveButton->setEnabled(true);
+    const int selectedId=monitorSelector->currentData().toInt();
+    const bool adding=enrolled&&selectedId==-1;
+    saveButton->setText(adding?"Add Monitor":(enrolled?"Save Monitor":"Save Server"));
+    saveButton->setEnabled(!enrolled||adding||!settingsLocked);
+    for(auto *control:{static_cast<QWidget*>(labelEdit),static_cast<QWidget*>(remarkEdit)})
+        control->setEnabled(!settingsLocked||adding);
+    for(auto *radio:osRadios->buttons())radio->setEnabled(!settingsLocked||adding);
+    for(auto *radio:machineRadios->buttons())radio->setEnabled(!settingsLocked||adding);
+    lockSettingsButton->setEnabled(enrolled&&!settingsLocked&&!adding);
+    lockSettingsButton->setText(settingsLocked?"Settings Locked":"Lock Settings");
 }
 void ConfigDialog::onPairClicked(){
     if(!saveServerIfChanged())return;
@@ -429,19 +473,52 @@ void ConfigDialog::onLogoutClicked(){
     updateMonitorList({});saveSettings();updateUI();
     emit sessionStateChanged();
 }
+void ConfigDialog::onLockSettingsClicked(){
+    if(authToken.isEmpty()||settingsLocked)return;
+    if(QMessageBox::question(this,"Lock monitor settings",
+        "Lock monitor settings now? Only an administrator can unlock this monitor in the web portal.")
+       !=QMessageBox::Yes)return;
+    const auto reply=authRequest({{"action","lock_settings"}},true);
+    if(!reply.value("success").toBool()){
+        QMessageBox::warning(this,"Lock settings",reply.value("error").toString("Unable to lock monitor."));return;
+    }
+    settingsLocked=true;
+    refreshMonitors();updateUI();
+}
+
 void ConfigDialog::onSaveClicked(){
     if(!saveServerIfChanged())return;
     if(authToken.isEmpty()){connectionStatusLabel->setText("● Server saved · select User No");return;}
     const int id=monitorSelector->currentData().toInt();
-    if(id<1||id!=monitorId){
-        QMessageBox::warning(this,"Monitor","Select an assigned monitor.");
-        return;
+    if(settingsLocked&&id!=-1){
+        QMessageBox::warning(this,"Settings locked","Ask your administrator to unlock this monitor.");return;
     }
-    const auto result=authRequest({{"action","save_monitor"},{"monitor_id",id},
+    if(id<1 && id!=-1){
+        QMessageBox::warning(this,"Monitor","Select a monitor.");return;
+    }
+    const QString os=osRadios->checkedButton()?osRadios->checkedButton()->text():"Ubuntu";
+    const QString machine=machineRadios->checkedButton()?machineRadios->checkedButton()->text().toLower():"desktop";
+    QJsonObject request={{"action",id==-1?"create_monitor":"save_monitor"},
         {"label",labelEdit->text().trimmed()},{"remark",remarkEdit->text().trimmed()},
-        {"os",osSelector->currentText()},{"machine",machineSelector->currentText().toLower()}},true);
-    if(!result.value("success").toBool()){
-        QMessageBox::warning(this,"Monitor",result.value("error").toString("Could not save monitor."));return;
+        {"os",os},{"machine",machine}};
+    if(id>0)request.insert("monitor_id",id);
+    if(id>0&&id!=monitorId){
+        QMessageBox::warning(this,"Monitor","Select the intended monitor first.");return;
     }
-    saveSettings();refreshMonitors();accept();
+    const auto result=authRequest(request,true);
+    if(!result.value("success").toBool()){
+        QMessageBox::warning(this,"Monitor",result.value("error").toString("Unable to save monitor."));return;
+    }
+    if(id==-1){
+        const int created=result.value("monitor_id").toInt();
+        if(created<1){QMessageBox::warning(this,"Monitor","Invalid new monitor ID.");return;}
+        const auto selection=authRequest({{"action","select"},{"monitor_id",created}},true);
+        if(!selection.value("success").toBool()){
+            QMessageBox::warning(this,"Monitor",selection.value("error").toString("Monitor created, but selecting it failed."));
+            refreshMonitors();return;
+        }
+        monitorId=created;
+    }
+    saveSettings();refreshMonitors();refreshDirectory();updateUI();
+    emit sessionStateChanged();
 }
