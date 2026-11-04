@@ -85,7 +85,8 @@ class Monitors extends Base {
                                 'name' => $name,
                                 'owner_user_id' => $owner_user_id,
                                 'mac_address' => ($mac_address !== '' ? $mac_address : null),
-                                'type' => $type,
+                                'name' => $name,
+                        'type' => $type,
                                 'platform' => ($platform ?: null),
                                 'os_status' => 0,
                                 'monitor_status' => 0,
@@ -136,11 +137,13 @@ class Monitors extends Base {
             $slack_id = trim($_POST['slack_id'] ?? '');
             $platform = trim($_POST['platform'] ?? '');
             $owner_user_id = filter_var($_POST['owner_user_id']??null,FILTER_VALIDATE_INT)?:null;
-            $assignment_locked = isset($_POST['assignment_locked']) ? 1 : 0;
             $settings_locked = isset($_POST['settings_locked']) ? 1 : 0;
+            $name=trim((string)($_POST['name']??$monitor['name']));
             if($owner_user_id && !$this->db->fetch('SELECT id FROM users WHERE id=:id',['id'=>$owner_user_id])) $error='Unknown account';
             // Validate type
-            if(strlen($remark)>500){$error='Remark too long';}
+            if(strlen($name)<1||strlen($name)>100||preg_match('/[<>\\x00-\\x1f]/',$name)){
+                $error='Invalid monitor label';
+            }elseif(strlen($remark)>500){$error='Remark too long';}
             elseif (!in_array($type, ['desktop', 'laptop', 'server'])) {
                 $error = 'Invalid device type selected';
             } elseif (!empty($platform) && !in_array($platform, ['Windows', 'Mac', 'Ubuntu'])) {
@@ -155,7 +158,7 @@ class Monitors extends Base {
                         'slack_id' => $slack_id,
                         'platform' => !empty($platform) ? $platform : null,
                         'owner_user_id' => $owner_user_id,
-                        'assignment_locked' => $assignment_locked,
+                        'assignment_locked' => $settings_locked,
                         'settings_locked' => $settings_locked
                     ];
                     
@@ -171,7 +174,7 @@ class Monitors extends Base {
         }
         
         $accounts=$this->db->fetchAll("SELECT u.id,u.name,u.email,u.user_no,
-            (SELECT m.ip_address FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id ORDER BY m.id LIMIT 1) AS ip_address
+            (SELECT COUNT(*) FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id) AS device_count
             FROM users u ORDER BY u.name,u.id");
         $this->view('monitors/edit', ['monitor'=>$monitor,'accounts'=>$accounts,'error'=>$error??null]);
     }
