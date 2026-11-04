@@ -2341,7 +2341,20 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         }
         if(id==SETTINGS_USER_NO && HIWORD(wp)==CBN_SELCHANGE){
             const std::string number=selectedUserNo(dlg);
-            if(number.empty())return TRUE;
+            if(number.empty()){
+                if(!settingsPendingUserNo.empty()){
+                    settingsPendingUserNo.clear();
+                    refreshUnifiedMonitors(dlg);
+                    updateUnifiedVisibility(dlg);
+                }
+                return TRUE;
+            }
+            if(!settingsPendingUserNo.empty() && number==signedInUsername){
+                settingsPendingUserNo.clear();
+                refreshUnifiedMonitors(dlg);
+                updateUnifiedVisibility(dlg);
+                return TRUE;
+            }
             if(!getClientToken().empty() && settingsAssignmentLocked){
                 showUtf8Message(dlg,"User assignment is locked. Ask your administrator to edit the monitor.",
                     "Assignment locked",MB_OK|MB_ICONWARNING);
