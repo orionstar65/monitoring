@@ -2368,6 +2368,11 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             if(MessageBoxW(dlg,L"Lock this monitor's settings? Only an administrator can unlock them in the web portal.",
                            L"Lock Settings",MB_YESNO|MB_ICONWARNING)!=IDYES)return TRUE;
             Json::Value req;req["action"]="lock_settings";
+            req["label"]=editText(dlg,SETTINGS_LABEL);
+            req["remark"]=editText(dlg,SETTINGS_REMARK);
+            req["os"]=IsDlgButtonChecked(dlg,SETTINGS_OS_MAC)==BST_CHECKED?"Mac":
+                IsDlgButtonChecked(dlg,SETTINGS_OS_UBUNTU)==BST_CHECKED?"Ubuntu":"Windows";
+            req["machine"]=IsDlgButtonChecked(dlg,SETTINGS_MACHINE_DESKTOP)==BST_CHECKED?"desktop":"laptop";
             const Json::Value answer=callClientAuth(req);
             if(!answer.get("success",false).asBool()){
                 showUtf8Message(dlg,answer.get("error","Cannot lock settings.").asString(),
