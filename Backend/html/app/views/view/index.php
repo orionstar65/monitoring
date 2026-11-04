@@ -1856,96 +1856,34 @@ function displayScreenshots(screenshots, pagination = null) {
 }
 
 function updateHeaderButtons(isSingleMonitor) {
-    const headerRight = $('.main-header .d-flex.justify-content-between.align-items-center > div:last-child');
-    
-    if (isSingleMonitor) {
-        // Add log buttons to header
-        if (headerRight.find('.log-buttons').length === 0) {
-            headerRight.prepend(`
-                <div class="log-buttons me-3">
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="headerBrowserLogBtn" title="View Browser Logs">
-                        <i class="fas fa-globe"></i> Browser
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-warning" id="headerKeyLogBtn" title="View Key Logs">
-                        <i class="fas fa-keyboard"></i> Keys
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-info" id="headerUsbLogBtn" title="View USB Logs">
-                        <i class="fas fa-usb"></i> USB
-                    </button>
-                </div>
-            `);
-            
-            // Add date filter
-            const today = new Date().toISOString().split('T')[0];
-            const dateFilterHtml = `
-                <form id="headerDateFilterForm" class="d-flex flex-wrap align-items-center gap-2 mb-0">
-                    <label for="headerStartDate" class="form-label mb-0">Start:</label>
-                    <input type="date" id="headerStartDate" name="start_date" class="form-control form-control-sm" style="width: 140px;" value="${today}">
-                    <label for="headerEndDate" class="form-label mb-0">End:</label>
-                    <input type="date" id="headerEndDate" name="end_date" class="form-control form-control-sm" style="width: 140px;" value="${today}">
-                    <button type="submit" class="btn btn-sm btn-primary">Filter</button>
-                    <button type="button" id="headerClearDateFilter" class="btn btn-sm btn-secondary">Clear</button>
-                </form>
-            `;
-            $('#headerDateFilterContainer').html(dateFilterHtml);
-            
-            // Setup date filter handlers
-            $('#headerDateFilterForm').off('submit').on('submit', function(e) {
-                e.preventDefault();
-                // Set global date filter values and reload screenshots
-                window.headerStartDate = $('#headerStartDate').val();
-                window.headerEndDate = $('#headerEndDate').val();
-                console.log('Date filter applied:', window.headerStartDate, 'to', window.headerEndDate);
-                loadScreenshotsForSelectedMonitor(1);
-            });
-            $('#headerClearDateFilter').off('click').on('click', function() {
-                $('#headerStartDate').val('');
-                $('#headerEndDate').val('');
-                window.headerStartDate = '';
-                window.headerEndDate = '';
-                console.log('Date filter cleared');
-                loadScreenshotsForSelectedMonitor(1);
-            });
-            
-            // Setup header log button handlers
-            setupHeaderLogButtonHandlers();
-        }
-    } else {
-        // Remove log buttons and date filter from header
-        headerRight.find('.log-buttons').remove();
-        $('#headerDateFilterContainer').empty();
+    const filter=$('#headerDateFilterContainer');
+    if(!isSingleMonitor){
+        filter.empty();
+        window.headerStartDate='';
+        window.headerEndDate='';
+        return;
     }
-}
-
-function setupHeaderLogButtonHandlers() {
-    // Browser log button
-    $('#headerBrowserLogBtn').off('click').on('click', function() {
-        if (currentLogData.browser.data.length > 0) {
-            displayLogTableWithPagination('browser', $("#browserLogsContent"));
-            $('#browserLogModal').modal('show');
-        } else {
-            alert('No browser logs available for this monitor.');
-        }
+    if(filter.find('#headerDateFilterForm').length)return;
+    filter.html(`
+        <form id="headerDateFilterForm" class="d-flex flex-wrap align-items-center gap-2 mb-0">
+            <label class="small mb-0" for="headerStartDate">From</label>
+            <input type="date" id="headerStartDate" class="form-control form-control-sm" style="width:145px">
+            <label class="small mb-0" for="headerEndDate">To</label>
+            <input type="date" id="headerEndDate" class="form-control form-control-sm" style="width:145px">
+            <button type="submit" class="btn btn-sm btn-outline-primary">Filter</button>
+            <button type="button" id="headerClearDateFilter" class="btn btn-sm btn-outline-secondary">Clear</button>
+        </form>`);
+    filter.off('submit','#headerDateFilterForm').on('submit','#headerDateFilterForm',function(e){
+        e.preventDefault();
+        window.headerStartDate=$('#headerStartDate').val();
+        window.headerEndDate=$('#headerEndDate').val();
+        loadScreenshotsForSelectedMonitor(1);
     });
-    
-    // Key log button
-    $('#headerKeyLogBtn').off('click').on('click', function() {
-        if (currentLogData.key.data.length > 0) {
-            displayLogTableWithPagination('key', $("#keyLogsContent"));
-            $('#keyLogModal').modal('show');
-        } else {
-            alert('No key logs available for this monitor.');
-        }
-    });
-    
-    // USB log button
-    $('#headerUsbLogBtn').off('click').on('click', function() {
-        if (currentLogData.usb.data.length > 0) {
-            displayLogTableWithPagination('usb', $("#usbLogsContent"));
-            $('#usbLogModal').modal('show');
-        } else {
-            alert('No USB logs available for this monitor.');
-        }
+    filter.off('click','#headerClearDateFilter').on('click','#headerClearDateFilter',function(){
+        window.headerStartDate='';
+        window.headerEndDate='';
+        $('#headerStartDate,#headerEndDate').val('');
+        loadScreenshotsForSelectedMonitor(1);
     });
 }
 
@@ -2031,19 +1969,8 @@ function generatePageNumbers(currentPage, totalPages) {
 }
 
 function loadScreenshotsForSelectedMonitor(page) {
-    if (selectedMonitors.length === 1) {
-        loadScreenshotsForMonitor(selectedMonitors[0], page);
-        // Also load logs for the selected monitor
-        loadLogsForMonitor(selectedMonitors[0]);
-    } else {
-        loadScreenshots(page);
-        // Clear log data when no single monitor is selected
-        currentLogData = {
-            browser: { data: [], headers: [], currentPage: 1, perPage: 20 },
-            key: { data: [], headers: [], currentPage: 1, perPage: 20 },
-            usb: { data: [], headers: [], currentPage: 1, perPage: 20 }
-        };
-    }
+    if(selectedMonitors.length===1)loadScreenshotsForMonitor(selectedMonitors[0],page);
+    else loadScreenshots(page);
 }
 
 function loadScreenshotsForMonitor(monitorId, page = 1) {
