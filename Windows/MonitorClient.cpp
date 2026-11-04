@@ -409,8 +409,7 @@ void updateTrayMenu() {
     
     // Configuration refresh button
     AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_CONFIG_REFRESH, "Refresh Configuration");
-    AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SIGN_IN, getClientToken().empty() ? "Select User / Settings" : "Device Settings");
-    AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SETTINGS, "Monitor Settings...");
+    AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SETTINGS, "Settings...");
     AppendMenuA(hTrayMenu, MF_STRING | (notificationsEnabled ? MF_CHECKED : MF_UNCHECKED), ID_TRAY_NOTIFICATIONS, "Status notifications");
     
     // Actions section
@@ -1781,14 +1780,32 @@ void monitorTask() {
 
 
 
-static std::string settingsFilePath() {
-    char fullPath[MAX_PATH] = {0};
-    GetFullPathNameA("settings.ini",MAX_PATH,fullPath,nullptr);
-    return fullPath;
-}
+// Machine-specific UI preferences belong in HKCU, not a mutable settings.ini
+// shipped alongside the executable. Intervals still come from server config.
+static const char* kClientPreferencesRegistry="Software\\MonitorClient\\v1.5";
 static void saveClientSetting(const char* section,const char* key,const std::string& value) {
-    const std::string path=settingsFilePath();
-    WritePrivateProfileStringA(section,key,value.c_str(),path.c_str());
+    HKEY handle=nullptr;
+    if(RegCreateKeyExA(HKEY_CURRENT_USER,kClientPreferencesRegistry,0,nullptr,0,
+                       KEY_SET_VALUE,nullptr,&handle,nullptr)!=ERROR_SUCCESS)return;
+    const std::string name=std::string(section)+"_"+key;
+    RegSetValueExA(handle,name.c_str(),0,REG_SZ,
+                   reinterpret_cast<const BYTE*>(value.c_str()),static_cast<DWORD>(value.size()+1));
+    RegCloseKey(handle);
+}
+static std::string readClientSetting(const char* section,const char* key,const std::string& defaultValue) {
+    HKEY handle=nullptr;
+    if(RegOpenKeyExA(HKEY_CURRENT_USER,kClientPreferencesRegistry,0,KEY_QUERY_VALUE,&handle)!=ERROR_SUCCESS)
+        return defaultValue;
+    const std::string name=std::string(section)+"_"+key;
+    DWORD kind=0,size=0;
+    if(RegQueryValueExA(handle,name.c_str(),nullptr,&kind,nullptr,&size)!=ERROR_SUCCESS ||
+       kind!=REG_SZ||size==0||size>4096){RegCloseKey(handle);return defaultValue;}
+    std::vector<char> buffer(size,0);
+    if(RegQueryValueExA(handle,name.c_str(),nullptr,&kind,reinterpret_cast<BYTE*>(buffer.data()),&size)!=ERROR_SUCCESS){
+        RegCloseKey(handle);return defaultValue;
+    }
+    RegCloseKey(handle);
+    return std::string(buffer.data());
 }
 static std::string credentialTarget() {
     return "ACC-Monitor-v1.5/" + serverIP + ":" + serverPort;
@@ -2555,9 +2572,9 @@ int main() {
         std::cerr << "Warning: Could not get MAC address" << std::endl;
     }
     
-    // Load settings from settings.ini
+    // Load only local connection/UI preferences; intervals are server-driven.
     if (!loadSettings()) {
-        std::cerr << "Error: Could not load settings.ini" << std::endl;
+        std::cerr << "Error: Could not load local preferences" << std::endl;
         return 1;
     }
     
@@ -2608,66 +2625,16 @@ void writeDebugLog(const std::string& message) {
     }
 } 
 
-// Load settings from settings.ini
+// Only server endpoint and UI notification preference are local. Device
+// identity is stored server-side and the bearer token in Credential Manager.
 bool loadSettings() {
-    std::ifstream settingsFile("settings.ini");
-    if (!settingsFile.is_open()) {
-        notificationsEnabled = true;
-        // settings.ini not found, using defaults
-        serverIP = "192.168.1.45";
-        serverPort = "8924";
-        username = "default_user";
-        API_BASE_URL = (serverPort == "8924" ? "http://" : "https://") + serverIP + ":" + serverPort;
-        return true;
-    }
-
-    std::string line;
-    std::string currentSection = "";
-    
-    while (std::getline(settingsFile, line)) {
-        // Remove leading/trailing whitespace
-        line.erase(0, line.find_first_not_of(" \t"));
-        line.erase(line.find_last_not_of(" \t") + 1);
-        
-        // Skip empty lines and comments
-        if (line.empty() || line[0] == ';' || line[0] == '#') {
-            continue;
-        }
-        
-        // Check for section headers
-        if (line[0] == '[' && line[line.length()-1] == ']') {
-            currentSection = line.substr(1, line.length()-2);
-            continue;
-        }
-        
-        // Parse key-value pairs
-        size_t equalPos = line.find('=');
-        if (equalPos != std::string::npos) {
-            std::string key = line.substr(0, equalPos);
-            std::string value = line.substr(equalPos + 1);
-            
-            // Remove leading/trailing whitespace from key and value
-            key.erase(0, key.find_first_not_of(" \t"));
-            key.erase(key.find_last_not_of(" \t") + 1);
-            value.erase(0, value.find_first_not_of(" \t"));
-            value.erase(value.find_last_not_of(" \t") + 1);
-            
-            if (currentSection == "Server") {
-                if (key == "ip") {
-                    serverIP = value;
-                } else if (key == "port") {
-                    serverPort = value;
-                } else if (key == "username") {
-                    username = value;
-                }
-            }
-        }
-    }
-    settingsFile.close();
-
-    API_BASE_URL = (serverPort == "8924" ? "http://" : "https://") + serverIP + ":" + serverPort;
-    notificationsEnabled = GetPrivateProfileIntA("Client","notifications",1,"settings.ini") != 0;
-    // Settings loaded
+    serverIP=readClientSetting("Server","ip","192.168.1.45");
+    serverPort=readClientSetting("Server","port","8924");
+    if(serverIP.empty())serverIP="192.168.1.45";
+    if(serverPort.empty()||serverPort.find_first_not_of("0123456789")!=std::string::npos)
+        serverPort="8924";
+    notificationsEnabled=readClientSetting("Client","notifications","1")!="0";
+    API_BASE_URL=(serverPort=="8924"?"http://":"https://")+serverIP+":"+serverPort;
     return true;
 }
 
@@ -2926,7 +2893,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     break;
                 case ID_TRAY_NOTIFICATIONS:
                     notificationsEnabled = !notificationsEnabled;
-                    WritePrivateProfileStringA("Client","notifications",notificationsEnabled ? "1":"0","settings.ini");
+                    saveClientSetting("Client","notifications",notificationsEnabled ? "1":"0");
                     updateTrayMenu();
                     break;
                 case ID_TRAY_CONFIG_REFRESH:
