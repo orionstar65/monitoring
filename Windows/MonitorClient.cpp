@@ -1894,7 +1894,9 @@ enum {
     SETTINGS_MONITOR_IP=4216,SETTINGS_USER_HEADING=4217,
     AUTH_FULLNAME=4300,AUTH_FULLNAME_LABEL=4301,
     SETTINGS_USER_NO=4218, SETTINGS_ENROLL=4220,
-    SETTINGS_SWITCH=4221, SETTINGS_NOTICE=4222
+    SETTINGS_SWITCH=4221, SETTINGS_NOTICE=4222,
+    SETTINGS_OS_MAC=4223, SETTINGS_OS_UBUNTU=4224,
+    SETTINGS_MACHINE_DESKTOP=4225, SETTINGS_LOCK_SETTINGS=4226
 };
 static HWND addControl(HWND parent,const char* cls,const char* label,DWORD style,
                        int x,int y,int width,int height,int id) {
@@ -1926,24 +1928,35 @@ bool showClientLogin() {
     return showMonitorSettings();
 }
 static Json::Value settingsMonitors;
+static bool settingsMonitorLocked=false;
+static void checkSettingsRadio(HWND dlg,int first,int second,int third,int value) {
+    const int ids[]={first,second,third};
+    for(int id:ids)if(id)CheckDlgButton(dlg,id,id==value?BST_CHECKED:BST_UNCHECKED);
+}
 static void changeMonitorFields(HWND dlg) {
     int ix=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
     int id=ix>=0?(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,ix,0):0;
-    setDlgUtf8Text(dlg,SETTINGS_SAVE,id>0?"Save":"Add");
+    settingsMonitorLocked=false;
+    setDlgUtf8Text(dlg,SETTINGS_SAVE,id==-1?"Add Monitor":"Save Monitor");
     setDlgUtf8Text(dlg,SETTINGS_LABEL,"");
     setDlgUtf8Text(dlg,SETTINGS_REMARK,"");
-    SendDlgItemMessageW(dlg,SETTINGS_OS,CB_SETCURSEL,0,0);
-    SendDlgItemMessageW(dlg,SETTINGS_MACHINE,CB_SETCURSEL,0,0);
-    if(!id)return;
+    checkSettingsRadio(dlg,SETTINGS_OS,SETTINGS_OS_MAC,SETTINGS_OS_UBUNTU,SETTINGS_OS);
+    checkSettingsRadio(dlg,SETTINGS_MACHINE,SETTINGS_MACHINE_DESKTOP,0,SETTINGS_MACHINE);
+    if(id<1){
+        setDlgUtf8Text(dlg,SETTINGS_MONITOR_IP,id==-1?"Assigned on creation":"—");
+        return;
+    }
     for(const auto &monitor:settingsMonitors){
         if(monitor.get("id",0).asInt()!=id)continue;
         setDlgUtf8Text(dlg,SETTINGS_LABEL,monitor.get("name","").asString().c_str());
         setDlgUtf8Text(dlg,SETTINGS_REMARK,monitor.get("remark","").asString().c_str());
         const std::string platform=monitor.get("platform","Windows").asString();
-        SendDlgItemMessageW(dlg,SETTINGS_OS,CB_SETCURSEL,
-            platform=="Mac"?1:platform=="Ubuntu"?2:0,0);
-        SendDlgItemMessageW(dlg,SETTINGS_MACHINE,CB_SETCURSEL,
-            monitor.get("type","").asString()=="desktop"?1:0,0);
+        checkSettingsRadio(dlg,SETTINGS_OS,SETTINGS_OS_MAC,SETTINGS_OS_UBUNTU,
+            platform=="Mac"?SETTINGS_OS_MAC:platform=="Ubuntu"?SETTINGS_OS_UBUNTU:SETTINGS_OS);
+        checkSettingsRadio(dlg,SETTINGS_MACHINE,SETTINGS_MACHINE_DESKTOP,0,
+            monitor.get("type","").asString()=="desktop"?SETTINGS_MACHINE_DESKTOP:SETTINGS_MACHINE);
+        settingsMonitorLocked=monitor.get("settings_locked",false).asBool() ||
+            monitor.get("settings_locked",0).asInt()==1;
         break;
     }
 }
@@ -2023,14 +2036,14 @@ static std::string selectedUserNo(HWND dlg) {
     if(length<=0||length>2048)return {};
     std::wstring item(static_cast<size_t>(length)+1,L'\0');
     SendMessageW(combo,CB_GETLBTEXT,ix,(LPARAM)item.data());
-    const size_t slash=item.find(L"/");
+    const size_t slash=item.find(L": ");
     if(slash==std::wstring::npos)return {};
     return wideToUtf8(item.substr(0,slash));
 }
 static void selectDirectoryUser(HWND dlg,const std::string& userNo) {
     const HWND combo=GetDlgItem(dlg,SETTINGS_USER_NO);
     if(userNo.empty()){SendMessageW(combo,CB_SETCURSEL,0,0);return;}
-    const std::wstring prefix=utf8ToWide(userNo+"/");
+    const std::wstring prefix=utf8ToWide(userNo+": ");
     const int index=(int)SendMessageW(combo,CB_FINDSTRING,(WPARAM)-1,(LPARAM)prefix.c_str());
     SendMessageW(combo,CB_SETCURSEL,index>=0?index:0,0);
 }
@@ -2052,8 +2065,9 @@ static void loadUserDirectory(HWND dlg) {
     for(const auto& entry:entries){
         const std::string no=entry.get("user_no","").asString();
         if(no.empty())continue;
-        const std::string label=no+"/"+entry.get("full_name","").asString()+
-            "/"+entry.get("ip_address","—").asString();
+        const int count=entry.get("device_count",0).asInt();
+        const std::string label=no+": "+entry.get("full_name","").asString()+
+            " ("+std::to_string(count)+" Devices)";
         const std::wstring wide=utf8ToWide(label);
         SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)wide.c_str());
     }
@@ -2095,7 +2109,9 @@ static void refreshUnifiedMonitors(HWND dlg) {
         SendMessageW(selector,CB_SETITEMDATA,ix,id);
         if(id==selectedMonitorId.load())selected=ix;
     }
-    SendMessageW(selector,CB_SETCURSEL,selected<0?0:selected,0);
+    const int newIndex=(int)SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)L"Add new...");
+    SendMessageW(selector,CB_SETITEMDATA,newIndex,(LPARAM)-1);
+    SendMessageW(selector,CB_SETCURSEL,selected<0?newIndex:selected,0);
     changeMonitorFields(dlg);
     const int index=(int)SendMessageW(selector,CB_GETCURSEL,0,0);
     const int id=index<0?0:(int)SendMessageW(selector,CB_GETITEMDATA,index,0);
@@ -2109,7 +2125,8 @@ static void updateUnifiedVisibility(HWND dlg) {
     const int monitorControls[] = {
         SETTINGS_MONITOR_HEADING,SETTINGS_MONITOR_DIVIDER,SETTINGS_MONITOR,
         SETTINGS_LABEL,SETTINGS_OS,SETTINGS_MACHINE,SETTINGS_MONITOR_IP,
-        SETTINGS_REMARK,4400,4401,4402,4403,4404,4405
+        SETTINGS_REMARK,SETTINGS_OS_MAC,SETTINGS_OS_UBUNTU,
+        SETTINGS_MACHINE_DESKTOP,SETTINGS_LOCK_SETTINGS,4400,4401,4402,4403,4404,4405
     };
     for(int id:monitorControls)ShowWindow(GetDlgItem(dlg,id),enrolled?SW_SHOW:SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),enrolled?SW_SHOW:SW_HIDE);
@@ -2121,7 +2138,17 @@ static void updateUnifiedVisibility(HWND dlg) {
         setDlgUtf8Text(dlg,SETTINGS_NOTICE,"User selection is locked. Ask your administrator to edit.");
     else if(!settingsDirectoryError.empty())
         setDlgUtf8Text(dlg,SETTINGS_NOTICE,settingsDirectoryError);
-    setDlgUtf8Text(dlg,SETTINGS_SAVE,enrolled?"Save Monitor":"Save Server");
+    const int index=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
+    const int chosen=index<0?0:(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,index,0);
+    const bool creating=enrolled&&chosen==-1;
+    setDlgUtf8Text(dlg,SETTINGS_SAVE,creating?"Add Monitor":enrolled?"Save Monitor":"Save Server");
+    const int editableIds[]={SETTINGS_LABEL,SETTINGS_REMARK,SETTINGS_OS,
+        SETTINGS_OS_MAC,SETTINGS_OS_UBUNTU,SETTINGS_MACHINE,SETTINGS_MACHINE_DESKTOP};
+    for(int id:editableIds)
+        EnableWindow(GetDlgItem(dlg,id),!settingsMonitorLocked||creating);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_SAVE),!enrolled||creating||!settingsMonitorLocked);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),enrolled&&!settingsMonitorLocked&&!creating);
+    setDlgUtf8Text(dlg,SETTINGS_LOCK_SETTINGS,settingsMonitorLocked?"Settings Locked":"Lock Settings");
     setDlgUtf8Text(dlg,SETTINGS_CONNECTION,
         connectionStatus.serverConnected&&enrolled?"● Connected and active":"● Offline / Not configured");
     ShowWindow(GetDlgItem(dlg,SETTINGS_NOTIFY),SW_SHOW);
@@ -2133,8 +2160,8 @@ static void updateUnifiedVisibility(HWND dlg) {
         {SETTINGS_MONITOR_DIVIDER,13,336},{SETTINGS_MONITOR_HEADING,13,346},
         {4400,13,375},{SETTINGS_MONITOR,108,373},
         {4401,13,410},{SETTINGS_LABEL,108,407},
-        {4402,13,443},{SETTINGS_OS,108,440},
-        {4403,13,476},{SETTINGS_MACHINE,108,473},
+        {4402,13,443},{SETTINGS_OS,108,440},{SETTINGS_OS_MAC,200,440},{SETTINGS_OS_UBUNTU,268,440},
+        {4403,13,476},{SETTINGS_MACHINE,108,473},{SETTINGS_MACHINE_DESKTOP,220,473},
         {4404,13,509},{SETTINGS_MONITOR_IP,108,509},
         {4405,13,542},{SETTINGS_REMARK,108,539}
     };
@@ -2144,6 +2171,8 @@ static void updateUnifiedVisibility(HWND dlg) {
     const int notifyY=enrolled?572-offset:(hasNotice?351:285);
     const int buttonsY=enrolled?607-offset:(hasNotice?389:321);
     SetWindowPos(GetDlgItem(dlg,SETTINGS_NOTIFY),nullptr,108,notifyY,0,0,
+                 SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
+    SetWindowPos(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),nullptr,108,buttonsY,0,0,
                  SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(dlg,SETTINGS_SAVE),nullptr,225,buttonsY,0,0,
                  SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
@@ -2185,17 +2214,19 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"STATIC","Label",0,13,410,90,21,4401);
         addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,407,310,25,SETTINGS_LABEL);
         addControl(dlg,"STATIC","OS",0,13,443,90,21,4402);
-        HWND os=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,440,310,120,SETTINGS_OS);
-        for(const wchar_t* name:{L"Windows",L"Mac",L"Ubuntu"})SendMessageW(os,CB_ADDSTRING,0,(LPARAM)name);
+        addControl(dlg,"BUTTON","Windows",WS_GROUP|BS_AUTORADIOBUTTON|WS_TABSTOP,108,440,88,24,SETTINGS_OS);
+        addControl(dlg,"BUTTON","Mac",BS_AUTORADIOBUTTON|WS_TABSTOP,200,440,64,24,SETTINGS_OS_MAC);
+        addControl(dlg,"BUTTON","Ubuntu",BS_AUTORADIOBUTTON|WS_TABSTOP,268,440,100,24,SETTINGS_OS_UBUNTU);
         addControl(dlg,"STATIC","Machine",0,13,476,90,21,4403);
-        HWND machine=addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,473,310,110,SETTINGS_MACHINE);
-        for(const wchar_t* name:{L"Laptop",L"Desktop"})SendMessageW(machine,CB_ADDSTRING,0,(LPARAM)name);
+        addControl(dlg,"BUTTON","Laptop",WS_GROUP|BS_AUTORADIOBUTTON|WS_TABSTOP,108,473,108,24,SETTINGS_MACHINE);
+        addControl(dlg,"BUTTON","Desktop",BS_AUTORADIOBUTTON|WS_TABSTOP,220,473,108,24,SETTINGS_MACHINE_DESKTOP);
         addControl(dlg,"STATIC","IP address",0,13,509,90,21,4404);
         addControl(dlg,"STATIC","—",0,108,509,310,21,SETTINGS_MONITOR_IP);
         addControl(dlg,"STATIC","Remark",0,13,542,90,21,4405);
         addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,539,310,25,SETTINGS_REMARK);
         addControl(dlg,"BUTTON","Show status notifications",BS_AUTOCHECKBOX|WS_TABSTOP,108,572,250,24,SETTINGS_NOTIFY);
         CheckDlgButton(dlg,SETTINGS_NOTIFY,notificationsEnabled?BST_CHECKED:BST_UNCHECKED);
+        addControl(dlg,"BUTTON","Lock Settings",WS_TABSTOP,108,607,112,30,SETTINGS_LOCK_SETTINGS);
         addControl(dlg,"BUTTON","Save Monitor",WS_TABSTOP|BS_DEFPUSHBUTTON,225,607,96,30,SETTINGS_SAVE);
         addControl(dlg,"BUTTON","Close",WS_TABSTOP,332,607,86,30,SETTINGS_CLOSE);
         loadUserDirectory(dlg);
@@ -2239,6 +2270,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         }
         if(id==SETTINGS_MONITOR&&HIWORD(wp)==CBN_SELCHANGE){
             changeMonitorFields(dlg);
+            updateUnifiedVisibility(dlg);
             const int ix=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
             const int chosen=ix<0?0:(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,ix,0);
             std::string ip="—";
@@ -2303,6 +2335,19 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);
             updateTrayIcon();return TRUE;
         }
+        if(id==SETTINGS_LOCK_SETTINGS){
+            if(settingsMonitorLocked||getClientToken().empty())return TRUE;
+            if(MessageBoxW(dlg,L"Lock this monitor's settings? Only an administrator can unlock them in the web portal.",
+                           L"Lock Settings",MB_YESNO|MB_ICONWARNING)!=IDYES)return TRUE;
+            Json::Value req;req["action"]="lock_settings";
+            const Json::Value answer=callClientAuth(req);
+            if(!answer.get("success",false).asBool()){
+                showUtf8Message(dlg,answer.get("error","Cannot lock settings.").asString(),
+                    "Lock Settings",MB_OK|MB_ICONERROR);return TRUE;
+            }
+            refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);
+            return TRUE;
+        }
         if(id==SETTINGS_SAVE){
             if(!applyUnifiedServer(dlg)){updateUnifiedVisibility(dlg);return TRUE;}
             notificationsEnabled=IsDlgButtonChecked(dlg,SETTINGS_NOTIFY)==BST_CHECKED;
@@ -2310,12 +2355,12 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             if(getClientToken().empty()){updateUnifiedVisibility(dlg);return TRUE;}
             const int ix=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
             const int chosen=ix<0?0:(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,ix,0);
-            if(chosen<1){
+            if(chosen<1 && chosen!=-1){
                 showUtf8Message(dlg,"Select a monitor assigned to this user.",
                     "Monitor Settings",MB_OK|MB_ICONWARNING);
                 return TRUE;
             }
-            if(chosen!=selectedMonitorId.load()) {
+            if(chosen>0 && chosen!=selectedMonitorId.load()) {
                 Json::Value selection;selection["action"]="select";selection["monitor_id"]=chosen;
                 const Json::Value accepted=callClientAuth(selection);
                 if(!accepted.get("success",false).asBool()){
@@ -2325,19 +2370,35 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
                 }
                 selectedMonitorId.store(chosen);
             }
-            Json::Value req;req["action"]="save_monitor";req["monitor_id"]=chosen;
+            if(settingsMonitorLocked && chosen!=-1){
+                showUtf8Message(dlg,"Settings are locked. Ask your administrator to unlock this monitor.",
+                    "Monitor Settings",MB_OK|MB_ICONWARNING);return TRUE;
+            }
+            Json::Value req;req["action"]=chosen==-1?"create_monitor":"save_monitor";
+            if(chosen>0)req["monitor_id"]=chosen;
             req["label"]=editText(dlg,SETTINGS_LABEL);req["remark"]=editText(dlg,SETTINGS_REMARK);
-            const int osi=(int)SendDlgItemMessageW(dlg,SETTINGS_OS,CB_GETCURSEL,0,0);
-            const int type=(int)SendDlgItemMessageW(dlg,SETTINGS_MACHINE,CB_GETCURSEL,0,0);
-            req["os"]=osi==1?"Mac":osi==2?"Ubuntu":"Windows";
-            req["machine"]=type==1?"desktop":"laptop";
+            req["os"]=IsDlgButtonChecked(dlg,SETTINGS_OS_MAC)==BST_CHECKED?"Mac":
+                IsDlgButtonChecked(dlg,SETTINGS_OS_UBUNTU)==BST_CHECKED?"Ubuntu":"Windows";
+            req["machine"]=IsDlgButtonChecked(dlg,SETTINGS_MACHINE_DESKTOP)==BST_CHECKED?"desktop":"laptop";
             const Json::Value result=callClientAuth(req);
             if(!result.get("success",false).asBool()){
                 showUtf8Message(dlg,result.get("error","Could not save monitor.").asString(),
                     "Monitor Settings",MB_OK|MB_ICONERROR);return TRUE;
             }
+            if(chosen==-1){
+                const int created=result.get("monitor_id",0).asInt();
+                if(created<=0)return TRUE;
+                Json::Value selection;selection["action"]="select";selection["monitor_id"]=created;
+                const Json::Value selected=callClientAuth(selection);
+                if(!selected.get("success",false).asBool()){
+                    showUtf8Message(dlg,selected.get("error","Monitor was created but selection failed.").asString(),
+                        "Monitor Settings",MB_OK|MB_ICONERROR);return TRUE;
+                }
+                selectedMonitorId.store(created);
+            }
+            loadUserDirectory(dlg);
             refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);
-            EndDialog(dlg,IDOK);return TRUE;
+            updateTrayIcon();return TRUE;
         }
         break;
     }
