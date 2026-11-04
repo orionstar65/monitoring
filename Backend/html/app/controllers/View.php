@@ -2,6 +2,7 @@
 require_once BASEPATH . 'app/controllers/Base.php';
 require_once BASEPATH . 'app/services/LogParserService.php';
 require_once BASEPATH . 'app/services/StatusService.php';
+require_once BASEPATH . 'app/services/MonitorMediaPaths.php';
 
 class View extends Base {
     private $logParser;
@@ -295,101 +296,44 @@ class View extends Base {
     }
     
     public function view_file($file_path = '') {
-        $file_path = (string)($_GET['path'] ?? $file_path);
-        // Preserve absolute legacy paths for realpath checks; normalize older
-        // relative ./html/data entries to app-relative data paths.
-        $file_path = str_replace('\\','/',$file_path);
-        $file_path = preg_replace('#^(?:\\./)?html/#','',$file_path);
-        // Security: Only allow viewing files from the data directories
-        $file_path = urldecode($file_path);
-        
-        // A database row may record ./html/data/... relative to the backend
-        // root. BASEPATH is the html/ directory, so resolve only under it.
-        $absolute_path = str_starts_with($file_path,'/') ? $file_path : BASEPATH . ltrim($file_path,'/');
-        
-        // Normalize paths for comparison
-        $normalized_file_path = realpath($absolute_path);
-        $normalized_base = realpath(BASEPATH);
-        
-        // Check if file exists and is within allowed directories
-        $allowed_dirs = [SCREENS_DIR, THUMBNAILS_DIR, LOGS_DIR];
-        
-        $is_allowed = false;
-        foreach ($allowed_dirs as $allowed_dir) {
-            $allowed_absolute = realpath(BASEPATH . $allowed_dir);
-            if ($allowed_absolute && $normalized_file_path &&
-                ($normalized_file_path === $allowed_absolute || str_starts_with($normalized_file_path,$allowed_absolute.DIRECTORY_SEPARATOR))) {
-                $is_allowed = true;
-                break;
-            }
-        }
-        
-        if (!$is_allowed || !file_exists($absolute_path)) {
+        // PHP has already decoded the query parameter once. Resolve it against
+        // known screenshot/log roots rather than assuming Apache's CWD.
+        $requested=(string)($_GET['path']??$file_path);
+        $absolute=monitorResolveMediaPath($requested);
+        if($absolute===null){
             http_response_code(404);
-            echo "File not found or access denied";
+            header('Content-Type: text/plain; charset=utf-8');
+            header('Cache-Control: no-store');
+            echo 'Media file not found';
             return;
         }
-        
-        $extension = pathinfo($absolute_path, PATHINFO_EXTENSION);
-        
-        // Set appropriate content type
-        switch (strtolower($extension)) {
-            case 'jpg':
-            case 'jpeg':
-                header('Content-Type: image/jpeg');
-                break;
-            case 'png':
-                header('Content-Type: image/png');
-                break;
-            case 'txt':
-                header('Content-Type: text/plain');
-                break;
-            default:
-                header('Content-Type: application/octet-stream');
+        $extension=strtolower(pathinfo($absolute,PATHINFO_EXTENSION));
+        $types=['jpg'=>'image/jpeg','jpeg'=>'image/jpeg','png'=>'image/png',
+            'webp'=>'image/webp','txt'=>'text/plain; charset=utf-8'];
+        if(!isset($types[$extension])){
+            http_response_code(415);echo 'Unsupported media type';return;
         }
-        
-        // Output file content
-        readfile($absolute_path);
+        header('Content-Type: '.$types[$extension]);
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: private, max-age=120');
+        header('Content-Length: '.filesize($absolute));
+        if(($_SERVER['REQUEST_METHOD']??'GET')==='HEAD')return;
+        readfile($absolute);
     }
-    
-    /**
-     * Convert absolute file path to relative URL path
-     * All paths use id_{monitor_id} format - no conversion needed
-     */
-    /**
-     * Legacy rows can reference thumbnails that were never created or were
-     * deleted. Fall back to an existing full screenshot without a broken card.
-     */
+
     private function preferredScreenshotPath(array $shot): string {
         $original=(string)($shot['file_path']??'');
         $thumbnail=(string)($shot['thumbnail_path']??'');
-        if($thumbnail==='')return $original;
-        $url=$this->getRelativePath($thumbnail);
-        $prefix='view/view_file?path=';
-        if(!str_starts_with($url,$prefix))return $original;
-        $relative=rawurldecode(substr($url,strlen($prefix)));
-        $root=realpath(BASEPATH.'data/thumbnails');
-        $candidate=realpath(BASEPATH.$relative);
-        return ($root&&$candidate&&is_file($candidate)&&
-            str_starts_with($candidate,$root.DIRECTORY_SEPARATOR))?$thumbnail:$original;
+        return $thumbnail!=='' && monitorResolveMediaPath($thumbnail)!==null
+            ? $thumbnail : $original;
     }
 
-    private function getRelativePath($path) {
-        if(!is_string($path)||trim($path)==='')return '';
-        $path=str_replace('\\','/',$path);
-        // Legacy rows may contain an absolute backend path or ./html/data/...
-        // file paths. Convert to an app-relative path without changing records.
-        $marker='/html/data/';
-        $pos=strpos($path,$marker);
-        if($pos!==false){
-            $path='data/'.substr($path,$pos+strlen($marker));
-        }else{
-            $path=preg_replace('#^(?:\\./)?(?:html/)?data/#','data/',$path);
-            $path=ltrim($path,'/');
-        }
-        // view_file performs a realpath check inside known data directories.
-        return 'view/view_file?path='.rawurlencode($path);
+    private function getRelativePath($path): string {
+        if(!is_string($path)||$path==='')return '';
+        $relative=monitorPublicMediaPath($path);
+        return $relative===null?'':'view/view_file?path='.rawurlencode($relative);
     }
+
     public function formatFileSize($bytes) {
         if ($bytes === 0) return "0 Bytes";
         $k = 1024;
