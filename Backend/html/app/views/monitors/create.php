@@ -29,7 +29,7 @@ ob_start();
                         <select name="owner_user_id" id="owner_user_id" class="form-select">
                           <option value="">Unassigned</option>
                           <?php foreach($accounts as $person): ?>
-                          <option value="<?= (int)$person['id'] ?>"><?= htmlspecialchars(($person['user_no']??'—').'/'.($person['name']??'').'/'.($person['ip_address']??'—'),ENT_QUOTES,'UTF-8') ?></option>
+                          <option value="<?= (int)$person['id'] ?>"><?= htmlspecialchars(($person['user_no']??'—').': '.($person['name']??'').' ('.(int)($person['device_count']??0).' Devices)',ENT_QUOTES,'UTF-8') ?></option>
                           <?php endforeach; ?>
                         </select>
                     </div>
