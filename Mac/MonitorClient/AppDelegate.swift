@@ -2829,20 +2829,37 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let label = entry("Label")
         let remark = entry("Remark")
         let monitorIP = text("—")
-        let os = NSPopUpButton()
-        os.addItems(withTitles: ["Windows", "Mac", "Ubuntu"])
-        os.widthAnchor.constraint(equalToConstant: 330).isActive = true
-        let machine = NSPopUpButton()
-        machine.addItems(withTitles: ["Laptop", "Desktop"])
-        machine.widthAnchor.constraint(equalToConstant: 330).isActive = true
+        func radioRow(_ choices: [String], selected: String) -> (NSStackView, [NSButton]) {
+            let radios = choices.map { title -> NSButton in
+                let button = NSButton(radioButtonWithTitle: title, target: nil, action: nil)
+                button.state = title == selected ? .on : .off
+                return button
+            }
+            let row = NSStackView(views: radios)
+            row.orientation = .horizontal
+            row.spacing = 12
+            return (row, radios)
+        }
+        let (osRow, osRadios) = radioRow(["Windows", "Mac", "Ubuntu"], selected: "Mac")
+        let (machineRow, machineRadios) = radioRow(["Laptop", "Desktop"], selected: "Laptop")
+        func selectedRadio(_ radios: [NSButton]) -> String {
+            radios.first(where: { $0.state == .on })?.title ?? radios[0].title
+        }
+        func chooseRadio(_ radios: [NSButton], value: String) {
+            for button in radios { button.state = button.title == value ? .on : .off }
+        }
         monitorPane.addArrangedSubview(line("Monitor", picker))
         monitorPane.addArrangedSubview(line("Label", label))
-        monitorPane.addArrangedSubview(line("OS", os))
-        monitorPane.addArrangedSubview(line("Machine", machine))
+        monitorPane.addArrangedSubview(line("OS", osRow))
+        monitorPane.addArrangedSubview(line("Machine", machineRow))
         monitorPane.addArrangedSubview(line("IP address", monitorIP))
         monitorPane.addArrangedSubview(line("Remark", remark))
         let save = action("Save Monitor", "save")
-        monitorPane.addArrangedSubview(line("", save))
+        let lockSettings = action("Lock Settings", "lock")
+        let monitorActions = NSStackView(views: [save, lockSettings])
+        monitorActions.orientation = .horizontal
+        monitorActions.spacing = 10
+        monitorPane.addArrangedSubview(line("", monitorActions))
         let monitorNote = text("Monitor assignment is controlled by the server.")
         monitorNote.textColor = .secondaryLabelColor
         monitorPane.addArrangedSubview(monitorNote)
@@ -2858,7 +2875,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let coordinator = UnifiedWindowActions()
         coordinator.window = window
         window.delegate = coordinator
-        for button in [test, unpair, save, close] {
+        for button in [test, unpair, save, lockSettings, close] {
             button.target = coordinator
             button.action = #selector(UnifiedWindowActions.activate(_:))
         }
@@ -2869,20 +2886,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         var availableMonitors: [[String: Any]] = []
         var locked = false
+        var monitorSettingsLocked = false
         var directoryError: String? = nil
         func updateMonitorFields() {
             let id = picker.selectedItem?.representedObject as? Int ?? 0
             guard let monitor = availableMonitors.first(where: { ($0["id"] as? Int) == id }) else {
                 label.stringValue = ""
                 remark.stringValue = ""
-                monitorIP.stringValue = "—"
+                monitorIP.stringValue = id == -1 ? "Assigned on creation" : "—"
+                monitorSettingsLocked = false
+                updateState()
                 return
             }
             label.stringValue = monitor["name"] as? String ?? ""
             remark.stringValue = monitor["remark"] as? String ?? ""
             monitorIP.stringValue = monitor["ip_address"] as? String ?? "—"
-            os.selectItem(withTitle: monitor["platform"] as? String ?? "Mac")
-            machine.selectItem(withTitle: (monitor["type"] as? String ?? "").lowercased() == "desktop" ? "Desktop" : "Laptop")
+            chooseRadio(osRadios, value: monitor["platform"] as? String ?? "Mac")
+            chooseRadio(machineRadios, value: (monitor["type"] as? String ?? "").lowercased() == "desktop" ? "Desktop" : "Laptop")
+            monitorSettingsLocked = monitor["settings_locked"] as? Bool ??
+                ((monitor["settings_locked"] as? Int ?? 0) == 1)
+            updateState()
         }
         func refreshMonitors() {
             guard !self.clientToken.isEmpty else {
@@ -2916,6 +2939,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 picker.addItem(withTitle: "\(name) · \(platform) · \(type) · \(ip)")
                 picker.lastItem?.representedObject = id
             }
+            picker.addItem(withTitle: "Add new...")
+            picker.lastItem?.representedObject = -1
             if let item = picker.itemArray.first(where: { ($0.representedObject as? Int) == self.selectedMonitorId }) {
                 picker.select(item)
             }
@@ -2935,6 +2960,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 notice.stringValue = "User selection is locked. Ask your administrator to edit."
                 notice.textColor = .systemOrange
             }
+            let creating = picker.selectedItem?.representedObject as? Int == -1
+            save.title = creating ? "Add Monitor" : "Save Monitor"
+            save.isEnabled = enrolled && (creating || !monitorSettingsLocked)
+            lockSettings.isEnabled = enrolled && !creating && !monitorSettingsLocked
+            lockSettings.title = monitorSettingsLocked ? "Settings Locked" : "Lock Settings"
+            label.isEnabled = !monitorSettingsLocked || creating
+            remark.isEnabled = !monitorSettingsLocked || creating
+            osRadios.forEach { $0.isEnabled = !monitorSettingsLocked || creating }
+            machineRadios.forEach { $0.isEnabled = !monitorSettingsLocked || creating }
             status.stringValue = self.isServerConnected ? "Server reachable" : "Offline / Not configured"
             self.updateTrayStatusDot()
         }
@@ -2990,8 +3024,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 let number = String(describing: record["user_no"] ?? "")
                 guard !number.isEmpty else { continue }
                 let name = record["full_name"] as? String ?? ""
-                let ip = record["ip_address"] as? String ?? "—"
-                users.addItem(withTitle: "\(number)/\(name)/\(ip)")
+                let count = record["device_count"] as? Int ?? 0
+                users.addItem(withTitle: "\(number): \(name) (\(count) Devices)")
                 users.lastItem?.representedObject = number
             }
             if let item = users.itemArray.first(where: {
@@ -3081,7 +3115,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     updateState()
                 }
                 monitorNote.stringValue = "Monitor assigned to this installation."
-                save.isEnabled = true
+                updateState()
             case "disconnect":
                 guard !locked else { showError("User assignment is locked. Ask your administrator to edit the monitor."); return }
                 _ = self.clientAuthRequest(["action":"logout"],authenticated:true)
@@ -3096,25 +3130,62 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 self.isServerConnected = false
                 refreshMonitors()
                 updateState()
+            case "lock":
+                guard !self.clientToken.isEmpty,
+                      picker.selectedItem?.representedObject as? Int == self.selectedMonitorId,
+                      !monitorSettingsLocked else { return }
+                let warning = NSAlert()
+                warning.messageText = "Lock monitor settings?"
+                warning.informativeText = "Only an administrator can unlock this monitor from the web portal."
+                warning.addButton(withTitle: "Lock Settings")
+                warning.addButton(withTitle: "Cancel")
+                guard warning.runModal() == .alertFirstButtonReturn else { return }
+                let result = self.clientAuthRequest(["action":"lock_settings"], authenticated:true)
+                guard result?["success"] as? Bool == true else {
+                    showError(result?["error"] as? String ?? "Could not lock settings.")
+                    return
+                }
+                refreshMonitors()
+                updateState()
             case "save":
                 guard saveServer(), !self.clientToken.isEmpty,
                       let id = picker.selectedItem?.representedObject as? Int,
-                      id == self.selectedMonitorId else {
+                      (id == self.selectedMonitorId || id == -1) else {
                     showError("Select one of your assigned monitors.")
                     return
                 }
-                let response = self.clientAuthRequest([
-                    "action":"save_monitor","monitor_id":id,
-                    "label":label.stringValue,"remark":remark.stringValue,
-                    "os":os.titleOfSelectedItem ?? "Mac",
-                    "machine":(machine.titleOfSelectedItem ?? "Laptop").lowercased()
-                ],authenticated:true)
-                guard response?["success"] as? Bool == true else {
-                    showError(response?["error"] as? String ?? "Could not update monitor.")
+                if id != -1 && monitorSettingsLocked {
+                    showError("Monitor settings are locked. Ask your administrator to unlock them.")
                     return
+                }
+                var request: [String: Any] = [
+                    "action":id == -1 ? "create_monitor" : "save_monitor",
+                    "label":label.stringValue,"remark":remark.stringValue,
+                    "os":selectedRadio(osRadios),
+                    "machine":selectedRadio(machineRadios).lowercased()
+                ]
+                if id > 0 { request["monitor_id"] = id }
+                let response = self.clientAuthRequest(request,authenticated:true)
+                guard response?["success"] as? Bool == true else {
+                    showError(response?["error"] as? String ?? "Could not save monitor.")
+                    return
+                }
+                if id == -1 {
+                    let created = response?["monitor_id"] as? Int ?? 0
+                    guard created > 0 else { showError("No monitor ID returned."); return }
+                    let selected = self.clientAuthRequest([
+                        "action":"select","monitor_id":created
+                    ],authenticated:true)
+                    guard selected?["success"] as? Bool == true else {
+                        showError(selected?["error"] as? String ?? "Monitor created, but selection failed.")
+                        refreshMonitors()
+                        return
+                    }
+                    self.selectedMonitorId = created
                 }
                 self.notificationsEnabled = notifications.state == .on
                 refreshMonitors()
+                refreshUserDirectory()
                 updateState()
             case "close":
                 self.notificationsEnabled = notifications.state == .on
