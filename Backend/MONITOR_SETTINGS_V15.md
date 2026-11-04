@@ -11,7 +11,9 @@ schema and native client behavior; the desktop build/version numbers are not bum
   **Switching user does not transfer existing monitor ownership.**
 - Monitor selector includes **Add new...**. Saving that choice creates a monitor
   owned by the selected user and selects it for this device session.
-- An existing monitor initially displays its **Label, OS, Machine, IP and
+  There is no stored monitor Label column; the stable ID is displayed as
+  `Device #N`.
+- An existing monitor initially displays its **OS, Machine, IP and
   Remark as read-only information**. Click **Edit** to show input fields and
   radio buttons; **Cancel** restores the previous values. **Add new...**
   enters edit mode automatically.
@@ -21,8 +23,10 @@ schema and native client behavior; the desktop build/version numbers are not bum
 - The desktop clients clear the temporary first-device state when the user
   selector changes or returns to the previously authenticated user; no
   instructional banners appear for accounts with zero monitors.
-- A user with zero devices can choose **Add new...** and explicitly create their
-  first monitor. This uses the existing trusted-LAN enrollment gate.
+- **Every fresh installation**, including one whose user has other locked
+  monitors, chooses **Add new...** and creates a separate monitor ID.
+  No lock propagates to the entire user account. This uses the existing
+  trusted-LAN enrollment gate.
 - OS is a radio group (Windows / Mac / Ubuntu); Machine is a separate radio
   group (Laptop / Desktop).
 - **Lock Settings** saves the visible monitor fields and permanently locks
@@ -120,3 +124,10 @@ that point to real files. See [MONITOR_LEGACY_MIGRATION.md](MONITOR_LEGACY_MIGRA
 Windows no longer reads `settings.ini`: registry preferences keep only the
 server endpoint and notification toggle. Screenshot/log intervals are fetched
 from the server. Web login is User No only.
+
+## November 4 schema and screenshot update
+
+For removal of the obsolete `tbl_monitor_ips.name` column and for diagnosis
+of HTTP screenshot URLs like `/html/view/view_file?path=data%2Fthumbnails%2F...`,
+see [MONITOR_V15_MONITOR_ID_AND_SCREENSHOTS.md](MONITOR_V15_MONITOR_ID_AND_SCREENSHOTS.md).
+Deploy compatible PHP before applying that one-time DROP COLUMN migration.
