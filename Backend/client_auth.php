@@ -35,7 +35,7 @@ try {
     // Direct private-LAN clients may list/enroll without pairing codes.
     // Public clients and untrusted proxy traffic remain denied unless an
     // administrator explicitly permits remote/VPN use via the environment.
-    if(in_array($action,['directory','enroll'],true)
+    if(in_array($action,['directory','enroll','bootstrap_monitor'],true)
        && !monitoringNoCodeEnrollmentAllowed($db)){
         http_response_code(503);
         echo json_encode([
@@ -48,14 +48,16 @@ try {
     // user's number, display name and the IP of their first assigned monitor.
     if($action==='directory'){
         $st=$db->prepare("SELECT u.user_no,u.name,
-               (SELECT m.ip_address FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id ORDER BY m.id LIMIT 1) AS ip_address
+               (SELECT m.ip_address FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id ORDER BY m.id LIMIT 1) AS ip_address,
+               (SELECT COUNT(*) FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id) AS device_count
                FROM users u WHERE u.user_no IS NOT NULL
                ORDER BY u.user_no LIMIT 10000");
         $st->execute();$rows=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
         echo json_encode(['success'=>true,'users'=>array_map(static fn($u)=>[
             'user_no'=>(string)$u['user_no'],
             'full_name'=>(string)$u['name'],
-            'ip_address'=>(string)($u['ip_address']??'—')
+            'ip_address'=>(string)($u['ip_address']??'—'),
+            'device_count'=>(int)$u['device_count']
         ],$rows)]);exit;
     }
     // User No selection registers a monitor-bound device session. The server issues
@@ -126,7 +128,7 @@ try {
     if($action==='restore'){
         $st=$db->prepare('SELECT id,name,user_no FROM users WHERE id=?');
         $st->bind_param('i',$userId);$st->execute();$user=$st->get_result()->fetch_assoc();$st->close();
-        $st=$db->prepare('SELECT id,name,ip_address,platform,type,remark,assignment_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY name,id');
+        $st=$db->prepare('SELECT id,name,ip_address,platform,type,remark,assignment_locked,settings_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY name,id');
         $st->bind_param('i',$userId);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
         $monitorId=(int)($session['monitor_id']??0);
         if($monitorId && !in_array($monitorId,array_map(static fn($m)=>(int)$m['id'],$monitors),true))$monitorId=0;
@@ -138,7 +140,7 @@ try {
             'monitor_id'=>$monitorId,'assignment_locked'=>$locked]);exit;
     }
     if($action==='monitors'){
-        $st=$db->prepare('SELECT id,name,ip_address,platform,type,remark,assignment_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY name,id');
+        $st=$db->prepare('SELECT id,name,ip_address,platform,type,remark,assignment_locked,settings_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY name,id');
         $st->bind_param('i',$userId);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);
         echo json_encode(['success'=>true,'monitors'=>$monitors]);exit;
     }
@@ -153,15 +155,51 @@ try {
         $st->bind_param('iii',$monitorId,$session['id'],$userId);$st->execute();$st->close();
         echo json_encode(['success'=>true,'monitor_id'=>(int)$monitorId]);exit;
     }
+    if($action==='lock_settings'){
+        $mid=(int)($session['monitor_id']??0);
+        if($mid<1){http_response_code(400);echo json_encode(['error'=>'Select a monitor']);exit;}
+        // Only the currently selected, owned monitor can be locked from a client.
+        // Unlocking is reserved for the web administrator.
+        $st=$db->prepare('UPDATE tbl_monitor_ips SET settings_locked=1 WHERE id=? AND owner_user_id=?');
+        $st->bind_param('ii',$mid,$userId);$st->execute();
+        $changed=$st->affected_rows;$st->close();
+        $st=$db->prepare('SELECT settings_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=?');
+        $st->bind_param('ii',$mid,$userId);$st->execute();$row=$st->get_result()->fetch_assoc();$st->close();
+        if(!$row){http_response_code(403);echo json_encode(['error'=>'Monitor not assigned to this user']);exit;}
+        echo json_encode(['success'=>true,'settings_locked'=>true]);exit;
+    }
+    if($action==='create_monitor'){
+        $fields=clientMonitorFields($data);
+        if(isset($fields['error'])){http_response_code(400);echo json_encode(['error'=>$fields['error']]);exit;}
+        $ip=(string)($data['ip_address']??$_SERVER['REMOTE_ADDR']??'');
+        if(!filter_var($ip,FILTER_VALIDATE_IP)){
+            http_response_code(400);echo json_encode(['error'=>'Enter a valid device IP address']);exit;
+        }
+        $db->begin_transaction();
+        try{
+            $st=$db->prepare('SELECT id FROM users WHERE id=? FOR UPDATE');
+            $st->bind_param('i',$userId);$st->execute();$owner=$st->get_result()->fetch_assoc();$st->close();
+            if(!$owner)throw new RuntimeException('Account not found');
+            $mac=null;$locked=0;
+            $st=$db->prepare('INSERT INTO tbl_monitor_ips (name,ip_address,mac_address,owner_user_id,platform,type,remark,assignment_locked,settings_locked) VALUES (?,?,?,?,?,?,?,?,?)');
+            $st->bind_param('sssisssii',$fields['name'],$ip,$mac,$userId,$fields['platform'],$fields['type'],$fields['remark'],$locked,$locked);
+            $st->execute();$newId=(int)$db->insert_id;$st->close();
+            $db->commit();
+            echo json_encode(['success'=>true,'monitor_id'=>$newId]);exit;
+        }catch(Throwable $e){$db->rollback();throw $e;}
+    }
     if($action==='save_monitor'){
         $monitorId=filter_var($data['monitor_id']??null,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
         if(!$monitorId){http_response_code(400);echo json_encode(['error'=>'Select an assigned monitor']);exit;}
         if((int)$session['monitor_id']!==$monitorId){
             http_response_code(403);echo json_encode(['error'=>'This monitor is not selected for this device']);exit;
         }
-        $st=$db->prepare('SELECT id FROM tbl_monitor_ips WHERE id=? AND owner_user_id=? LIMIT 1');
+        $st=$db->prepare('SELECT id,settings_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=? LIMIT 1');
         $st->bind_param('ii',$monitorId,$userId);$st->execute();$owned=$st->get_result()->fetch_assoc();$st->close();
         if(!$owned){http_response_code(403);echo json_encode(['error'=>'Monitor not assigned to your account']);exit;}
+        if((int)$owned['settings_locked']===1){
+            http_response_code(423);echo json_encode(['error'=>'Monitor settings are locked. Ask your administrator to unlock them.','code'=>'settings_locked']);exit;
+        }
         $fields=clientMonitorFields($data);
         if(isset($fields['error'])){http_response_code(400);echo json_encode(['error'=>$fields['error']]);exit;}
         $st=$db->prepare('UPDATE tbl_monitor_ips SET name=?,platform=?,type=?,remark=? WHERE id=? AND owner_user_id=?');
@@ -170,8 +208,8 @@ try {
         echo json_encode(['success'=>true,'monitor_id'=>$monitorId]);exit;
     }
     if($action==='request_monitor'){
-        http_response_code(403);
-        echo json_encode(['error'=>'New monitors must be added and assigned by an administrator in the web portal.']);exit;
+        http_response_code(400);
+        echo json_encode(['error'=>'Use Add new... in Monitor Settings to create a device under the selected user.']);exit;
     }
     if($action==='logout'){
         // The administrator's lock also prevents disconnect/re-enroll flows
