@@ -13,11 +13,11 @@ $recovery=source('Backend/recover_web_login.php');
 $migration=source('Backend/migrations/2026_11_02_remove_username_v17.sql');
 $checks=[
     'User No lookup uses exact parameter'=>str_contains($auth,'WHERE user_no=:user_no LIMIT 1'),
-    'Email lookup uses exact parameter'=>str_contains($auth,'WHERE email=:email LIMIT 1'),
+    'Email login is not accepted'=>!str_contains($auth,'WHERE email=:email LIMIT 1'),
     'Full name not used for login'=>!str_contains($auth,'WHERE name=')&&!str_contains($auth,'WHERE username'),
     'Passwords still verified with PHP password API'=>str_contains($auth,'password_verify('),
-    'User No and email are shown on form'=>str_contains($form,'User No or email'),
-    'Old username login is identified as retired'=>str_contains($form,'Previous usernames are no longer accepted'),
+    'User No only in form'=>str_contains($form,'>User No</label>')&&!str_contains($form,'User No or email'),
+    'No obsolete login descriptions'=>!str_contains($form,'Previous usernames')&&!str_contains($form,'class="form-text"'),
     'Recovery script is CLI-only'=>str_contains($recovery,"PHP_SAPI!=='cli'"),
     'Recovery script never returns hashes'=>str_contains($recovery,'password_get_info')&&str_contains($recovery,'password_hash'),
     'Password reset requires explicit admin User No'=>str_contains($recovery,'--reset-user-no='),
