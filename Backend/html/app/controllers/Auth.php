@@ -7,26 +7,14 @@ class Auth extends Base {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $identifier = trim((string)($_POST['identifier'] ?? ''));
             $password = $_POST['password'] ?? '';
-            if ($identifier==='' || $password==='') {
-                $error = 'User No or email and password are required';
+            if (!preg_match('/^[1-9][0-9]{0,14}$/D',$identifier) || $password==='') {
+                $error = 'Enter your User No and password.';
             } else {
-                // User No is a stable numeric identifier. Never fall back to
-                // Full Name: names are not unique and must not select an account.
-                // Retired username values no longer exist after schema revision 17.
-                if(preg_match('/^[1-9][0-9]{0,14}$/D',$identifier)){
-                    $user=$this->db->fetch(
-                        'SELECT * FROM users WHERE user_no=:user_no LIMIT 1',
-                        ['user_no'=>$identifier]
-                    );
-                } elseif(filter_var($identifier,FILTER_VALIDATE_EMAIL)){
-                    $user=$this->db->fetch(
-                        'SELECT * FROM users WHERE email=:email LIMIT 1',
-                        ['email'=>$identifier]
-                    );
-                } else {
-                    $user=false;
-                }
-                
+                $user=$this->db->fetch(
+                    'SELECT * FROM users WHERE user_no=:user_no LIMIT 1',
+                    ['user_no'=>$identifier]
+                );
+
                 $attemptKey=hash('sha256',($_SERVER['REMOTE_ADDR']??'').'|'.strtolower($identifier));
                 $attempts=(int)$this->db->fetch("SELECT COUNT(*) AS hits FROM login_attempts WHERE attempt_key=:k AND attempted_at>DATE_SUB(NOW(),INTERVAL 15 MINUTE)",['k'=>$attemptKey])['hits'];
                 if($attempts>=8){http_response_code(429);$error='Too many login attempts; try again later.';}
@@ -42,7 +30,7 @@ class Auth extends Base {
                         : ($user['role']==='admin' ? 'dashboard' : 'monitors'));
                 } else {
                     $this->db->insert('login_attempts',['attempt_key'=>$attemptKey]);
-                    $error = 'Invalid login details. Use your User No or registered email, not an old username.';
+                    $error = 'Invalid User No or password.';
                 }
             }
         }
