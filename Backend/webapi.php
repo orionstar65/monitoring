@@ -40,8 +40,8 @@ $dbService = new DatabaseService($mysqli);
 $monitorId=requireClientMonitor($mysqli);
 $dbService->setAuthenticatedMonitorId($monitorId);
 
-// Note: Do NOT require a monitor record to exist before processing uploads.
-// For uploads we resolve monitor_id inside uploadCacheScreenWithMetadata() using MAC/IP (MAC-first).
+// The monitor identity for every upload comes exclusively from the validated
+// device bearer session. A request IP or caller-provided MAC is not an identity.
 
 /**
  * Upload screenshot with metadata storage
@@ -49,22 +49,11 @@ $dbService->setAuthenticatedMonitorId($monitorId);
 function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
     global $config, $dbService, $mysqli;
     
-    // Get client IP address
-    $clientIP = $_SERVER['REMOTE_ADDR'] ?? '';
-    
-    // Check for MAC address in POST parameters (optional, some platforms send it)
-    $macAddress = $_POST['mac_address'] ?? null;
-    if ($macAddress === '') {
-        $macAddress = null;
-    }
-    
-    // Get monitor ID (will use MAC address if provided, or ARP lookup as fallback)
-    $monitor_id = $dbService->getMonitorId($clientIP, $macAddress);
-    if (!$monitor_id) {
-        error_log("Could not find monitor ID for IP: $clientIP, MAC: " . ($macAddress ?? 'null'));
-        return false;
-    }
-    
+    // requireClientMonitor() already verified this session is bound to an
+    // existing, owned monitor. Never rediscover identity using MAC/ARP/IP.
+    $monitor_id=(int)$GLOBALS['monitorId'];
+    if($monitor_id<1)return false;
+
     // Get device-based paths for file storage (uses ONLY id_{monitor_id} format)
     $monitor_paths = getMonitorPaths($monitor_id);
     if (!$monitor_paths) {
