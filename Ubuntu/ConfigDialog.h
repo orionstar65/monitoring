@@ -9,6 +9,8 @@
 #include <QGroupBox>
 #include <QComboBox>
 #include <QCheckBox>
+#include <QRadioButton>
+#include <QButtonGroup>
 #include <QJsonArray>
 #include <QJsonObject>
 
@@ -37,6 +39,7 @@ private slots:
     void onUserChanged(int);
     void onMonitorChanged(int);
     void onTestConnectionClicked();
+    void onLockSettingsClicked();
 private:
     QJsonObject authRequest(const QJsonObject &payload,bool authenticated=false);
     QString settingsPath() const;
@@ -59,14 +62,16 @@ private:
     QJsonArray assignedMonitors;
     int monitorId=0;
     bool assignmentLocked=false;
+    bool settingsLocked=false;
     bool logoutPerformed=false;
     QLineEdit *serverIPEdit=nullptr,*clientNameEdit=nullptr;
     QLineEdit *labelEdit=nullptr,*remarkEdit=nullptr;
     QSpinBox *serverPortEdit=nullptr;
-    QComboBox *userSelector=nullptr,*monitorSelector=nullptr,*osSelector=nullptr,*machineSelector=nullptr;
+    QComboBox *userSelector=nullptr,*monitorSelector=nullptr;
+    QButtonGroup *osRadios=nullptr,*machineRadios=nullptr;
     QLabel *connectionStatusLabel=nullptr,*assignmentStatusLabel=nullptr,*monitorIPLabel=nullptr;
     QCheckBox *notificationsCheck=nullptr;
     QGroupBox *monitorGroup=nullptr;
-    QPushButton *testButton=nullptr,*logoutButton=nullptr,*saveButton=nullptr;
+    QPushButton *testButton=nullptr,*logoutButton=nullptr,*saveButton=nullptr,*lockSettingsButton=nullptr;
 };
 #endif
