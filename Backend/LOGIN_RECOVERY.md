@@ -1,6 +1,6 @@
 # Web sign-in recovery after retiring usernames (MonitorClient v1.5)
 
-The old web **username** field has been removed from the users table. Web sign-in now accepts **User No or registered email + password**. User No is **not** the database ID. Earlier accounts were initially assigned `users.id + 100000`, although administrators may have edited it later.
+The old web **username** field has been removed from the users table. Web sign-in now accepts **User No + password**. User No is **not** the database ID. Earlier accounts were initially assigned `users.id + 100000`, although administrators may have edited it later.
 
 ## If your existing sign-in says "Invalid login details"
 
