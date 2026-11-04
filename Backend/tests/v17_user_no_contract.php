@@ -15,7 +15,10 @@ $winCmake=$read('Windows/CMakeLists.txt');
 $macProject=$read('Mac/MonitorClient.xcodeproj/project.pbxproj');
 $ubuntuVersion=$read('Ubuntu/version.h');
 $check=[
- 'Login uses User No'=>str_contains($auth,'WHERE user_no = :user_no OR email = :email'),
+ 'Login uses User No'=>str_contains($auth,'WHERE user_no=:user_no LIMIT 1'),
+ 'Login uses email'=>str_contains($auth,'WHERE email=:email LIMIT 1'),
+ 'LAN-scoped directory fallback'=>str_contains($read('Backend/services/ClientIdentity.php'),'monitoringLanEnrollmentClient()'),
+ 'Directory includes administrator accounts'=>str_contains($api,"FROM users u WHERE u.user_no IS NOT NULL"),
  'No accounts.username in account controller'=>!str_contains($users,'username'),
  'No accounts.username in base session'=>!str_contains($base,'username'),
  'Directory exposes display fields'=>str_contains($api,"'full_name'")&&str_contains($api,"'ip_address'"),
