@@ -42,6 +42,25 @@ try {
     $_SERVER['REMOTE_ADDR']='8.8.8.8';
     expectIdentity(!monitoringLanHttpAllowed(),'Public IP must not use LAN HTTP exception');
 
+    // Direct local subnet is accepted without opening enrollment to the
+    // public internet, loopback proxies or untrusted forwarded headers.
+    expectIdentity(monitoringIsPrivateLanAddress('192.168.1.45'),'192.168 LAN');
+    expectIdentity(monitoringIsPrivateLanAddress('10.0.0.2'),'10/8 LAN');
+    expectIdentity(monitoringIsPrivateLanAddress('172.20.10.4'),'172.16/12 LAN');
+    expectIdentity(monitoringIsPrivateLanAddress('fd00::25'),'IPv6 unique local');
+    expectIdentity(!monitoringIsPrivateLanAddress('8.8.8.8'),'Reject public IPv4');
+    expectIdentity(!monitoringIsPrivateLanAddress('127.0.0.1'),'Reject loopback proxy');
+    expectIdentity(!monitoringIsPrivateLanAddress('::1'),'Reject IPv6 loopback');
+    $_SERVER['REMOTE_ADDR']='192.168.1.60';
+    unset($_SERVER['HTTP_X_FORWARDED_FOR'],$_SERVER['HTTP_FORWARDED']);
+    expectIdentity(monitoringLanEnrollmentClient(),'Direct LAN desktop client');
+    $_SERVER['REMOTE_ADDR']='8.8.8.8';
+    expectIdentity(!monitoringLanEnrollmentClient(),'Reject direct public client');
+    $_SERVER['REMOTE_ADDR']='192.168.1.60';
+    $_SERVER['HTTP_X_FORWARDED_FOR']='8.8.8.8';
+    expectIdentity(!monitoringLanEnrollmentClient(),'Reject untrusted forwarded client');
+    unset($_SERVER['HTTP_X_FORWARDED_FOR']);
+
     $_SERVER['HTTP_AUTHORIZATION']='Bearer '.str_repeat('a',64);
     expectIdentity(clientBearer()===str_repeat('a',64),'Valid bearer token should parse');
     $_SERVER['HTTP_AUTHORIZATION']='Bearer '.str_repeat('X',64);
