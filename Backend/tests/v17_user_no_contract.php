@@ -6,6 +6,7 @@ $auth=$read('Backend/html/app/controllers/Auth.php');
 $users=$read('Backend/html/app/controllers/Users.php');
 $base=$read('Backend/html/app/controllers/Base.php');
 $api=$read('Backend/client_auth.php');
+$diagnostics=$read('Backend/diagnose_user_directory.php');
 $mac=$read('Mac/MonitorClient/AppDelegate.swift');
 $win=$read('Windows/MonitorClient.cpp');
 $linux=$read('Ubuntu/ConfigDialog.cpp');
@@ -19,6 +20,7 @@ $check=[
  'Login uses email'=>str_contains($auth,'WHERE email=:email LIMIT 1'),
  'LAN-scoped directory fallback'=>str_contains($read('Backend/services/ClientIdentity.php'),'monitoringLanEnrollmentClient()'),
  'Directory includes administrator accounts'=>str_contains($api,"FROM users u WHERE u.user_no IS NOT NULL"),
+ 'CLI-only read-only directory diagnostics'=>str_contains($diagnostics,"PHP_SAPI!=='cli'")&&!str_contains($diagnostics,'UPDATE users'),
  'No accounts.username in account controller'=>!str_contains($users,'username'),
  'No accounts.username in base session'=>!str_contains($base,'username'),
  'Directory exposes display fields'=>str_contains($api,"'full_name'")&&str_contains($api,"'ip_address'"),
