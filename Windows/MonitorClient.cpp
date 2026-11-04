@@ -2157,6 +2157,7 @@ static void refreshUnifiedMonitors(HWND dlg) {
 static void updateUnifiedVisibility(HWND dlg) {
     const bool enrolled=!getClientToken().empty()&&selectedMonitorId.load()>0;
     const bool pending=!settingsPendingUserNo.empty();
+    const bool locked=enrolled&&(settingsAssignmentLocked||settingsMonitorLocked);
     const int monitorControls[] = {
         SETTINGS_MONITOR_HEADING,SETTINGS_MONITOR_DIVIDER,SETTINGS_MONITOR,
         SETTINGS_LABEL,SETTINGS_OS,SETTINGS_MACHINE,SETTINGS_MONITOR_IP,
@@ -2165,8 +2166,12 @@ static void updateUnifiedVisibility(HWND dlg) {
     };
     for(int id:monitorControls)ShowWindow(GetDlgItem(dlg,id),(enrolled||pending)?SW_SHOW:SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),enrolled?SW_SHOW:SW_HIDE);
-    EnableWindow(GetDlgItem(dlg,SETTINGS_USER_NO),!enrolled||!settingsAssignmentLocked);
-    EnableWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),!settingsAssignmentLocked);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_USER_NO),!locked);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),!locked);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_MONITOR),!locked);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_IP),!locked);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_PORT),!locked);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_TEST),!locked);
     const bool hasNotice=(enrolled&&settingsAssignmentLocked)||!settingsDirectoryError.empty();
     ShowWindow(GetDlgItem(dlg,SETTINGS_NOTICE),hasNotice?SW_SHOW:SW_HIDE);
     if(enrolled&&settingsAssignmentLocked)
@@ -2175,9 +2180,9 @@ static void updateUnifiedVisibility(HWND dlg) {
         setDlgUtf8Text(dlg,SETTINGS_NOTICE,settingsDirectoryError);
     const int index=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
     const int chosen=index<0?0:(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,index,0);
-    const bool creating=(enrolled||pending)&&chosen==-1;
+    const bool creating=(enrolled||pending)&&chosen==-1&&!locked;
     const bool existing=enrolled&&chosen>0;
-    const bool editing=(creating || (existing&&settingsEditing&&!settingsMonitorLocked));
+    const bool editing=!locked&&(creating || (existing&&settingsEditing));
     // Existing records have a real information view; inputs exist only in Edit
     // or Add new modes. Never leave controls from the previous user visible.
     const int editIds[]={SETTINGS_LABEL,SETTINGS_REMARK,SETTINGS_OS,
@@ -2186,13 +2191,13 @@ static void updateUnifiedVisibility(HWND dlg) {
         SETTINGS_INFO_REMARK};
     for(int id:editIds)ShowWindow(GetDlgItem(dlg,id),editing?SW_SHOW:SW_HIDE);
     for(int id:infoIds)ShowWindow(GetDlgItem(dlg,id),existing&&!editing?SW_SHOW:SW_HIDE);
-    ShowWindow(GetDlgItem(dlg,SETTINGS_EDIT),existing&&!settingsMonitorLocked?SW_SHOW:SW_HIDE);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_EDIT),existing&&!locked?SW_SHOW:SW_HIDE);
     setDlgUtf8Text(dlg,SETTINGS_EDIT,editing?"Cancel Edit":"Edit");
     ShowWindow(GetDlgItem(dlg,SETTINGS_SAVE),(!enrolled&&!pending)||editing?SW_SHOW:SW_HIDE);
     setDlgUtf8Text(dlg,SETTINGS_SAVE,creating?"Add Monitor":enrolled?"Save Monitor":"Save Server");
-    EnableWindow(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),existing&&!settingsMonitorLocked);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),existing&&!locked);
     ShowWindow(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),existing?SW_SHOW:SW_HIDE);
-    setDlgUtf8Text(dlg,SETTINGS_LOCK_SETTINGS,settingsMonitorLocked?"Settings Locked":"Lock Settings");
+    setDlgUtf8Text(dlg,SETTINGS_LOCK_SETTINGS,locked?"Settings Locked":"Lock Settings");
     setDlgUtf8Text(dlg,SETTINGS_CONNECTION,
         connectionStatus.serverConnected&&enrolled?"● Connected and active":"● Offline / Not configured");
     ShowWindow(GetDlgItem(dlg,SETTINGS_NOTIFY),SW_SHOW);
@@ -2309,6 +2314,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             EndDialog(dlg,IDCANCEL);return TRUE;
         }
         if(id==SETTINGS_TEST){
+            if(settingsAssignmentLocked||settingsMonitorLocked)return TRUE;
             const std::string host=editText(dlg,SETTINGS_IP),port=editText(dlg,SETTINGS_PORT);
             if(host.empty()||port.empty()||port.find_first_not_of("0123456789")!=std::string::npos){
                 showUtf8Message(dlg,"Enter a server IP and numeric port.","Test Connection",MB_OK|MB_ICONWARNING);
@@ -2325,7 +2331,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         if(id==SETTINGS_EDIT && HIWORD(wp)==BN_CLICKED){
             const int index=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
             const int monitorId=index<0?0:(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,index,0);
-            if(monitorId>0 && !settingsMonitorLocked){
+            if(monitorId>0 && !(settingsAssignmentLocked||settingsMonitorLocked)){
                 if(settingsEditing)changeMonitorFields(dlg); // discard unsaved values
                 else settingsEditing=true;
                 updateUnifiedVisibility(dlg);
@@ -2333,6 +2339,9 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             return TRUE;
         }
         if(id==SETTINGS_MONITOR&&HIWORD(wp)==CBN_SELCHANGE){
+            if(settingsAssignmentLocked||settingsMonitorLocked){
+                refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);return TRUE;
+            }
             changeMonitorFields(dlg);
             updateUnifiedVisibility(dlg);
             const int ix=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
@@ -2372,7 +2381,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
                 updateUnifiedVisibility(dlg);
                 return TRUE;
             }
-            if(!getClientToken().empty() && settingsAssignmentLocked){
+            if(!getClientToken().empty() && (settingsAssignmentLocked||settingsMonitorLocked)){
                 showUtf8Message(dlg,"User assignment is locked. Ask your administrator to edit the monitor.",
                     "Assignment locked",MB_OK|MB_ICONWARNING);
                 selectDirectoryUser(dlg,signedInUsername);return TRUE;
@@ -2418,7 +2427,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             return TRUE;
         }
         if(id==SETTINGS_LOGOUT){
-            if(settingsAssignmentLocked){
+            if(settingsAssignmentLocked||settingsMonitorLocked){
                 showUtf8Message(dlg,"User assignment is locked. Ask your administrator to edit the monitor.",
                     "Assignment locked",MB_OK|MB_ICONWARNING);
                 return TRUE;
@@ -2439,7 +2448,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             updateTrayIcon();return TRUE;
         }
         if(id==SETTINGS_LOCK_SETTINGS){
-            if(settingsMonitorLocked||getClientToken().empty())return TRUE;
+            if(settingsAssignmentLocked||settingsMonitorLocked||getClientToken().empty())return TRUE;
             if(MessageBoxW(dlg,L"Lock this monitor's settings? Only an administrator can unlock them in the web portal.",
                            L"Lock Settings",MB_YESNO|MB_ICONWARNING)!=IDYES)return TRUE;
             Json::Value req;req["action"]="lock_settings";
@@ -2503,7 +2512,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             if(chosen>0&&!settingsEditing){
                 updateUnifiedVisibility(dlg);return TRUE;
             }
-            if(settingsMonitorLocked && chosen!=-1){
+            if((settingsAssignmentLocked||settingsMonitorLocked) && chosen!=-1){
                 showUtf8Message(dlg,"Settings are locked. Ask your administrator to unlock this monitor.",
                     "Monitor Settings",MB_OK|MB_ICONWARNING);return TRUE;
             }
