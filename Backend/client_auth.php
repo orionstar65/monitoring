@@ -289,6 +289,15 @@ try {
         }
         $db->begin_transaction();
         try{
+            // Lock the currently selected monitor in the same transaction as
+            // creation; a concurrent admin lock must not allow a new device.
+            $mid=(int)($session['monitor_id']??0);
+            $st=$db->prepare('SELECT assignment_locked,settings_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=? FOR UPDATE');
+            $st->bind_param('ii',$mid,$userId);$st->execute();$origin=$st->get_result()->fetch_assoc();$st->close();
+            if(!$origin || $origin['assignment_locked'] || $origin['settings_locked']){
+                $db->rollback();http_response_code(423);
+                echo json_encode(['error'=>'Settings are locked. Ask your administrator.','code'=>'settings_locked']);exit;
+            }
             $st=$db->prepare('SELECT id FROM users WHERE id=? FOR UPDATE');
             $st->bind_param('i',$userId);$st->execute();$owner=$st->get_result()->fetch_assoc();$st->close();
             if(!$owner)throw new RuntimeException('Account not found');
@@ -314,9 +323,19 @@ try {
         }
         $fields=clientMonitorFields($data);
         if(isset($fields['error'])){http_response_code(400);echo json_encode(['error'=>$fields['error']]);exit;}
-        $st=$db->prepare('UPDATE tbl_monitor_ips SET name=?,platform=?,type=?,remark=? WHERE id=? AND owner_user_id=?');
+        // Make the lock condition part of the UPDATE, eliminating the
+        // check-then-update race with an administrator locking this monitor.
+        $st=$db->prepare('UPDATE tbl_monitor_ips SET name=?,platform=?,type=?,remark=? WHERE id=? AND owner_user_id=? AND assignment_locked=0 AND settings_locked=0');
         $st->bind_param('ssssii',$fields['name'],$fields['platform'],$fields['type'],$fields['remark'],$monitorId,$userId);
-        $st->execute();$st->close();
+        $st->execute();$changed=$st->affected_rows;$st->close();
+        if($changed===0){
+            // A no-op edit is valid; a newly locked record is not.
+            $st=$db->prepare('SELECT assignment_locked,settings_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=?');
+            $st->bind_param('ii',$monitorId,$userId);$st->execute();$check=$st->get_result()->fetch_assoc();$st->close();
+            if(!$check || $check['assignment_locked'] || $check['settings_locked']){
+                http_response_code(423);echo json_encode(['error'=>'Settings are locked. Ask your administrator.','code'=>'settings_locked']);exit;
+            }
+        }
         echo json_encode(['success'=>true,'monitor_id'=>$monitorId]);exit;
     }
     if($action==='request_monitor'){
