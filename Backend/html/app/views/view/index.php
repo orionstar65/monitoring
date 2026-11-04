@@ -1168,15 +1168,14 @@ function escapeViewerText(value) {
         '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
     })[char]);
 }
-$(document).on('click','.screenshot-card[data-shot-id],.cctv-screenshot-card[data-shot-id]',function(){
-    const id=$(this).attr('data-shot-id');
-    const shot=($(this).hasClass('cctv-screenshot-card')?fullscreenShotMap:visibleShotMap).get(id);
-    if(!shot)return;
-    viewScreenshot(shot.url,shot.user,shot.ip,id);
-});
-
 // Initialize when jQuery is ready
 waitForJQuery(function() {
+    $(document).on('click','.screenshot-card[data-shot-id],.cctv-screenshot-card[data-shot-id]',function(){
+        const id=$(this).attr('data-shot-id');
+        const shot=($(this).hasClass('cctv-screenshot-card')?fullscreenShotMap:visibleShotMap).get(id);
+        if(!shot)return;
+        viewScreenshot(shot.url,shot.user,shot.ip,id);
+    });
     // Detect and display user's timezone
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     $('#userTimezone').text(userTimezone);
@@ -1619,70 +1618,45 @@ function formatTimeAgo(seconds) {
 }
 
 function updateMonitorList(monitors) {
-    // Sort monitors by name (username) alphabetically
-    monitors = [...monitors].sort(function(a, b) {
-        const nameA = (a.name || a.username || '').toLowerCase();
-        const nameB = (b.name || b.username || '').toLowerCase();
-        return nameA.localeCompare(nameB);
-    });
-    
-    let html = '';
-    
-    monitors.forEach(function(monitor) {
-        const isSelected = selectedMonitors.includes(monitor.id);
-        
-        // Use the status calculated by the backend
-        let statusText = monitor.status_text || 'Offline';
-        let statusClass = monitor.live_status || 'offline';
-        
-
-        
-        // Fallback calculation if backend status is not available
-        if (!monitor.live_status && monitor.latest_activity) {
-            const timeAgo = Math.floor((Date.now() / 1000) - monitor.latest_activity);
-            if (timeAgo < 600) { // 10 minutes - match backend logic (2 Tic cycles)
-                statusText = 'Online';
-                statusClass = 'online';
-            } else if (timeAgo < 1800) { // 30 minutes - match backend logic (6 Tic cycles)
-                statusText = 'Online';
-                statusClass = 'online';
-            } else if (timeAgo < 3600) { // 1 hour - match backend logic (12 Tic cycles)
-                statusText = 'Inactive';
-                statusClass = 'inactive';
-            } else {
-                statusText = 'Offline';
-                statusClass = 'offline';
-            }
-        } else if (!monitor.latest_activity) {
-            statusText = 'Never';
-            statusClass = 'offline';
-        }
-        
-        html += `
-            <div class="monitor-item ${isSelected ? 'selected' : ''}">
+    const ordered=[...monitors].sort((a,b)=>String(a.name||a.username||'')
+        .localeCompare(String(b.name||b.username||''),undefined,{sensitivity:'base'}));
+    if(!ordered.length){
+        $('#monitorList').html('<div class="p-4 text-center text-muted">No monitors found</div>');
+        return;
+    }
+    const html=ordered.map(monitor=>{
+        const chosen=selectedMonitors.includes(Number(monitor.id));
+        const status=['online','inactive','offline'].includes(monitor.live_status)
+            ?monitor.live_status:'offline';
+        const statusText=monitor.status_text||'Offline';
+        const label=escapeViewerText(monitor.name||('Monitor #'+monitor.id));
+        const user=escapeViewerText(monitor.username||'Unassigned');
+        const number=escapeViewerText(monitor.user_no||'—');
+        const ip=escapeViewerText(monitor.last_seen_ip||monitor.ip_address||'—');
+        const platform=escapeViewerText(monitor.platform||'—');
+        const machine=escapeViewerText(monitor.type||'—');
+        return `
+            <div class="monitor-item ${chosen?'selected':''}" data-monitor-id="${Number(monitor.id)}">
                 <div class="monitor-item-header">
-                    <input type="radio" class="monitor-radio" name="monitor_selection" value="${monitor.id}" ${isSelected ? 'checked' : ''}>
-                    <div class="monitor-item-name">${monitor.username}</div>
+                    <input type="radio" class="monitor-radio" name="monitor_selection"
+                           value="${Number(monitor.id)}" ${chosen?'checked':''}>
+                    <div class="monitor-item-name" title="${label}">${label}</div>
                     <div class="monitor-item-status">
-                        <span class="live-status-badge status-${statusClass}">
-                            <i class="fas fa-circle"></i>
-                            <span>${statusText}</span>
-                            ${statusClass === 'online' ? '<div class="pulse"></div>' : ''}
+                        <span class="live-status-badge status-${status}">
+                            <i class="fas fa-circle"></i><span>${escapeViewerText(statusText)}</span>
+                            ${status==='online'?'<div class="pulse"></div>':''}
                         </span>
                     </div>
                 </div>
-                                 ${monitor.type && monitor.type !== 'Unknown' ? 
-                     `<div class="monitor-item-username">
-                         <i class="fas fa-${getMonitorTypeIcon(monitor.type)}"></i>
-                         <span>${monitor.type || 'Desktop'}</span>
-                     </div>` : ''}
-            </div>
-        `;
-    });
-    
+                <div class="monitor-item-username" title="${user}">
+                    <i class="fas fa-user me-1"></i>${number}: ${user}
+                </div>
+                <div class="monitor-item-username">
+                    <i class="fas fa-desktop me-1"></i>${platform} · ${machine} · ${ip}
+                </div>
+            </div>`;
+    }).join('');
     $('#monitorList').html(html);
-    
-    // Update select all checkbox after restoring selection
     updateSelectAllCheckbox();
 }
 
