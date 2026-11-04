@@ -15,7 +15,7 @@ ob_start(); ?>
 </div>
 <div class="card shadow-sm"><div class="card-body"><div class="table-responsive">
 <table id="monitors-table" class="table table-hover align-middle advanced-table" style="width:100%">
-<thead><tr><th>ID</th><th>User No</th><th>Full Name</th><th>IP Address</th><th>Machine</th><th>OS</th><th>Status</th><th>Last activity</th><th>Remark</th><th>Assignment</th><th>Settings</th><th data-dt-order="disable">Actions</th></tr></thead>
+<thead><tr><th>ID</th><th>User No</th><th>Full Name</th><th>IP Address</th><th>Machine</th><th>OS</th><th>Status</th><th>Last activity</th><th>Remark</th><th>Lock</th><th data-dt-order="disable">Actions</th></tr></thead>
 <tbody>
 <?php foreach($monitors as $m): ?>
 <tr>
@@ -28,8 +28,7 @@ ob_start(); ?>
  <td><span class="badge <?= $m['dynamic_status']==='online'?'bg-success':($m['dynamic_status']==='inactive'?'bg-warning text-dark':'bg-secondary') ?>"><?= $escape($m['status_text']) ?></span></td>
  <td data-order="<?= $escape($m['last_monitor_tic']??'') ?>"><?= $m['last_monitor_tic']?$escape($m['last_monitor_tic']):'Never' ?></td>
  <td><?= $escape($m['remark']??'') ?></td>
- <td><?= !empty($m['assignment_locked'])?'<span class="badge bg-secondary"><i class="fas fa-lock"></i> Locked</span>':'<span class="badge bg-success"><i class="fas fa-lock-open"></i> Unlocked</span>' ?></td>
- <td><?= !empty($m['settings_locked'])?'<span class="badge bg-secondary"><i class="fas fa-lock"></i> Locked</span>':'<span class="badge bg-success"><i class="fas fa-lock-open"></i> Unlocked</span>' ?></td>
+ <td><?= (!empty($m['settings_locked'])||!empty($m['assignment_locked']))?'<span class="badge bg-secondary"><i class="fas fa-lock"></i> Locked</span>':'<span class="badge bg-success"><i class="fas fa-lock-open"></i> Unlocked</span>' ?></td>
  <td class="text-nowrap">
  <?php if(($_SESSION['role']??'')==='admin'): ?>
  <a href="<?= BASE_URL ?>view/logs/<?= (int)$m['id'] ?>" class="btn btn-sm btn-light" title="View logs" aria-label="View logs"><i class="fas fa-chart-line"></i></a>
