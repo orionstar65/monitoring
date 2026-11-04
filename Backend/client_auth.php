@@ -122,7 +122,7 @@ try {
         $st->bind_param('s',$attemptKey);$st->execute();$st->close();
         $db->begin_transaction();
         try {
-            $st=$db->prepare("SELECT u.id AS user_id,m.id AS monitor_id,m.assignment_locked FROM users u JOIN tbl_monitor_ips m ON m.owner_user_id=u.id WHERE u.user_no=? AND u.role IN ('admin','user','viewer') ORDER BY m.id LIMIT 1 FOR UPDATE");
+            $st=$db->prepare("SELECT u.id AS user_id,m.id AS monitor_id,m.assignment_locked,m.settings_locked FROM users u JOIN tbl_monitor_ips m ON m.owner_user_id=u.id WHERE u.user_no=? AND u.role IN ('admin','user','viewer') ORDER BY m.id LIMIT 1 FOR UPDATE");
             $st->bind_param('s',$userNo);$st->execute();$monitor=$st->get_result()->fetch_assoc();$st->close();
             if(!$monitor){
                 $db->rollback();http_response_code(404);
@@ -134,7 +134,8 @@ try {
             $st->bind_param('sii',$hash,$uid,$mid);$st->execute();$st->close();
             $db->commit();
             echo json_encode(['success'=>true,'token'=>$token,'monitor_id'=>$mid,'user_no'=>$userNo,
-                'assignment_locked'=>(bool)$monitor['assignment_locked']]);exit;
+                'settings_locked'=>!empty($monitor['assignment_locked'])||!empty($monitor['settings_locked']),
+                'assignment_locked'=>!empty($monitor['assignment_locked'])||!empty($monitor['settings_locked'])]);exit;
         } catch(Throwable $failure){$db->rollback();throw $failure;}
     }
     if($action==='signup'||$action==='login'){
@@ -156,15 +157,15 @@ try {
         $mid=(int)($session['monitor_id']??0);
         $db->begin_transaction();
         try {
-            $st=$db->prepare('SELECT owner_user_id,assignment_locked FROM tbl_monitor_ips WHERE id=? FOR UPDATE');
+            $st=$db->prepare('SELECT owner_user_id,assignment_locked,settings_locked FROM tbl_monitor_ips WHERE id=? FOR UPDATE');
             $st->bind_param('i',$mid);$st->execute();$current=$st->get_result()->fetch_assoc();$st->close();
             if(!$current || (int)$current['owner_user_id']!==$userId){
                 $db->rollback();http_response_code(403);
                 echo json_encode(['error'=>'The selected device is no longer assigned to this account']);exit;
             }
-            if((int)$current['assignment_locked']===1){
+            if((int)$current['assignment_locked']===1||(int)$current['settings_locked']===1){
                 $db->rollback();http_response_code(423);
-                echo json_encode(['error'=>'User assignment is locked. Ask your administrator to edit the monitor.','code'=>'assignment_locked']);exit;
+                echo json_encode(['error'=>'Settings are locked. Ask your administrator.','code'=>'settings_locked']);exit;
             }
             $st=$db->prepare("SELECT u.id AS user_id,m.id AS monitor_id FROM users u
                 JOIN tbl_monitor_ips m ON m.owner_user_id=u.id
@@ -192,26 +193,26 @@ try {
         $st->bind_param('i',$userId);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
         $monitors=array_map(static function(array $m):array {
             $m['id']=(int)$m['id'];
-            $m['assignment_locked']=(bool)$m['assignment_locked'];
-            $m['settings_locked']=(bool)$m['settings_locked'];
+            $m['settings_locked']=!empty($m['settings_locked'])||!empty($m['assignment_locked']);
+            $m['assignment_locked']=$m['settings_locked'];
             return $m;
         },$monitors);
         $monitorId=(int)($session['monitor_id']??0);
         if($monitorId && !in_array($monitorId,array_map(static fn($m)=>(int)$m['id'],$monitors),true))$monitorId=0;
         $locked=false;
         foreach($monitors as $monitor){
-            if((int)$monitor['id']===$monitorId){$locked=!empty($monitor['assignment_locked']);break;}
+            if((int)$monitor['id']===$monitorId){$locked=!empty($monitor['settings_locked']);break;}
         }
         echo json_encode(['success'=>true,'user'=>$user,'monitors'=>$monitors,
-            'monitor_id'=>$monitorId,'assignment_locked'=>$locked]);exit;
+            'monitor_id'=>$monitorId,'settings_locked'=>$locked,'assignment_locked'=>$locked]);exit;
     }
     if($action==='monitors'){
         $st=$db->prepare('SELECT id,name,ip_address,platform,type,remark,assignment_locked,settings_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY name,id');
         $st->bind_param('i',$userId);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
         $monitors=array_map(static function(array $m):array {
             $m['id']=(int)$m['id'];
-            $m['assignment_locked']=(bool)$m['assignment_locked'];
-            $m['settings_locked']=(bool)$m['settings_locked'];
+            $m['settings_locked']=!empty($m['settings_locked'])||!empty($m['assignment_locked']);
+            $m['assignment_locked']=$m['settings_locked'];
             return $m;
         },$monitors);
         echo json_encode(['success'=>true,'monitors'=>$monitors]);exit;
@@ -219,6 +220,15 @@ try {
     if($action==='select'){
         $monitorId=filter_var($data['monitor_id']??null,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);
         if(!$monitorId){http_response_code(400);echo json_encode(['error'=>'Invalid monitor ID']);exit;}
+        // A unified lock also freezes monitor switching for this installation.
+        $currentId=(int)($session['monitor_id']??0);
+        if($currentId!==$monitorId && $currentId>0){
+            $st=$db->prepare('SELECT assignment_locked,settings_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=?');
+            $st->bind_param('ii',$currentId,$userId);$st->execute();$origin=$st->get_result()->fetch_assoc();$st->close();
+            if(!$origin || $origin['settings_locked'] || $origin['assignment_locked']){
+                http_response_code(423);echo json_encode(['error'=>'Settings are locked. Ask your administrator.','code'=>'settings_locked']);exit;
+            }
+        }
         // Only a monitor owned by this session's user may be activated.
         $st=$db->prepare('SELECT id FROM tbl_monitor_ips WHERE id=? AND owner_user_id=?');
         $st->bind_param('ii',$monitorId,$userId);$st->execute();$owned=$st->get_result()->fetch_assoc();$st->close();
@@ -239,28 +249,34 @@ try {
         // pressing Lock Settings cannot silently discard unsaved changes.
         $db->begin_transaction();
         try{
-            $st=$db->prepare('SELECT settings_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=? FOR UPDATE');
+            $st=$db->prepare('SELECT settings_locked,assignment_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=? FOR UPDATE');
             $st->bind_param('ii',$mid,$userId);$st->execute();$row=$st->get_result()->fetch_assoc();$st->close();
             if(!$row){
                 $db->rollback();http_response_code(403);
                 echo json_encode(['error'=>'Monitor not assigned to this user']);exit;
             }
-            if(!(int)$row['settings_locked']){
+            if(!(int)$row['settings_locked']&&!(int)$row['assignment_locked']){
                 if($hasFields){
                     $name=$fields['name'];$platform=$fields['platform'];$type=$fields['type'];$remark=$fields['remark'];
-                    $st=$db->prepare('UPDATE tbl_monitor_ips SET name=?,platform=?,type=?,remark=?,settings_locked=1 WHERE id=? AND owner_user_id=?');
+                    $st=$db->prepare('UPDATE tbl_monitor_ips SET name=?,platform=?,type=?,remark=?,settings_locked=1,assignment_locked=1 WHERE id=? AND owner_user_id=?');
                     $st->bind_param('ssssii',$name,$platform,$type,$remark,$mid,$userId);
                 }else{
-                    $st=$db->prepare('UPDATE tbl_monitor_ips SET settings_locked=1 WHERE id=? AND owner_user_id=?');
+                    $st=$db->prepare('UPDATE tbl_monitor_ips SET settings_locked=1,assignment_locked=1 WHERE id=? AND owner_user_id=?');
                     $st->bind_param('ii',$mid,$userId);
                 }
                 $st->execute();$st->close();
             }
             $db->commit();
-            echo json_encode(['success'=>true,'settings_locked'=>true]);exit;
+            echo json_encode(['success'=>true,'settings_locked'=>true,'assignment_locked'=>true]);exit;
         }catch(Throwable $failure){$db->rollback();throw $failure;}
     }
     if($action==='create_monitor'){
+        $currentId=(int)($session['monitor_id']??0);
+        $st=$db->prepare('SELECT assignment_locked,settings_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=?');
+        $st->bind_param('ii',$currentId,$userId);$st->execute();$current=$st->get_result()->fetch_assoc();$st->close();
+        if(!$current||$current['assignment_locked']||$current['settings_locked']){
+            http_response_code(423);echo json_encode(['error'=>'Settings are locked. Ask your administrator.','code'=>'settings_locked']);exit;
+        }
         $fields=clientMonitorFields($data);
         if(isset($fields['error'])){http_response_code(400);echo json_encode(['error'=>$fields['error']]);exit;}
         $ip=(string)($data['ip_address']??$_SERVER['REMOTE_ADDR']??'');
@@ -286,10 +302,10 @@ try {
         if((int)$session['monitor_id']!==$monitorId){
             http_response_code(403);echo json_encode(['error'=>'This monitor is not selected for this device']);exit;
         }
-        $st=$db->prepare('SELECT id,settings_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=? LIMIT 1');
+        $st=$db->prepare('SELECT id,settings_locked,assignment_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=? LIMIT 1');
         $st->bind_param('ii',$monitorId,$userId);$st->execute();$owned=$st->get_result()->fetch_assoc();$st->close();
         if(!$owned){http_response_code(403);echo json_encode(['error'=>'Monitor not assigned to your account']);exit;}
-        if((int)$owned['settings_locked']===1){
+        if((int)$owned['settings_locked']===1||(int)$owned['assignment_locked']===1){
             http_response_code(423);echo json_encode(['error'=>'Monitor settings are locked. Ask your administrator to unlock them.','code'=>'settings_locked']);exit;
         }
         $fields=clientMonitorFields($data);
@@ -306,10 +322,10 @@ try {
     if($action==='logout'){
         // The administrator's lock also prevents disconnect/re-enroll flows
         // from changing the selected user through the normal application UI.
-        $st=$db->prepare('SELECT assignment_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=? LIMIT 1');
+        $st=$db->prepare('SELECT assignment_locked,settings_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=? LIMIT 1');
         $mid=(int)($session['monitor_id']??0);
         $st->bind_param('ii',$mid,$userId);$st->execute();$row=$st->get_result()->fetch_assoc();$st->close();
-        if($row && (int)$row['assignment_locked']===1){
+        if($row && ((int)$row['assignment_locked']===1||(int)$row['settings_locked']===1)){
             http_response_code(423);
             echo json_encode(['error'=>'User assignment is locked. Ask your administrator to edit the monitor.','code'=>'assignment_locked']);exit;
         }
