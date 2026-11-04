@@ -26,6 +26,7 @@
 #include <QHBoxLayout>
 #include <QRadioButton>
 #include <QButtonGroup>
+#include <QStackedWidget>
 
 ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     setWindowTitle("MonitorClient v1.5 — Settings");
@@ -118,15 +119,34 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     }
     monitorIPLabel=new QLabel("—",monitorGroup);
     remarkEdit=new QLineEdit(monitorGroup);
+    labelInfo=new QLabel("—",monitorGroup);
+    osInfo=new QLabel("—",monitorGroup);
+    machineInfo=new QLabel("—",monitorGroup);
+    remarkInfo=new QLabel("—",monitorGroup);
+    remarkInfo->setWordWrap(true);
+    labelInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    remarkInfo->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    labelStack=new QStackedWidget(monitorGroup);
+    labelStack->addWidget(labelInfo);labelStack->addWidget(labelEdit);
+    osStack=new QStackedWidget(monitorGroup);
+    osStack->addWidget(osInfo);osStack->addWidget(osRow);
+    machineStack=new QStackedWidget(monitorGroup);
+    machineStack->addWidget(machineInfo);machineStack->addWidget(machineRow);
+    remarkStack=new QStackedWidget(monitorGroup);
+    remarkStack->addWidget(remarkInfo);remarkStack->addWidget(remarkEdit);
     clientNameEdit=labelEdit;
-    monitorForm->addRow("Monitor",monitorSelector);
-    monitorForm->addRow("Label",labelEdit);
-    monitorForm->addRow("OS",osRow);
-    monitorForm->addRow("Machine",machineRow);
+    editButton=new QPushButton("Edit",monitorGroup);
+    auto *selectionRow=new QWidget(monitorGroup);
+    auto *selectionLayout=new QHBoxLayout(selectionRow);
+    selectionLayout->setContentsMargins(0,0,0,0);
+    selectionLayout->addWidget(monitorSelector,1);
+    selectionLayout->addWidget(editButton);
+    monitorForm->addRow("Monitor",selectionRow);
+    monitorForm->addRow("Label",labelStack);
+    monitorForm->addRow("OS",osStack);
+    monitorForm->addRow("Machine",machineStack);
     monitorForm->addRow("IP address",monitorIPLabel);
-    monitorForm->addRow("Remark",remarkEdit);
-    lockSettingsButton=new QPushButton("Lock Settings",monitorGroup);
-    monitorForm->addRow("",lockSettingsButton);
+    monitorForm->addRow("Remark",remarkStack);
     content->addWidget(monitorGroup);
     divider();
 
@@ -134,14 +154,19 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     content->addWidget(notificationsCheck);
     auto *buttons=new QHBoxLayout();
     saveButton=new QPushButton("Save",this);
+    lockSettingsButton=new QPushButton("Lock Settings",this);
     auto *closeButton=new QPushButton("Close",this);
-    buttons->addStretch();buttons->addWidget(saveButton);buttons->addWidget(closeButton);
+    buttons->addStretch();
+    buttons->addWidget(saveButton);
+    buttons->addWidget(lockSettingsButton);
+    buttons->addWidget(closeButton);
     outer->addLayout(buttons);
     connect(testButton,&QPushButton::clicked,this,&ConfigDialog::onTestConnectionClicked);
     connect(logoutButton,&QPushButton::clicked,this,&ConfigDialog::onLogoutClicked);
     connect(userSelector,QOverload<int>::of(&QComboBox::currentIndexChanged),this,&ConfigDialog::onUserChanged);
     connect(monitorSelector,QOverload<int>::of(&QComboBox::currentIndexChanged),this,&ConfigDialog::onMonitorChanged);
     connect(saveButton,&QPushButton::clicked,this,&ConfigDialog::onSaveClicked);
+    connect(editButton,&QPushButton::clicked,this,&ConfigDialog::onEditClicked);
     connect(lockSettingsButton,&QPushButton::clicked,this,&ConfigDialog::onLockSettingsClicked);
     connect(closeButton,&QPushButton::clicked,this,&ConfigDialog::reject);
     loadSettings();
@@ -330,10 +355,13 @@ void ConfigDialog::updateMonitorList(const QJsonArray &items){
 void ConfigDialog::onMonitorChanged(int){
     const int id=monitorSelector->currentData().toInt();
     if(id==-1){
+        monitorEditing=true;
         labelEdit->clear();remarkEdit->clear();
-        monitorIPLabel->setText("Assigned on creation");
-        settingsLocked=false;updateUI();return;
+        monitorIPLabel->setText("—");
+        settingsLocked=false;
+        updateUI();return;
     }
+    monitorEditing=false;
     if(id>0 && !authToken.isEmpty() && id!=monitorId){
         const auto response=authRequest({{"action","select"},{"monitor_id",id}},true);
         if(!response.value("success").toBool()){
@@ -357,23 +385,25 @@ void ConfigDialog::onMonitorChanged(int){
     for(const auto &value:assignedMonitors){
         const QJsonObject m=value.toObject();
         if(m.value("id").toInt()!=id)continue;
-        labelEdit->setText(m.value("name").toString());
-        remarkEdit->setText(m.value("remark").toString());
+        const QString label=m.value("name").toString();
+        const QString remark=m.value("remark").toString();
+        labelEdit->setText(label);
+        remarkEdit->setText(remark);
+        labelInfo->setText(label.isEmpty()?"—":label);
+        remarkInfo->setText(remark.isEmpty()?"—":remark);
         const QString platform=m.value("platform").toString("Ubuntu");
+        osInfo->setText(platform);
         for(auto *button:osRadios->buttons())
             if(button->text()==platform)button->setChecked(true);
         const QString type=m.value("type").toString().toLower()=="desktop"?"Desktop":"Laptop";
+        machineInfo->setText(type);
         for(auto *button:machineRadios->buttons())
             if(button->text()==type)button->setChecked(true);
         settingsLocked=m.value("settings_locked").toBool();
         monitorIPLabel->setText(m.value("ip_address").toString("—"));
         break;
     }
-    saveButton->setEnabled(!settingsLocked && (authToken.isEmpty()||id==monitorId||id==-1));
-    if(id!=monitorId && monitorId>0)
-        assignmentStatusLabel->setText("Select one of the assigned monitors.");
-    else
-        updateUI();
+    updateUI();
 }
 void ConfigDialog::onUserChanged(int){
     const QString number=userSelector->currentData().toString();
@@ -397,22 +427,26 @@ void ConfigDialog::updateUI(){
     logoutButton->setEnabled(enrolled&&!assignmentLocked);
     userSelector->setEnabled(!enrolled||!assignmentLocked);
     const bool hasLock=enrolled&&assignmentLocked;
-    assignmentStatusLabel->setVisible(hasLock||!directoryError.isEmpty()||pending);
+    assignmentStatusLabel->setVisible(hasLock||!directoryError.isEmpty());
     if(hasLock)
         assignmentStatusLabel->setText("User selection is locked. Ask your administrator to edit.");
-    else if(pending)
-        assignmentStatusLabel->setText("No devices assigned. Choose Add new... and add the first monitor.");
     else if(!directoryError.isEmpty())
         assignmentStatusLabel->setText(directoryError);
     const int selectedId=monitorSelector->currentData().toInt();
     const bool adding=(enrolled||pending)&&selectedId==-1;
-    saveButton->setText(adding?"Add Monitor":(enrolled?"Save Monitor":"Save Server"));
-    saveButton->setEnabled(adding||!enrolled||!settingsLocked);
-    for(auto *control:{static_cast<QWidget*>(labelEdit),static_cast<QWidget*>(remarkEdit)})
-        control->setEnabled(!settingsLocked||adding);
-    for(auto *radio:osRadios->buttons())radio->setEnabled(!settingsLocked||adding);
-    for(auto *radio:machineRadios->buttons())radio->setEnabled(!settingsLocked||adding);
-    lockSettingsButton->setEnabled(enrolled&&!pending&&!settingsLocked&&!adding);
+    const bool existing=enrolled&&selectedId>0;
+    const bool editing=adding||(existing&&monitorEditing&&!settingsLocked);
+    labelStack->setCurrentIndex(editing?1:0);
+    osStack->setCurrentIndex(editing?1:0);
+    machineStack->setCurrentIndex(editing?1:0);
+    remarkStack->setCurrentIndex(editing?1:0);
+    editButton->setVisible(existing&&!settingsLocked);
+    editButton->setText(editing?"Cancel":"Edit");
+    saveButton->setText(adding?"Add Monitor":enrolled?"Save Monitor":"Save Server");
+    saveButton->setVisible((!enrolled&&!pending)||editing);
+    saveButton->setEnabled((!enrolled&&!pending)||editing);
+    lockSettingsButton->setVisible(existing);
+    lockSettingsButton->setEnabled(existing&&!settingsLocked);
     lockSettingsButton->setText(settingsLocked?"Settings Locked":"Lock Settings");
 }
 void ConfigDialog::onPairClicked(){
@@ -488,6 +522,17 @@ void ConfigDialog::onLogoutClicked(){
     updateMonitorList({});saveSettings();updateUI();
     emit sessionStateChanged();
 }
+void ConfigDialog::onEditClicked(){
+    const int id=monitorSelector->currentData().toInt();
+    if(id<1||settingsLocked)return;
+    if(monitorEditing){
+        onMonitorChanged(monitorSelector->currentIndex()); // discard unsaved edits
+    }else{
+        monitorEditing=true;
+        updateUI();
+    }
+}
+
 void ConfigDialog::onLockSettingsClicked(){
     if(authToken.isEmpty()||settingsLocked)return;
     if(QMessageBox::question(this,"Lock monitor settings",
@@ -529,6 +574,7 @@ void ConfigDialog::onSaveClicked(){
     }
     if(authToken.isEmpty()){connectionStatusLabel->setText("● Server saved · select User No");return;}
     const int id=monitorSelector->currentData().toInt();
+    if(id>0&&!monitorEditing)return;
     if(settingsLocked&&id!=-1){
         QMessageBox::warning(this,"Settings locked","Ask your administrator to unlock this monitor.");return;
     }
