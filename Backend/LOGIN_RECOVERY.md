@@ -7,15 +7,14 @@ The old web **username** field has been removed from the users table. Web sign-i
 1. Do **not** recreate the administrator account or rerun `Backend/database_setup.sql`; the latter drops the database.
 2. On the **backend server**, from the repository directory, list the existing administrator accounts:
    ```bash
-   php Backend/recover_web_login.php --list-admins
+   sudo python3 Backend/with_database_env.py \
+       php Backend/recover_web_login.php --list-admins
    ```
    This displays only account ID, User No, Full Name, email and whether a recognizable password hash is present. It does not display or change passwords. Use the listed **User No** or email to sign in, **not** the old username or the database ID.
 3. If the password is unknown or its hash is unusable, run the **explicit** admin recovery option locally. Enter a new password without placing it on a command line or in the repository:
    ```bash
-   read -rs -p "New admin password: " MONITOR_RECOVERY_PASSWORD; echo
-   export MONITOR_RECOVERY_PASSWORD
-   php Backend/recover_web_login.php --reset-user-no=100001
-   unset MONITOR_RECOVERY_PASSWORD
+   sudo python3 Backend/with_database_env.py --prompt-recovery-password \
+       php Backend/recover_web_login.php --reset-user-no=100001
    ```
    Replace `100001` with the actual User No reported by `--list-admins`. Password must contain at least 12 characters. On success, sign in and change it via the forced password-change form.
 
@@ -43,3 +42,11 @@ The recovery PHP script is **CLI-only**, selects an admin by exact User No, vali
 ### Version policy
 
 The app and its native build versions remain **v1.5**. Schema revision numbers 16 and 17 are database schema migrations, not app version bumps.
+
+## Environment troubleshooting
+
+If PHP reports `MONITOR_DB_PASSWORD is missing`, it means the SSH shell did
+not inherit Apache's `SetEnv` variables. Use the wrapper above. It reads
+`/etc/monitoring/apache-db.conf` with root privileges and drops privileges
+to your regular user before executing the command. See
+[ENV_MANAGEMENT.md](ENV_MANAGEMENT.md) for checks that do not reveal secrets.
