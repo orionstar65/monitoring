@@ -1929,6 +1929,7 @@ bool showClientLogin() {
 }
 static Json::Value settingsMonitors;
 static bool settingsMonitorLocked=false;
+static std::string settingsPendingUserNo;
 static void checkSettingsRadio(HWND dlg,int first,int second,int third,int value) {
     const int ids[]={first,second,third};
     for(int id:ids)if(id)CheckDlgButton(dlg,id,id==value?BST_CHECKED:BST_UNCHECKED);
@@ -2073,7 +2074,7 @@ static void loadUserDirectory(HWND dlg) {
     }
     if(SendMessageW(selector,CB_GETCOUNT,0,0)<=1)
         settingsDirectoryError="No eligible users. Create a user or viewer in the web portal.";
-    selectDirectoryUser(dlg,signedInUsername);
+    selectDirectoryUser(dlg,settingsPendingUserNo.empty()?signedInUsername:settingsPendingUserNo);
 }
 static void refreshUnifiedMonitors(HWND dlg) {
     settingsMonitors=Json::arrayValue;
@@ -2095,6 +2096,7 @@ static void refreshUnifiedMonitors(HWND dlg) {
             {std::lock_guard<std::mutex> guard(authMutex);clientToken.clear();}
             selectedMonitorId.store(0);
             settingsAssignmentLocked=false;
+            settingsPendingUserNo.clear();
             if(keyboardHook)removeKeyboardHook();
         }
     }
@@ -2122,32 +2124,35 @@ static void refreshUnifiedMonitors(HWND dlg) {
 }
 static void updateUnifiedVisibility(HWND dlg) {
     const bool enrolled=!getClientToken().empty()&&selectedMonitorId.load()>0;
+    const bool pending=!settingsPendingUserNo.empty();
     const int monitorControls[] = {
         SETTINGS_MONITOR_HEADING,SETTINGS_MONITOR_DIVIDER,SETTINGS_MONITOR,
         SETTINGS_LABEL,SETTINGS_OS,SETTINGS_MACHINE,SETTINGS_MONITOR_IP,
         SETTINGS_REMARK,SETTINGS_OS_MAC,SETTINGS_OS_UBUNTU,
         SETTINGS_MACHINE_DESKTOP,SETTINGS_LOCK_SETTINGS,4400,4401,4402,4403,4404,4405
     };
-    for(int id:monitorControls)ShowWindow(GetDlgItem(dlg,id),enrolled?SW_SHOW:SW_HIDE);
+    for(int id:monitorControls)ShowWindow(GetDlgItem(dlg,id),(enrolled||pending)?SW_SHOW:SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),enrolled?SW_SHOW:SW_HIDE);
     EnableWindow(GetDlgItem(dlg,SETTINGS_USER_NO),!enrolled||!settingsAssignmentLocked);
     EnableWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),!settingsAssignmentLocked);
-    const bool hasNotice=(enrolled&&settingsAssignmentLocked)||!settingsDirectoryError.empty();
+    const bool hasNotice=pending||(enrolled&&settingsAssignmentLocked)||!settingsDirectoryError.empty();
     ShowWindow(GetDlgItem(dlg,SETTINGS_NOTICE),hasNotice?SW_SHOW:SW_HIDE);
     if(enrolled&&settingsAssignmentLocked)
         setDlgUtf8Text(dlg,SETTINGS_NOTICE,"User selection is locked. Ask your administrator to edit.");
+    else if(pending)
+        setDlgUtf8Text(dlg,SETTINGS_NOTICE,"No devices assigned. Choose Add new... and add this user's first monitor.");
     else if(!settingsDirectoryError.empty())
         setDlgUtf8Text(dlg,SETTINGS_NOTICE,settingsDirectoryError);
     const int index=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
     const int chosen=index<0?0:(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,index,0);
-    const bool creating=enrolled&&chosen==-1;
+    const bool creating=(enrolled||pending)&&chosen==-1;
     setDlgUtf8Text(dlg,SETTINGS_SAVE,creating?"Add Monitor":enrolled?"Save Monitor":"Save Server");
     const int editableIds[]={SETTINGS_LABEL,SETTINGS_REMARK,SETTINGS_OS,
         SETTINGS_OS_MAC,SETTINGS_OS_UBUNTU,SETTINGS_MACHINE,SETTINGS_MACHINE_DESKTOP};
     for(int id:editableIds)
         EnableWindow(GetDlgItem(dlg,id),!settingsMonitorLocked||creating);
-    EnableWindow(GetDlgItem(dlg,SETTINGS_SAVE),!enrolled||creating||!settingsMonitorLocked);
-    EnableWindow(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),enrolled&&!settingsMonitorLocked&&!creating);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_SAVE),pending||!enrolled||creating||!settingsMonitorLocked);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),enrolled&&!pending&&!settingsMonitorLocked&&!creating);
     setDlgUtf8Text(dlg,SETTINGS_LOCK_SETTINGS,settingsMonitorLocked?"Settings Locked":"Lock Settings");
     setDlgUtf8Text(dlg,SETTINGS_CONNECTION,
         connectionStatus.serverConnected&&enrolled?"● Connected and active":"● Offline / Not configured");
@@ -2168,8 +2173,8 @@ static void updateUnifiedVisibility(HWND dlg) {
     for(const auto& item:monitorLayout)
         SetWindowPos(GetDlgItem(dlg,item.id),nullptr,item.x,item.y-offset,0,0,
                      SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
-    const int notifyY=enrolled?572-offset:(hasNotice?351:285);
-    const int buttonsY=enrolled?607-offset:(hasNotice?389:321);
+    const int notifyY=(enrolled||pending)?572-offset:(hasNotice?351:285);
+    const int buttonsY=(enrolled||pending)?607-offset:(hasNotice?389:321);
     SetWindowPos(GetDlgItem(dlg,SETTINGS_NOTIFY),nullptr,108,notifyY,0,0,
                  SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),nullptr,108,buttonsY,0,0,
@@ -2179,7 +2184,7 @@ static void updateUnifiedVisibility(HWND dlg) {
     SetWindowPos(GetDlgItem(dlg,SETTINGS_CLOSE),nullptr,332,buttonsY,0,0,
                  SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
     SetWindowPos(dlg,nullptr,0,0,465,
-                 enrolled?(hasNotice?685:627):(hasNotice?480:410),
+                 (enrolled||pending)?(hasNotice?685:627):(hasNotice?480:410),
                  SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
 }
 static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp) {
@@ -2309,11 +2314,23 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             const std::string token=response.get("token","").asString();
             const int monitor=response.get("monitor_id",0).asInt();
             if(!response.get("success",false).asBool()||token.size()!=64||monitor<=0){
+                if(response.get("code","").asString()=="no_monitors"){
+                    settingsPendingUserNo=number;
+                    settingsMonitors=Json::arrayValue;
+                    const HWND combo=GetDlgItem(dlg,SETTINGS_MONITOR);
+                    SendMessageW(combo,CB_RESETCONTENT,0,0);
+                    const int i=(int)SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Add new...");
+                    SendMessageW(combo,CB_SETITEMDATA,i,-1);
+                    SendMessageW(combo,CB_SETCURSEL,i,0);
+                    changeMonitorFields(dlg);updateUnifiedVisibility(dlg);
+                    return TRUE;
+                }
                 showUtf8Message(dlg,response.get("error","Unable to select user.").asString(),
                     "User",MB_OK|MB_ICONWARNING);
                 selectDirectoryUser(dlg,signedInUsername);
                 refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);return TRUE;
             }
+            settingsPendingUserNo.clear();
             {std::lock_guard<std::mutex> lock(authMutex);clientToken=token;}
             selectedMonitorId.store(monitor);
             signedInUsername=number;
@@ -2363,6 +2380,28 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             if(!applyUnifiedServer(dlg)){updateUnifiedVisibility(dlg);return TRUE;}
             notificationsEnabled=IsDlgButtonChecked(dlg,SETTINGS_NOTIFY)==BST_CHECKED;
             saveClientSetting("Client","notifications",notificationsEnabled?"1":"0");
+            if(!settingsPendingUserNo.empty()){
+                Json::Value req;req["action"]="bootstrap_monitor";req["user_no"]=settingsPendingUserNo;
+                req["label"]=editText(dlg,SETTINGS_LABEL);req["remark"]=editText(dlg,SETTINGS_REMARK);
+                req["os"]=IsDlgButtonChecked(dlg,SETTINGS_OS_MAC)==BST_CHECKED?"Mac":
+                    IsDlgButtonChecked(dlg,SETTINGS_OS_UBUNTU)==BST_CHECKED?"Ubuntu":"Windows";
+                req["machine"]=IsDlgButtonChecked(dlg,SETTINGS_MACHINE_DESKTOP)==BST_CHECKED?"desktop":"laptop";
+                const Json::Value result=callClientAuth(req);
+                const std::string token=result.get("token","").asString();
+                const int created=result.get("monitor_id",0).asInt();
+                if(!result.get("success",false).asBool()||token.size()!=64||created<1){
+                    showUtf8Message(dlg,result.get("error","Cannot add first monitor.").asString(),
+                        "Add Monitor",MB_OK|MB_ICONERROR);return TRUE;
+                }
+                {std::lock_guard<std::mutex> lock(authMutex);clientToken=token;}
+                selectedMonitorId.store(created);
+                signedInUsername=settingsPendingUserNo;settingsPendingUserNo.clear();
+                rememberClientToken(token);
+                loadUserDirectory(dlg);refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);
+                if(!keyboardHook)setupKeyboardHook();
+                if(!usbMonitoringActive)setupUSBMONITORING();
+                updateTrayIcon();return TRUE;
+            }
             if(getClientToken().empty()){updateUnifiedVisibility(dlg);return TRUE;}
             const int ix=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
             const int chosen=ix<0?0:(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,ix,0);
