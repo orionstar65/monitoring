@@ -2287,6 +2287,8 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
                     refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);return TRUE;
                 }
                 selectedMonitorId.store(chosen);
+                refreshUnifiedMonitors(dlg);
+                updateUnifiedVisibility(dlg);
                 updateTrayIcon();
             }
             std::string ip="—";
