@@ -10,12 +10,6 @@ ob_start();
             <div class="row">
                 <div class="col-md-6">
                     <div class="mb-3">
-                        <label for="name" class="form-label">Name</label>
-                        <input type="text" class="form-control" id="name" name="name" required>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="mb-3">
                         <label for="ip_address" class="form-label">IP Address</label>
                         <input type="text" class="form-control" id="ip_address" name="ip_address" required>
                     </div>
