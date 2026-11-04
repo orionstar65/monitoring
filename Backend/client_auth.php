@@ -126,7 +126,7 @@ try {
             $st->bind_param('s',$userNo);$st->execute();$monitor=$st->get_result()->fetch_assoc();$st->close();
             if(!$monitor){
                 $db->rollback();http_response_code(404);
-                echo json_encode(['error'=>'No monitors assigned. Choose Add new... to create the first device.','code'=>'no_monitors','user_no'=>$userNo]);exit;
+                echo json_encode(['error'=>'No monitors assigned.','code'=>'no_monitors','user_no'=>$userNo]);exit;
             }
             $mid=(int)$monitor['monitor_id'];$uid=(int)$monitor['user_id'];
             $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);
@@ -172,7 +172,7 @@ try {
             $st->bind_param('s',$newNo);$st->execute();$target=$st->get_result()->fetch_assoc();$st->close();
             if(!$target){
                 $db->rollback();http_response_code(404);
-                echo json_encode(['error'=>'No monitors assigned. Choose Add new... to create the first device.','code'=>'no_monitors','user_no'=>$newNo]);exit;
+                echo json_encode(['error'=>'No monitors assigned.','code'=>'no_monitors','user_no'=>$newNo]);exit;
             }
             $targetUser=(int)$target['user_id'];$targetMonitor=(int)$target['monitor_id'];
             $st=$db->prepare('UPDATE client_sessions SET revoked_at=NOW() WHERE id=? AND user_id=?');
