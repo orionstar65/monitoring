@@ -12,7 +12,7 @@ MonitorClient is a Windows system monitoring client that collects and sends vari
 - **Key Logging**: Captures keystrokes with application context
 - **USB Device Monitoring**: Tracks USB device connect/disconnect events
 - **Real-time Status**: Connection status monitoring with visual indicators
-- **Configurable Intervals**: All monitoring intervals are configurable via settings file
+- **Configurable Intervals**: Monitoring intervals are fetched from server configuration
 
 ## Prerequisites
 
@@ -89,39 +89,23 @@ After successful build, you'll find:
 - `settings.ini` - Configuration file (if it exists)
 - Required DLL files in the build directory
 
-## Configuration
+### Configuration
 
-### settings.ini
+The v1.5 desktop app no longer requires `settings.ini`.
 
-Create or modify `settings.ini` in the same directory as the executable:
+1. Open the single **Settings...** option in the tray menu.
+2. Enter the server address and port (HTTP on 8924 or HTTPS on 8925).
+3. Select a User No and monitor. Existing monitor details are read-only until **Edit**.
+4. **Lock Settings** freezes server configuration, user assignment and monitor
+   management; status notifications remain editable. Admin unlocks from the portal.
 
-```ini
-[Server]
-ip=192.168.1.45
-port=8924
-username=your_username
-
-[Client]
-version=1.0
-mac_address=
-
-[Intervals]
-screenshot=5
-tic=30
-history=120
-keylog=60
-usb=30
-```
-
-**Configuration Options:**
-- `ip`: Server IP address
-- `port`: Server port number
-- `username`: Username for authentication
-- `screenshot`: Screenshot interval in seconds
-- `tic`: Heartbeat interval in seconds
-- `history`: Browser history check interval in seconds
-- `keylog`: Key logging interval in seconds
-- `usb`: USB monitoring interval in seconds
+The server address, port and notification preference are stored under
+`HKEY_CURRENT_USER\\Software\\MonitorClient\\v1.5`.
+The device session is stored in Windows Credential Manager.
+Screenshot, heartbeat, browser, key and USB intervals come from
+`/webapi_config.php` on the configured server, not from a local INI file.
+Older `settings.ini` files are ignored and can be removed after checking
+the saved server address.
 
 ## Running the Application
 
