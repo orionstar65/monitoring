@@ -32,17 +32,16 @@ try {
         http_response_code(400);echo json_encode(['error'=>'Invalid JSON request']);exit;
     }
     $action=$data['action'];
-    // This unauthenticated directory/enrollment flow is allowed only after
-    // explicit setup. A one-time DB flag enables trusted-LAN requests;
-    // deployments that require remote access may still use the explicit env
-    // opt-in and must separately restrict public access by firewall/VPN.
+    // Direct private-LAN clients may list/enroll without pairing codes.
+    // Public clients and untrusted proxy traffic remain denied unless an
+    // administrator explicitly permits remote/VPN use via the environment.
     if(in_array($action,['directory','enroll'],true)
        && !monitoringNoCodeEnrollmentAllowed($db)){
         http_response_code(503);
         echo json_encode([
             'success'=>false,
             'code'=>'directory_disabled',
-            'error'=>'User list disabled on this connection. Run the one-time backend setup, then connect from a trusted LAN/VPN.'
+            'error'=>'User list is restricted to the trusted LAN. Connect with a private LAN address or ask the server admin to configure restricted remote enrollment.'
         ]);exit;
     }
     // Restricted to explicitly enabled, trusted deployments: return each eligible
