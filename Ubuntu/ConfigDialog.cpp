@@ -493,7 +493,12 @@ void ConfigDialog::onLockSettingsClicked(){
     if(QMessageBox::question(this,"Lock monitor settings",
         "Lock monitor settings now? Only an administrator can unlock this monitor in the web portal.")
        !=QMessageBox::Yes)return;
-    const auto reply=authRequest({{"action","lock_settings"}},true);
+    const auto reply=authRequest({
+        {"action","lock_settings"},{"label",labelEdit->text().trimmed()},
+        {"remark",remarkEdit->text().trimmed()},
+        {"os",osRadios->checkedButton()?osRadios->checkedButton()->text():"Ubuntu"},
+        {"machine",machineRadios->checkedButton()?machineRadios->checkedButton()->text().toLower():"desktop"}
+    },true);
     if(!reply.value("success").toBool()){
         QMessageBox::warning(this,"Lock settings",reply.value("error").toString("Unable to lock monitor."));return;
     }
