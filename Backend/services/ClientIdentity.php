@@ -69,21 +69,13 @@ function monitoringLanEnrollmentClient(): bool {
     return true;
 }
 function monitoringNoCodeEnrollmentAllowed(mysqli $db): bool {
-    // Existing explicit deployment opt-in remains supported.
+    // Explicit server-side deny always wins.
+    if(getenv('MONITOR_DISABLE_USER_NO_ENROLL')==='1')return false;
+    // Existing opt-in for tightly firewalled remote/VPN deployments.
     if(getenv('MONITOR_ENABLE_USER_NO_ENROLL')==='1')return true;
-    // The one-time server recovery/activation script enables this DB flag.
-    // It is intentionally LAN-only, even when set.
-    if(!monitoringLanEnrollmentClient())return false;
-    try {
-        $query=$db->query("SELECT enabled FROM monitoring_runtime_flags WHERE name='trusted_lan_user_no_enrollment' LIMIT 1");
-        if(!$query)return false;
-        $row=$query->fetch_assoc();
-        $query->free();
-        return $row && (int)$row['enabled']===1;
-    } catch(Throwable $ignored) {
-        // Safe default when the one-time setup has not been run.
-        return false;
-    }
+    // Direct trusted-LAN clients can list/select users without provisioning
+    // a pairing code. Public clients and untrusted proxy headers are denied.
+    return monitoringLanEnrollmentClient();
 }
 function clientIdentityDatabase(): mysqli {
     require_once __DIR__ . '/../config.inc.php';
