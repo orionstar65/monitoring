@@ -21,6 +21,7 @@ class View extends Base {
         
         // Add basic status based on database data only
         foreach ($monitors as &$monitor) {
+            $monitor['id']=(int)$monitor['id'];
             // Use StatusService's calculateClientStatus() for consistent status calculation
             $statusInfo = $this->statusService->calculateClientStatus($monitor['last_monitor_tic'] ?? null);
             $monitor['live_status'] = $statusInfo['status'];
@@ -274,13 +275,15 @@ class View extends Base {
         // Get monitors from database only (fast)
         // OPTIMIZED: Only select fields needed for status calculation and response
         $monitors = $this->db->fetchAll(
-            "SELECT m.id,m.ip_address,m.mac_address,owner.name AS username,m.name,m.type,m.last_monitor_tic,m.updated_at,m.created_at
+            "SELECT m.id,m.ip_address,m.last_seen_ip,m.mac_address,m.platform,
+                    owner.name AS username,owner.user_no,m.name,m.type,m.last_monitor_tic,m.updated_at,m.created_at
              FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
              ORDER BY m.name ASC"
         );
         
         // Add status based on database data only
         foreach ($monitors as &$monitor) {
+            $monitor['id']=(int)$monitor['id'];
             // Use StatusService's calculateClientStatus() for consistent status calculation
             $statusInfo = $this->statusService->calculateClientStatus($monitor['last_monitor_tic'] ?? null);
             $monitor['live_status'] = $statusInfo['status'];
@@ -293,20 +296,16 @@ class View extends Base {
     
     public function view_file($file_path = '') {
         $file_path = (string)($_GET['path'] ?? $file_path);
-        // Normalize stored paths from ./html/data to the webroot's data folder.
-        $file_path = preg_replace('#^(?:\\./)?html/#','',str_replace('\\\\','/',$file_path));
+        // Preserve absolute legacy paths for realpath checks; normalize older
+        // relative ./html/data entries to app-relative data paths.
+        $file_path = str_replace('\\\\','/',$file_path);
+        $file_path = preg_replace('#^(?:\\./)?html/#','',$file_path);
         // Security: Only allow viewing files from the data directories
         $file_path = urldecode($file_path);
         
-        // Convert relative path to absolute path if needed
-        $absolute_path = $file_path;
-        if (!file_exists($file_path)) {
-            // Try with BASEPATH prefix
-            $absolute_path = BASEPATH . $file_path;
-            if (file_exists($absolute_path)) {
-                $file_path = $absolute_path;
-            }
-        }
+        // A database row may record ./html/data/... relative to the backend
+        // root. BASEPATH is the html/ directory, so resolve only under it.
+        $absolute_path = str_starts_with($file_path,'/') ? $file_path : BASEPATH . ltrim($file_path,'/');
         
         // Normalize paths for comparison
         $normalized_file_path = realpath($absolute_path);
@@ -358,26 +357,21 @@ class View extends Base {
      * All paths use id_{monitor_id} format - no conversion needed
      */
     private function getRelativePath($path) {
-        // Handle null or empty paths
-        if (empty($path)) {
-            return '';
+        if(!is_string($path)||trim($path)==='')return '';
+        $path=str_replace('\\','/',$path);
+        // Legacy rows may contain an absolute backend path or ./html/data/...
+        // file paths. Convert to an app-relative path without changing records.
+        $marker='/html/data/';
+        $pos=strpos($path,$marker);
+        if($pos!==false){
+            $path='data/'.substr($path,$pos+strlen($marker));
+        }else{
+            $path=preg_replace('#^(?:\\./)?(?:html/)?data/#','data/',$path);
+            $path=ltrim($path,'/');
         }
-        
-        // Convert backslashes to forward slashes
-        $path = str_replace('\\', '/', $path);
-        
-        // Remove leading './' if present
-        $path = ltrim($path, './');
-        
-        // Remove leading '/' if present
-        $path = ltrim($path, '/');
-        
-        // Remove 'html/data/' from the beginning if present (since BASE_URL already includes 'html/')
-        $path = preg_replace('/^html\/data\//', 'data/', $path);
-        
-        return 'view/view_file?path=' . rawurlencode($path);
+        // view_file performs a realpath check inside known data directories.
+        return 'view/view_file?path='.rawurlencode($path);
     }
-    
     public function formatFileSize($bytes) {
         if ($bytes === 0) return "0 Bytes";
         $k = 1024;
