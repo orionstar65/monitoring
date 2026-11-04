@@ -1023,7 +1023,20 @@ ob_start();
     
     <!-- Right Main Content - Status Overview + Screenshots -->
     <div class="main-content" style="margin-left: 0 !important;">
-        
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 px-3 py-3 border-bottom" id="liveSummary">
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <span class="badge text-bg-light border"><i class="fas fa-desktop me-1"></i><span id="total-monitors">0</span> Devices</span>
+                <span class="badge text-bg-success"><span id="online-monitors">0</span> Online</span>
+                <span class="badge text-bg-warning"><span id="inactive-monitors">0</span> Idle</span>
+                <span class="badge text-bg-secondary"><span id="offline-monitors">0</span> Offline</span>
+                <span class="small text-muted" id="lastLiveRefresh" aria-live="polite">Not updated</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <a href="<?= BASE_URL ?>view/logs" class="btn btn-sm btn-outline-secondary"><i class="fas fa-list me-1"></i>Activity Logs</a>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="refreshLiveNow"><i class="fas fa-sync-alt me-1"></i>Refresh</button>
+            </div>
+        </div>
+
         <!-- Modern Screenshots Section -->
         <div class="main-header">
             <h6>
@@ -1148,6 +1161,19 @@ let currentPerPage = 50;
 let selectedMonitors = [];
 let allMonitors = [];
 let filteredMonitors = [];
+let fullscreenShotMap = new Map();
+let visibleShotMap = new Map();
+function escapeViewerText(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    })[char]);
+}
+$(document).on('click','.screenshot-card[data-shot-id],.cctv-screenshot-card[data-shot-id]',function(){
+    const id=$(this).attr('data-shot-id');
+    const shot=($(this).hasClass('cctv-screenshot-card')?fullscreenShotMap:visibleShotMap).get(id);
+    if(!shot)return;
+    viewScreenshot(shot.url,shot.user,shot.ip,id);
+});
 
 // Initialize when jQuery is ready
 waitForJQuery(function() {
@@ -1158,6 +1184,11 @@ waitForJQuery(function() {
     // Load initial data
     loadMonitors();
     loadScreenshots();
+    $('#refreshLiveNow').on('click',function(){
+        loadMonitors();
+        if(selectedMonitors.length===1)loadScreenshotsForMonitor(selectedMonitors[0],1);
+        else loadScreenshots(1);
+    });
     
     
     // Auto-refresh every 30 seconds
@@ -1212,13 +1243,13 @@ waitForJQuery(function() {
     function loadFullscreenScreenshots() {
         const params = new URLSearchParams({
             page: 1,
-            per_page: 1000, // Load more screenshots for fullscreen
+            per_page: 50, // Backend caps pagination at 50 records
             format: 'fullscreen'
         });
         
         // Add device filter if single monitor is selected
         if (selectedMonitors.length === 1) {
-            params.append('device_id', selectedMonitors[0].id);
+            params.append('monitor_id', selectedMonitors[0]);
         }
         
         // Show loading indicator on refresh button
@@ -1261,33 +1292,33 @@ waitForJQuery(function() {
         }
         
         let html = '';
+        fullscreenShotMap = new Map();
         screenshots.forEach(function(item) {
-            const monitor = item.monitor;
-            const thumbnailUrl = "<?php echo BASE_URL; ?>" + item.thumbnail;
-            const fullUrl = "<?php echo BASE_URL; ?>" + item.screenshot;
-            
-            // Simplified display - no timestamp needed
-            
-            // Since the API doesn't provide status, we'll show a default online status
-            // or try to determine it from existing monitor data
-            const statusClass = 'cctv-status-online'; // Default to online since screenshots exist
-            const statusText = 'Online';
+            const monitor = item.monitor || {};
+            const thumbnailUrl = "<?php echo BASE_URL; ?>" + (item.thumbnail||item.screenshot||'');
+            const fullUrl = "<?php echo BASE_URL; ?>" + (item.screenshot||'');
+            const id = String(item.global_id||'');
+            fullscreenShotMap.set(id,{url:fullUrl,user:monitor.username||'Unknown User',
+                                      ip:monitor.ip_address||'—'});
+            const live = allMonitors.find(m=>m.id===Number(monitor.id||monitor.monitor_id));
+            const state = live?.live_status || 'offline';
+            const statusClass = 'cctv-status-' + (['online','inactive','offline'].includes(state)?state:'offline');
+            const statusText = live?.status_text || 'Offline';
             
             html += `
-                <div class="cctv-screenshot-card" 
-                     onclick="viewScreenshot('${fullUrl}', '${monitor.username}', '${monitor.ip_address}', '${item.global_id}')"
-                     title="Click to view full screenshot">
-                    <div class="cctv-status-indicator ${statusClass}" title="Status: ${statusText}"></div>
-                    <img src="${thumbnailUrl}" alt="Screenshot" loading="lazy">
+                <div class="cctv-screenshot-card" data-shot-id="${escapeViewerText(id)}"
+                     title="View screenshot">
+                    <div class="cctv-status-indicator ${statusClass}" title="Status: ${escapeViewerText(statusText)}"></div>
+                    <img src="${escapeViewerText(thumbnailUrl)}" alt="Screenshot" loading="lazy">
                     <div class="cctv-screenshot-info">
                         <div class="cctv-user-info">
                             <div class="cctv-username">
                                 <i class="fas fa-user"></i>
-                                ${monitor.username || 'Unknown User'}
+                                ${escapeViewerText(monitor.username || 'Unknown User')}
                             </div>
                             <div class="cctv-ip">
                                 <i class="fas fa-desktop"></i>
-                                ${monitor.ip_address}
+                                ${escapeViewerText(monitor.ip_address||'—')}
                             </div>
                         </div>
                     </div>
@@ -1544,22 +1575,24 @@ function loadMonitors() {
         url: "<?php echo BASE_URL; ?>view/api_live_status",
         method: "GET",
         success: function(data) {
-            allMonitors = data;
+            allMonitors = Array.isArray(data) ? data.map(m=>({...m,id:Number(m.id)})) : [];
             
             // Preserve current selection when refreshing
             if (selectedMonitors.length > 0) {
                 // Keep only monitors that still exist
                 selectedMonitors = selectedMonitors.filter(id => 
-                    data.some(monitor => monitor.id === id)
+                    allMonitors.some(monitor => monitor.id === id)
                 );
             }
             
-            filteredMonitors = [...data];
+            filteredMonitors = [...allMonitors];
             updateMonitorList(filteredMonitors);
-            updateStatusStats(data);
+            updateStatusStats(allMonitors);
+            $('#lastLiveRefresh').text('Updated '+new Date().toLocaleTimeString());
         },
         error: function(xhr, status, error) {
             console.log("Failed to load monitors:", error);
+            $('#lastLiveRefresh').text('Status unavailable');
         }
     });
 }
@@ -1661,8 +1694,8 @@ function updateStatusStats(monitors) {
     
     $('#total-monitors').text(total);
     $('#online-monitors').text(online);
-    $('#active-monitors').text(inactive + online); // Active = online + inactive
-    $('#total-screenshots').text(monitors.filter(m => m.live_status === 'online' || m.live_status === 'inactive').length);
+    $('#inactive-monitors').text(inactive);
+    $('#offline-monitors').text(offline);
 }
 
 function loadScreenshotsForMonitor(monitorId) {
@@ -1761,10 +1794,14 @@ function displayScreenshots(screenshots, pagination = null) {
     updateHeaderButtons(isSingleMonitor);
     
     let html = '<div class="screenshot-grid">';
+    visibleShotMap = new Map();
     screenshots.forEach(function(item) {
-        const monitor = item.monitor;
-        const thumbnailUrl = "<?php echo BASE_URL; ?>" + item.thumbnail;
-        const fullUrl = "<?php echo BASE_URL; ?>" + item.screenshot;
+        const monitor = item.monitor || {};
+        const thumbnailUrl = "<?php echo BASE_URL; ?>" + (item.thumbnail||item.screenshot||'');
+        const fullUrl = "<?php echo BASE_URL; ?>" + (item.screenshot||'');
+        const shotId = String(item.global_id||'');
+        visibleShotMap.set(shotId,{url:fullUrl,user:monitor.username||'Unknown User',
+                                   ip:monitor.ip_address||'—'});
         
         let timestamp;
         if (item.modified_time) {
@@ -1800,8 +1837,8 @@ function displayScreenshots(screenshots, pagination = null) {
         if (isSingleMonitor) {
             // Single monitor view - show enhanced time ago and timestamp
             html += `
-                <div class="screenshot-card" onclick="viewScreenshot('${fullUrl}', '${monitor.username}', '${monitor.ip_address}', '${item.global_id}')">
-                    <img src="${thumbnailUrl}" alt="Screenshot" loading="lazy">
+                <div class="screenshot-card" data-shot-id="${escapeViewerText(shotId)}">
+                    <img src="${escapeViewerText(thumbnailUrl)}" alt="Screenshot" loading="lazy">
                     <div class="screenshot-info">
                         <div class="screenshot-timestamp">
                             <i class="fas fa-${getMonitorTypeIcon(monitor.type)} me-1"></i>${monitor.type || 'Desktop'}
@@ -1815,16 +1852,16 @@ function displayScreenshots(screenshots, pagination = null) {
         } else {
             // Multiple monitor view - show full info
             const usernameHtml = (monitor.username && monitor.username !== 'Unknown') 
-                ? `<span class="badge bg-primary"><i class="fas fa-user me-1"></i>${monitor.username}</span>` 
+                ? `<span class="badge bg-primary"><i class="fas fa-user me-1"></i> ${escapeViewerText(monitor.username)}</span>` 
                 : '';
             
             html += `
-                <div class="screenshot-card" onclick="viewScreenshot('${fullUrl}', '${monitor.username}', '${monitor.ip_address}', '${item.global_id}')">
-                    <img src="${thumbnailUrl}" alt="Screenshot" loading="lazy">
+                <div class="screenshot-card" data-shot-id="${escapeViewerText(shotId)}">
+                    <img src="${escapeViewerText(thumbnailUrl)}" alt="Screenshot" loading="lazy">
                     <div class="screenshot-info">
                         <div class="screenshot-badges">
                             ${usernameHtml}
-                            <span class="badge bg-info"><i class="fas fa-${getMonitorTypeIcon(monitor.type)} me-1"></i>${monitor.ip_address}</span>
+                            <span class="badge bg-info"><i class="fas fa-${getMonitorTypeIcon(monitor.type)} me-1"></i>${escapeViewerText(monitor.ip_address||'—')}</span>
                         </div>
                         <div class="screenshot-details">
                             <div><i class="fas fa-clock me-1"></i>${timestamp}</div>
