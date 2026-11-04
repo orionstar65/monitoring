@@ -407,6 +407,12 @@ void ConfigDialog::onMonitorChanged(int){
 }
 void ConfigDialog::onUserChanged(int){
     const QString number=userSelector->currentData().toString();
+    if(!pendingUserNo.isEmpty()&&(number.isEmpty()||number==activeUserNo)){
+        pendingUserNo.clear();
+        refreshMonitors();
+        updateUI();
+        return;
+    }
     if(number.isEmpty()||number==activeUserNo)return;
     if(assignmentLocked&&!authToken.isEmpty()){
         QMessageBox::warning(this,"Assignment locked",
