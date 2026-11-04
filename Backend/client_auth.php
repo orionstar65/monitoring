@@ -230,15 +230,35 @@ try {
     if($action==='lock_settings'){
         $mid=(int)($session['monitor_id']??0);
         if($mid<1){http_response_code(400);echo json_encode(['error'=>'Select a monitor']);exit;}
-        // Only the currently selected, owned monitor can be locked from a client.
-        // Unlocking is reserved for the web administrator.
-        $st=$db->prepare('UPDATE tbl_monitor_ips SET settings_locked=1 WHERE id=? AND owner_user_id=?');
-        $st->bind_param('ii',$mid,$userId);$st->execute();
-        $changed=$st->affected_rows;$st->close();
-        $st=$db->prepare('SELECT settings_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=?');
-        $st->bind_param('ii',$mid,$userId);$st->execute();$row=$st->get_result()->fetch_assoc();$st->close();
-        if(!$row){http_response_code(403);echo json_encode(['error'=>'Monitor not assigned to this user']);exit;}
-        echo json_encode(['success'=>true,'settings_locked'=>true]);exit;
+        $hasFields=isset($data['os'],$data['machine']);
+        $fields=$hasFields?clientMonitorFields($data):[];
+        if(isset($fields['error'])){
+            http_response_code(400);echo json_encode(['error'=>$fields['error']]);exit;
+        }
+        // Save the displayed fields and lock in the same transaction, so
+        // pressing Lock Settings cannot silently discard unsaved changes.
+        $db->begin_transaction();
+        try{
+            $st=$db->prepare('SELECT settings_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=? FOR UPDATE');
+            $st->bind_param('ii',$mid,$userId);$st->execute();$row=$st->get_result()->fetch_assoc();$st->close();
+            if(!$row){
+                $db->rollback();http_response_code(403);
+                echo json_encode(['error'=>'Monitor not assigned to this user']);exit;
+            }
+            if(!(int)$row['settings_locked']){
+                if($hasFields){
+                    $name=$fields['name'];$platform=$fields['platform'];$type=$fields['type'];$remark=$fields['remark'];
+                    $st=$db->prepare('UPDATE tbl_monitor_ips SET name=?,platform=?,type=?,remark=?,settings_locked=1 WHERE id=? AND owner_user_id=?');
+                    $st->bind_param('ssssii',$name,$platform,$type,$remark,$mid,$userId);
+                }else{
+                    $st=$db->prepare('UPDATE tbl_monitor_ips SET settings_locked=1 WHERE id=? AND owner_user_id=?');
+                    $st->bind_param('ii',$mid,$userId);
+                }
+                $st->execute();$st->close();
+            }
+            $db->commit();
+            echo json_encode(['success'=>true,'settings_locked'=>true]);exit;
+        }catch(Throwable $failure){$db->rollback();throw $failure;}
     }
     if($action==='create_monitor'){
         $fields=clientMonitorFields($data);
