@@ -2893,6 +2893,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             button.target = coordinator
             button.action = #selector(UnifiedWindowActions.activate(_:))
         }
+        for radio in osRadios {
+            radio.identifier = NSUserInterfaceItemIdentifier("os:" + radio.title)
+            radio.target = coordinator
+            radio.action = #selector(UnifiedWindowActions.activate(_:))
+        }
+        for radio in machineRadios {
+            radio.identifier = NSUserInterfaceItemIdentifier("machine:" + radio.title)
+            radio.target = coordinator
+            radio.action = #selector(UnifiedWindowActions.activate(_:))
+        }
         users.target = coordinator
         users.action = #selector(UnifiedWindowActions.selectUser(_:))
         picker.target = coordinator
@@ -3077,6 +3087,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         coordinator.handler = { [weak self] command in
             guard let self = self else { return }
             switch command {
+            case let value where value.hasPrefix("os:"):
+                chooseRadio(osRadios, value: String(value.dropFirst(3)))
+            case let value where value.hasPrefix("machine:"):
+                chooseRadio(machineRadios, value: String(value.dropFirst(8)))
             case "test":
                 let host = ipField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
                 let port = portField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
