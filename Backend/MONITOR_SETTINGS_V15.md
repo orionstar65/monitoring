@@ -28,8 +28,11 @@ schema and native client behavior; the desktop build/version numbers are not bum
 - **Lock Settings** saves the visible monitor fields and permanently locks
   future client-side edits to that monitor, including forged API requests.
   Only an administrator can unlock the monitor in **Web → Monitors → Edit**.
-- **Lock User No assignment** is a separate setting that controls changing the
-  selected user. The two locks are independent.
+- **Lock Settings** is the only user-facing lock. When locked, the client
+  cannot change the server, user, selected monitor or monitor fields, and cannot
+  create another monitor. Only **Show status notifications** remains editable.
+  The legacy `assignment_locked` and `settings_locked` database fields are
+  mirrored for backward compatibility and reconciled by the one-time migration.
 - Every telemetry upload resolves by the **server-validated device session's
   monitor ID**, not MAC address, ARP, or IP matching. The last observed network
   IP is stored separately from the configured IP.
@@ -107,3 +110,13 @@ Do not rollback the PHP code without the matching clients; older versions
 may revert to MAC/IP-based assumptions. Stop ingestion and restore the
 verified database backup and compatible backend/client set together. The
 settings lock is stored in the database and remains until an admin unlocks it.
+
+## Legacy reconciliation
+
+Use the new one-time, preview-first `Backend/migrate_legacy_monitor_data_once.php`
+script to align the two lock flags and normalize only screenshot metadata paths
+that point to real files. See [MONITOR_LEGACY_MIGRATION.md](MONITOR_LEGACY_MIGRATION.md).
+
+Windows no longer reads `settings.ini`: registry preferences keep only the
+server endpoint and notification toggle. Screenshot/log intervals are fetched
+from the server. Web login is User No only.
