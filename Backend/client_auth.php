@@ -128,6 +128,10 @@ try {
                 $db->rollback();http_response_code(404);
                 echo json_encode(['error'=>'No monitors assigned.','code'=>'no_monitors','user_no'=>$userNo]);exit;
             }
+            if(!empty($monitor['settings_locked'])||!empty($monitor['assignment_locked'])){
+                $db->rollback();http_response_code(423);
+                echo json_encode(['error'=>'Settings are locked. Ask your administrator.','code'=>'settings_locked']);exit;
+            }
             $mid=(int)$monitor['monitor_id'];$uid=(int)$monitor['user_id'];
             $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);
             $st=$db->prepare("INSERT INTO client_sessions (token_hash,user_id,monitor_id,session_type,expires_at) VALUES (?,?,?,'device',NULL)");
