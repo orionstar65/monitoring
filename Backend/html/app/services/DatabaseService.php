@@ -15,146 +15,14 @@ class DatabaseService {
     }
     
     /**
-     * Get MAC address from IP address using ARP lookup
-     * Only works on local network
-     * Returns MAC address string or null if not found/error
-     */
-    private function getMacAddressFromArp($ip_address) {
-        if (empty($ip_address)) {
-            return null;
-        }
-        
-        // Sanitize IP address to prevent command injection
-        if (!filter_var($ip_address, FILTER_VALIDATE_IP)) {
-            return null;
-        }
-        
-        $mac_address = null;
-        $output = [];
-        $return_code = 0;
-        
-        // Detect OS and use appropriate ARP command
-        if (PHP_OS_FAMILY === 'Windows') {
-            // Windows: arp -a shows all entries (doesn't accept IP parameter)
-            $command = 'arp -a 2>&1';
-            exec($command, $output, $return_code);
-            
-            if ($return_code === 0 && !empty($output)) {
-                // Parse Windows ARP output format: "  IP_ADDRESS     MAC_ADDRESS     TYPE"
-                // Example: "  192.168.1.100     00-11-22-33-44-55     dynamic"
-                foreach ($output as $line) {
-                    if (preg_match('/\s+' . preg_quote($ip_address, '/') . '\s+([0-9a-fA-F]{2}[:-][0-9a-fA-F]{2}[:-][0-9a-fA-F]{2}[:-][0-9a-fA-F]{2}[:-][0-9a-fA-F]{2}[:-][0-9a-fA-F]{2})\s+/', $line, $matches)) {
-                        $mac_address = strtoupper(str_replace('-', ':', $matches[1]));
-                        break;
-                    }
-                }
-            }
-        } else {
-            // Linux/macOS: arp -n shows numeric addresses, or arp -a shows all
-            // Try arp -n first (more reliable for specific IP)
-            $command = 'arp -n ' . escapeshellarg($ip_address) . ' 2>&1';
-            exec($command, $output, $return_code);
-            
-            if ($return_code === 0 && !empty($output)) {
-                // Parse Linux/macOS ARP output format: "IP_ADDRESS ether MAC_ADDRESS CMD"
-                // Example: "192.168.1.100 (192.168.1.100) at aa:bb:cc:dd:ee:ff [ether] on en0"
-                foreach ($output as $line) {
-                    if (preg_match('/\(?([0-9a-fA-F]{2}[:-][0-9a-fA-F]{2}[:-][0-9a-fA-F]{2}[:-][0-9a-fA-F]{2}[:-][0-9a-fA-F]{2}[:-][0-9a-fA-F]{2})\)?/i', $line, $matches)) {
-                        $mac_address = strtoupper(str_replace('-', ':', $matches[1]));
-                        break;
-                    }
-                }
-            }
-            
-            // Fallback to arp -a if arp -n didn't work
-            if (!$mac_address) {
-                $command = 'arp -a | grep ' . escapeshellarg($ip_address) . ' 2>&1';
-                exec($command, $output, $return_code);
-                
-                if ($return_code === 0 && !empty($output)) {
-                    foreach ($output as $line) {
-                        if (preg_match('/\(?([0-9a-fA-F]{2}[:-][0-9a-fA-F]{2}[:-][0-9a-fA-F]{2}[:-][0-9a-fA-F]{2}[:-][0-9a-fA-F]{2}[:-][0-9a-fA-F]{2})\)?/i', $line, $matches)) {
-                            $mac_address = strtoupper(str_replace('-', ':', $matches[1]));
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        
-        return $mac_address;
-    }
-    
-    /**
-     * Get monitor ID by IP address or MAC address
-     * Handles duplicate entries by returning the most recent one
-     * Priority: MAC address from parameter > MAC address from ARP lookup > IP address
-     * 
-     * @param string|null $ip_address Client IP address (for fallback lookup)
-     * @param string|null $mac_address Client MAC address (preferred identifier)
-     * @return int|null Monitor ID (primary key) or null if not found
+     * Telemetry identity is exclusively the monitor ID verified against a
+     * device session at the HTTP boundary. MAC and IP are inventory / observed
+     * network metadata, never authorization or a fallback lookup key.
      */
     public function getMonitorId($ip_address = null, $mac_address = null) {
-        if ($this->authenticatedMonitorId !== null) return $this->authenticatedMonitorId;
-        $monitor_id = null;
-        
-        // Priority 1: Try MAC address from parameter first (if provided)
-        if ($mac_address) {
-            $stmt = $this->mysqli->prepare("
-                SELECT id FROM tbl_monitor_ips 
-                WHERE mac_address = ? 
-                ORDER BY updated_at DESC, created_at DESC, id DESC 
-                LIMIT 1
-            ");
-            $stmt->bind_param("s", $mac_address);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            if ($row = $result->fetch_assoc()) {
-                $monitor_id = $row['id'];
-            }
-            $stmt->close();
-        }
-        
-        // Priority 2: If no MAC address parameter provided and IP is available, try ARP lookup
-        if (!$monitor_id && $ip_address && !$mac_address) {
-            $mac_address = $this->getMacAddressFromArp($ip_address);
-            if ($mac_address) {
-                $stmt = $this->mysqli->prepare("
-                    SELECT id FROM tbl_monitor_ips 
-                    WHERE mac_address = ? 
-                    ORDER BY updated_at DESC, created_at DESC, id DESC 
-                    LIMIT 1
-                ");
-                $stmt->bind_param("s", $mac_address);
-                $stmt->execute();
-                $result = $stmt->get_result();
-                if ($row = $result->fetch_assoc()) {
-                    $monitor_id = $row['id'];
-                }
-                $stmt->close();
-            }
-        }
-        
-        // Priority 3: Fall back to IP address if MAC address lookup didn't work
-        if (!$monitor_id && $ip_address) {
-            $stmt = $this->mysqli->prepare("
-                SELECT id FROM tbl_monitor_ips 
-                WHERE ip_address = ? 
-                ORDER BY updated_at DESC, created_at DESC, id DESC 
-                LIMIT 1
-            ");
-            $stmt->bind_param("s", $ip_address);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            if ($row = $result->fetch_assoc()) {
-                $monitor_id = $row['id'];
-            }
-            $stmt->close();
-        }
-        
-        return $monitor_id;
+        return $this->authenticatedMonitorId;
     }
-    
+
     /**
      * Legacy function name - use getMonitorId() instead
      * @deprecated Use getMonitorId() instead
@@ -600,7 +468,8 @@ class DatabaseService {
             $stmt->bind_param('si',$ip_address,$this->authenticatedMonitorId);
             $ok=$stmt->execute();$stmt->close();return $ok;
         }
-        // Get monitor ID using MAC address (if provided) or IP address
+        // Unauthenticated activity must never update any monitor, even if a
+        // request's source IP or MAC matches an existing inventory record.
         $monitor_id = $this->getMonitorId($ip_address, $mac_address);
         
         if (!$monitor_id) {
