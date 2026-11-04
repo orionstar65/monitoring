@@ -17,7 +17,7 @@ $macProject=$read('Mac/MonitorClient.xcodeproj/project.pbxproj');
 $ubuntuVersion=$read('Ubuntu/version.h');
 $check=[
  'Login uses User No'=>str_contains($auth,'WHERE user_no=:user_no LIMIT 1'),
- 'Login uses email'=>str_contains($auth,'WHERE email=:email LIMIT 1'),
+ 'Login rejects email'=>!str_contains($auth,'WHERE email=:email LIMIT 1'),
  'LAN-scoped directory fallback'=>str_contains($read('Backend/services/ClientIdentity.php'),'monitoringLanEnrollmentClient()'),
  'Directory includes administrator accounts'=>str_contains($api,"FROM users u WHERE u.user_no IS NOT NULL"),
  'CLI-only read-only directory diagnostics'=>str_contains($diagnostics,"PHP_SAPI!=='cli'")&&!str_contains($diagnostics,'UPDATE users'),
