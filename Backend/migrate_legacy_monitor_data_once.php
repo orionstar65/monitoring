@@ -49,16 +49,22 @@ $db=null;$transaction=false;
 try{
     $db=clientIdentityDatabase();
     $lockId='monitor_legacy_metadata_alignment_v15_20261104';
-    $db->query("CREATE TABLE IF NOT EXISTS monitoring_maintenance_runs (
-        run_id VARCHAR(96) PRIMARY KEY,
-        completed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        users_updated INT NOT NULL DEFAULT 0
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-    $guard=$db->prepare('SELECT completed_at FROM monitoring_maintenance_runs WHERE run_id=?');
-    $guard->bind_param('s',$lockId);$guard->execute();$prior=$guard->get_result()->fetch_assoc();$guard->close();
-    if($prior){
-        fwrite(STDOUT,"Already applied on ".$prior['completed_at'].". No records changed.\n");
-        exit(0);
+    // Preview never creates tables or mutates records.
+    $existingMarker=$db->query("SHOW TABLES LIKE 'monitoring_maintenance_runs'")->num_rows>0;
+    if($existingMarker){
+        $guard=$db->prepare('SELECT completed_at FROM monitoring_maintenance_runs WHERE run_id=?');
+        $guard->bind_param('s',$lockId);$guard->execute();$prior=$guard->get_result()->fetch_assoc();$guard->close();
+        if($prior){
+            fwrite(STDOUT,"Already applied on ".$prior['completed_at'].". No records changed.\\n");
+            exit(0);
+        }
+    }
+    if($apply && !$existingMarker){
+        $db->query("CREATE TABLE monitoring_maintenance_runs (
+            run_id VARCHAR(96) PRIMARY KEY,
+            completed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            users_updated INT NOT NULL DEFAULT 0
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
     // Verify required schema: migration must run after settings_locked was added.
     $fields=[];
