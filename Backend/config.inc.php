@@ -12,16 +12,16 @@ class JConfig {
     public $dbpassword;
     public $dbname;
     
-    // Directory paths for storing data
-    public $screens_dir_path = './html/data/screens/';
-    public $thumbnails_dir_path = './html/data/thumbnails/';
-    public $logs_dir_path = './html/data/logs/';
+    // Absolute storage roots: never depend on Apache/PHP working directory.
+    public $screens_dir_path = __DIR__.'/html/data/screens/';
+    public $thumbnails_dir_path = __DIR__.'/html/data/thumbnails/';
+    public $logs_dir_path = __DIR__.'/html/data/logs/';
 }
 
-// Global variables for backward compatibility
-$screens_dir_path = './html/data/screens/';
-$thumbnails_dir_path = './html/data/thumbnails/';
-$logs_dir_path = './html/data/logs/';
+// Global paths are used by legacy upload helpers; keep absolute.
+$screens_dir_path = __DIR__.'/html/data/screens/';
+$thumbnails_dir_path = __DIR__.'/html/data/thumbnails/';
+$logs_dir_path = __DIR__.'/html/data/logs/';
 
 // Create directories if they don't exist
 $directories = [$screens_dir_path, $thumbnails_dir_path, $logs_dir_path];
