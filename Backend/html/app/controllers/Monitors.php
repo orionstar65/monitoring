@@ -52,7 +52,6 @@ class Monitors extends Base {
         
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $ip_address = $_POST['ip_address'] ?? '';
-            $name = $_POST['name'] ?? '';
             $owner_user_id=filter_var($_POST['owner_user_id']??null,FILTER_VALIDATE_INT)?:null;
             $mac_address = $_POST['mac_address'] ?? '';
             $type = $_POST['type'] ?? 'desktop';
@@ -65,14 +64,14 @@ class Monitors extends Base {
                 $error='Invalid machine type';
             } elseif(!filter_var($ip_address,FILTER_VALIDATE_IP)){
                 $error='Enter a valid IP address';
-            } elseif(strlen(trim($name))>255 || strlen($mac_address)>17){
-                $error='Invalid device name or MAC address';
+            } elseif(strlen($mac_address)>17){
+                $error='Invalid MAC address';
             }
             // Validate platform if provided
             if (!isset($error) && !empty($platform) && !in_array($platform, ['Windows', 'Mac', 'Ubuntu'],true)) {
                 $error = 'Invalid platform selected';
-            } elseif (!isset($error) && (empty($ip_address) || trim($name)==='')) {
-                $error = 'IP address and name are required';
+            } elseif (!isset($error) && empty($ip_address)) {
+                $error = 'IP address is required';
             } elseif(!isset($error)) {
                 $existing = false;
                 $error = null;
@@ -82,10 +81,8 @@ class Monitors extends Base {
                         try {
                             $monitorId = $this->db->insert('tbl_monitor_ips', [
                                 'ip_address' => $ip_address,
-                                'name' => $name,
                                 'owner_user_id' => $owner_user_id,
                                 'mac_address' => ($mac_address !== '' ? $mac_address : null),
-                                'name' => $name,
                         'type' => $type,
                                 'platform' => ($platform ?: null),
                                 'os_status' => 0,
@@ -138,12 +135,9 @@ class Monitors extends Base {
             $platform = trim($_POST['platform'] ?? '');
             $owner_user_id = filter_var($_POST['owner_user_id']??null,FILTER_VALIDATE_INT)?:null;
             $settings_locked = isset($_POST['settings_locked']) ? 1 : 0;
-            $name=trim((string)($_POST['name']??$monitor['name']));
             if($owner_user_id && !$this->db->fetch('SELECT id FROM users WHERE id=:id',['id'=>$owner_user_id])) $error='Unknown account';
             // Validate type
-            if(strlen($name)<1||strlen($name)>100||preg_match('/[<>\\x00-\\x1f]/',$name)){
-                $error='Invalid monitor label';
-            }elseif(strlen($remark)>500){$error='Remark too long';}
+            if(strlen($remark)>500){$error='Remark too long';}
             elseif (!in_array($type, ['desktop', 'laptop', 'server'])) {
                 $error = 'Invalid device type selected';
             } elseif (!empty($platform) && !in_array($platform, ['Windows', 'Mac', 'Ubuntu'])) {
