@@ -1780,7 +1780,7 @@ void monitorTask() {
 
 
 
-// Machine-specific UI preferences belong in HKCU, not a mutable settings.ini
+// Machine-specific UI preferences belong in HKCU, not a separate mutable INI file
 // shipped alongside the executable. Intervals still come from server config.
 static const char* kClientPreferencesRegistry="Software\\MonitorClient\\v1.5";
 static void saveClientSetting(const char* section,const char* key,const std::string& value) {
