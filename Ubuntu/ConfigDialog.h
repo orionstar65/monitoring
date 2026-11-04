@@ -11,6 +11,7 @@
 #include <QCheckBox>
 #include <QRadioButton>
 #include <QButtonGroup>
+#include <QStackedWidget>
 #include <QJsonArray>
 #include <QJsonObject>
 
@@ -40,6 +41,7 @@ private slots:
     void onMonitorChanged(int);
     void onTestConnectionClicked();
     void onLockSettingsClicked();
+    void onEditClicked();
 private:
     QJsonObject authRequest(const QJsonObject &payload,bool authenticated=false);
     QString settingsPath() const;
@@ -64,6 +66,7 @@ private:
     int monitorId=0;
     bool assignmentLocked=false;
     bool settingsLocked=false;
+    bool monitorEditing=false;
     bool logoutPerformed=false;
     QLineEdit *serverIPEdit=nullptr,*clientNameEdit=nullptr;
     QLineEdit *labelEdit=nullptr,*remarkEdit=nullptr;
@@ -71,8 +74,10 @@ private:
     QComboBox *userSelector=nullptr,*monitorSelector=nullptr;
     QButtonGroup *osRadios=nullptr,*machineRadios=nullptr;
     QLabel *connectionStatusLabel=nullptr,*assignmentStatusLabel=nullptr,*monitorIPLabel=nullptr;
+    QLabel *labelInfo=nullptr,*osInfo=nullptr,*machineInfo=nullptr,*remarkInfo=nullptr;
+    QStackedWidget *labelStack=nullptr,*osStack=nullptr,*machineStack=nullptr,*remarkStack=nullptr;
     QCheckBox *notificationsCheck=nullptr;
     QGroupBox *monitorGroup=nullptr;
-    QPushButton *testButton=nullptr,*logoutButton=nullptr,*saveButton=nullptr,*lockSettingsButton=nullptr;
+    QPushButton *testButton=nullptr,*logoutButton=nullptr,*saveButton=nullptr,*lockSettingsButton=nullptr,*editButton=nullptr;
 };
 #endif
