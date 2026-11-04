@@ -298,7 +298,7 @@ class View extends Base {
         $file_path = (string)($_GET['path'] ?? $file_path);
         // Preserve absolute legacy paths for realpath checks; normalize older
         // relative ./html/data entries to app-relative data paths.
-        $file_path = str_replace('\\\\','/',$file_path);
+        $file_path = str_replace('\\','/',$file_path);
         $file_path = preg_replace('#^(?:\\./)?html/#','',$file_path);
         // Security: Only allow viewing files from the data directories
         $file_path = urldecode($file_path);
