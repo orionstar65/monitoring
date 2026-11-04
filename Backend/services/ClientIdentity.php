@@ -35,6 +35,56 @@ function requireSecureRequest(): void {
         exit;
     }
 }
+/**
+ * Minimal trusted-LAN check for opt-in no-code desktop enrollment.
+ * Forwarded headers are never trusted from arbitrary clients.
+ */
+function monitoringIsPrivateLanAddress(string $address): bool {
+    if(filter_var($address,FILTER_VALIDATE_IP,FILTER_FLAG_IPV4)){
+        $parts=array_map('intval',explode('.',$address));
+        return $parts[0]===10
+            || ($parts[0]===172 && $parts[1]>=16 && $parts[1]<=31)
+            || ($parts[0]===192 && $parts[1]===168)
+            || ($parts[0]===169 && $parts[1]===254);
+    }
+    if(!filter_var($address,FILTER_VALIDATE_IP,FILTER_FLAG_IPV6))return false;
+    $packed=inet_pton($address);
+    if(!$packed)return false;
+    $first=ord($packed[0]);$second=ord($packed[1]);
+    return ($first & 0xfe)===0xfc
+        || ($first===0xfe && ($second & 0xc0)===0x80);
+}
+function monitoringLanEnrollmentClient(): bool {
+    $peer=(string)($_SERVER['REMOTE_ADDR']??'');
+    // Automatic LAN access does not treat loopback as a LAN peer. This
+    // avoids treating every public request tunneled through localhost as local.
+    if(!monitoringIsPrivateLanAddress($peer))return false;
+    if(isset($_SERVER['HTTP_FORWARDED'])||isset($_SERVER['HTTP_X_FORWARDED_FOR'])){
+        // A proxy can relay public traffic. Only an explicitly trusted HTTPS
+        // proxy may supply a client IP for this decision.
+        if(!monitoringTrustedProxyHttps())return false;
+        $client=trim(explode(',',(string)($_SERVER['HTTP_X_FORWARDED_FOR']??''))[0]);
+        return monitoringIsPrivateLanAddress($client);
+    }
+    return true;
+}
+function monitoringNoCodeEnrollmentAllowed(mysqli $db): bool {
+    // Existing explicit deployment opt-in remains supported.
+    if(getenv('MONITOR_ENABLE_USER_NO_ENROLL')==='1')return true;
+    // The one-time server recovery/activation script enables this DB flag.
+    // It is intentionally LAN-only, even when set.
+    if(!monitoringLanEnrollmentClient())return false;
+    try {
+        $query=$db->query("SELECT enabled FROM monitoring_runtime_flags WHERE name='trusted_lan_user_no_enrollment' LIMIT 1");
+        if(!$query)return false;
+        $row=$query->fetch_assoc();
+        $query->free();
+        return $row && (int)$row['enabled']===1;
+    } catch(Throwable $ignored) {
+        // Safe default when the one-time setup has not been run.
+        return false;
+    }
+}
 function clientIdentityDatabase(): mysqli {
     require_once __DIR__ . '/../config.inc.php';
     $config=new JConfig();
