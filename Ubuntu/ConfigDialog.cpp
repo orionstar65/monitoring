@@ -269,7 +269,7 @@ bool ConfigDialog::saveServerIfChanged(){
 void ConfigDialog::refreshDirectory(){
     auto result=authRequest({{"action","directory"}});
     const QSignalBlocker blocked(userSelector);
-    const QString current=authToken.isEmpty()?QString():activeUserNo;
+    const QString current=!pendingUserNo.isEmpty()?pendingUserNo:(authToken.isEmpty()?QString():activeUserNo);
     userSelector->clear();
     userSelector->addItem("Select a user…",QString());
     if(!result.value("success").toBool()){
@@ -391,25 +391,28 @@ void ConfigDialog::onUserChanged(int){
 }
 void ConfigDialog::updateUI(){
     const bool enrolled=!authToken.isEmpty()&&monitorId>0;
-    monitorGroup->setVisible(enrolled);
+    const bool pending=!pendingUserNo.isEmpty();
+    monitorGroup->setVisible(enrolled||pending);
     logoutButton->setVisible(enrolled);
     logoutButton->setEnabled(enrolled&&!assignmentLocked);
     userSelector->setEnabled(!enrolled||!assignmentLocked);
     const bool hasLock=enrolled&&assignmentLocked;
-    assignmentStatusLabel->setVisible(hasLock||!directoryError.isEmpty());
+    assignmentStatusLabel->setVisible(hasLock||!directoryError.isEmpty()||pending);
     if(hasLock)
         assignmentStatusLabel->setText("User selection is locked. Ask your administrator to edit.");
+    else if(pending)
+        assignmentStatusLabel->setText("No devices assigned. Choose Add new... and add the first monitor.");
     else if(!directoryError.isEmpty())
         assignmentStatusLabel->setText(directoryError);
     const int selectedId=monitorSelector->currentData().toInt();
-    const bool adding=enrolled&&selectedId==-1;
+    const bool adding=(enrolled||pending)&&selectedId==-1;
     saveButton->setText(adding?"Add Monitor":(enrolled?"Save Monitor":"Save Server"));
-    saveButton->setEnabled(!enrolled||adding||!settingsLocked);
+    saveButton->setEnabled(adding||!enrolled||!settingsLocked);
     for(auto *control:{static_cast<QWidget*>(labelEdit),static_cast<QWidget*>(remarkEdit)})
         control->setEnabled(!settingsLocked||adding);
     for(auto *radio:osRadios->buttons())radio->setEnabled(!settingsLocked||adding);
     for(auto *radio:machineRadios->buttons())radio->setEnabled(!settingsLocked||adding);
-    lockSettingsButton->setEnabled(enrolled&&!settingsLocked&&!adding);
+    lockSettingsButton->setEnabled(enrolled&&!pending&&!settingsLocked&&!adding);
     lockSettingsButton->setText(settingsLocked?"Settings Locked":"Lock Settings");
 }
 void ConfigDialog::onPairClicked(){
@@ -418,6 +421,11 @@ void ConfigDialog::onPairClicked(){
     if(number.isEmpty()){QMessageBox::warning(this,"Select User No","Choose a User No.");return;}
     const auto result=authRequest({{"action","enroll"},{"user_no",number}});
     if(!result.value("success").toBool()){
+        if(result.value("code").toString()=="no_monitors"){
+            pendingUserNo=number;
+            settingsLocked=false;
+            updateMonitorList({});updateUI();return;
+        }
         QMessageBox::warning(this,"User selection failed",result.value("error").toString("Could not load assigned monitors."));
         {
             const QSignalBlocker blocked(userSelector);
@@ -427,6 +435,7 @@ void ConfigDialog::onPairClicked(){
         return;
     }
     authToken=result.value("token").toString();
+    pendingUserNo.clear();
     monitorId=result.value("monitor_id").toInt();
     assignmentLocked=result.value("assignment_locked").toBool();
     activeUserNo=number;
@@ -449,10 +458,16 @@ void ConfigDialog::onSwitchClicked(){
     if(assignmentLocked){QMessageBox::warning(this,"Assignment locked","Ask your administrator to edit this monitor.");return;}
     const auto result=authRequest({{"action","switch_user"},{"user_no",userSelector->currentData().toString()}},true);
     if(!result.value("success").toBool()){
+        if(result.value("code").toString()=="no_monitors"){
+            pendingUserNo=userSelector->currentData().toString();
+            settingsLocked=false;
+            updateMonitorList({});updateUI();return;
+        }
         QMessageBox::warning(this,"Cannot change user",result.value("error").toString("Ask your administrator to change the assignment."));
         refreshMonitors();saveSettings();updateUI();return;
     }
     authToken=result.value("token").toString();
+    pendingUserNo.clear();
     activeUserNo=userSelector->currentData().toString();
     rememberToken(authToken);
     refreshMonitors();saveSettings();updateUI();
@@ -469,7 +484,7 @@ void ConfigDialog::onLogoutClicked(){
     if(!authToken.isEmpty()&&oldHost==getServerIP()&&oldPort==getServerPort())
         authRequest({{"action","logout"}},true);
     clearStoredToken(oldHost,oldPort);
-    authToken.clear();monitorId=0;assignmentLocked=false;activeUserNo.clear();logoutPerformed=true;
+    authToken.clear();monitorId=0;assignmentLocked=false;activeUserNo.clear();pendingUserNo.clear();logoutPerformed=true;
     updateMonitorList({});saveSettings();updateUI();
     emit sessionStateChanged();
 }
@@ -488,6 +503,25 @@ void ConfigDialog::onLockSettingsClicked(){
 
 void ConfigDialog::onSaveClicked(){
     if(!saveServerIfChanged())return;
+    if(!pendingUserNo.isEmpty()){
+        QJsonObject request={{"action","bootstrap_monitor"},{"user_no",pendingUserNo},
+            {"label",labelEdit->text().trimmed()},{"remark",remarkEdit->text().trimmed()},
+            {"os",osRadios->checkedButton()?osRadios->checkedButton()->text():"Ubuntu"},
+            {"machine",machineRadios->checkedButton()?machineRadios->checkedButton()->text().toLower():"desktop"}};
+        const auto result=authRequest(request,false);
+        if(!result.value("success").toBool()){
+            QMessageBox::warning(this,"Add monitor",result.value("error").toString("Could not create first monitor."));return;
+        }
+        const QString token=result.value("token").toString();
+        const int created=result.value("monitor_id").toInt();
+        if(token.length()!=64||created<1){
+            QMessageBox::warning(this,"Add monitor","Invalid enrollment response.");return;
+        }
+        authToken=token;monitorId=created;activeUserNo=pendingUserNo;pendingUserNo.clear();
+        assignmentLocked=false;settingsLocked=false;
+        rememberToken(authToken);refreshMonitors();refreshDirectory();saveSettings();updateUI();
+        emit sessionStateChanged();return;
+    }
     if(authToken.isEmpty()){connectionStatusLabel->setText("● Server saved · select User No");return;}
     const int id=monitorSelector->currentData().toInt();
     if(settingsLocked&&id!=-1){
