@@ -101,28 +101,41 @@ try {
     $userId=(int)$session['user_id'];
     if($action==='switch_user'){
         $newNo=(string)($data['user_no']??'');
-        if(!preg_match('/^[1-9][0-9]{0,14}$/',$newNo)){http_response_code(400);echo json_encode(['error'=>'Invalid User No']);exit;}
+        if(!preg_match('/^[1-9][0-9]{0,14}$/D',$newNo)){
+            http_response_code(400);echo json_encode(['error'=>'Invalid User No']);exit;
+        }
+        // Changing a user must never silently transfer a monitor to another
+        // account. Select the first monitor already owned by the target user.
         $mid=(int)($session['monitor_id']??0);
-        if($mid<1){http_response_code(403);echo json_encode(['error'=>'Device is not registered']);exit;}
         $db->begin_transaction();
         try {
             $st=$db->prepare('SELECT owner_user_id,assignment_locked FROM tbl_monitor_ips WHERE id=? FOR UPDATE');
-            $st->bind_param('i',$mid);$st->execute();$monitor=$st->get_result()->fetch_assoc();$st->close();
-            if(!$monitor||(int)$monitor['owner_user_id']!==$userId){$db->rollback();http_response_code(403);echo json_encode(['error'=>'Assignment changed. Select the user again or ask your administrator.']);exit;}
-            if((int)$monitor['assignment_locked']===1){$db->rollback();http_response_code(423);echo json_encode(['error'=>'User assignment is locked. Ask your administrator to edit the monitor.','code'=>'assignment_locked']);exit;}
-            $st=$db->prepare("SELECT id FROM users WHERE user_no=? AND role IN ('admin','user','viewer') LIMIT 1");
+            $st->bind_param('i',$mid);$st->execute();$current=$st->get_result()->fetch_assoc();$st->close();
+            if(!$current || (int)$current['owner_user_id']!==$userId){
+                $db->rollback();http_response_code(403);
+                echo json_encode(['error'=>'The selected device is no longer assigned to this account']);exit;
+            }
+            if((int)$current['assignment_locked']===1){
+                $db->rollback();http_response_code(423);
+                echo json_encode(['error'=>'User assignment is locked. Ask your administrator to edit the monitor.','code'=>'assignment_locked']);exit;
+            }
+            $st=$db->prepare("SELECT u.id AS user_id,m.id AS monitor_id FROM users u
+                JOIN tbl_monitor_ips m ON m.owner_user_id=u.id
+                WHERE u.user_no=? ORDER BY m.id LIMIT 1");
             $st->bind_param('s',$newNo);$st->execute();$target=$st->get_result()->fetch_assoc();$st->close();
-            if(!$target){$db->rollback();http_response_code(404);echo json_encode(['error'=>'User No not found']);exit;}
-            $newId=(int)$target['id'];
-            $st=$db->prepare('UPDATE tbl_monitor_ips SET owner_user_id=? WHERE id=?');
-            $st->bind_param('ii',$newId,$mid);$st->execute();$st->close();
-            $st=$db->prepare('UPDATE client_sessions SET revoked_at=NOW() WHERE monitor_id=? AND revoked_at IS NULL');
-            $st->bind_param('i',$mid);$st->execute();$st->close();
+            if(!$target){
+                $db->rollback();http_response_code(404);
+                echo json_encode(['error'=>'This user has no monitors. Add one from the admin web portal.']);exit;
+            }
+            $targetUser=(int)$target['user_id'];$targetMonitor=(int)$target['monitor_id'];
+            $st=$db->prepare('UPDATE client_sessions SET revoked_at=NOW() WHERE id=? AND user_id=?');
+            $st->bind_param('ii',$session['id'],$userId);$st->execute();$st->close();
             $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);
-            $st=$db->prepare("INSERT INTO client_sessions(token_hash,user_id,monitor_id,session_type,expires_at) VALUES(?,?,?,'device',NULL)");
-            $st->bind_param('sii',$hash,$newId,$mid);$st->execute();$st->close();
+            $st=$db->prepare("INSERT INTO client_sessions(token_hash,user_id,monitor_id,session_type,expires_at)
+                 VALUES(?,?,?,'device',NULL)");
+            $st->bind_param('sii',$hash,$targetUser,$targetMonitor);$st->execute();$st->close();
             $db->commit();
-            echo json_encode(['success'=>true,'token'=>$token,'user_no'=>$newNo,'monitor_id'=>$mid]);exit;
+            echo json_encode(['success'=>true,'token'=>$token,'user_no'=>$newNo,'monitor_id'=>$targetMonitor]);exit;
         }catch(Throwable $failure){$db->rollback();throw $failure;}
     }
     if($action==='restore'){
