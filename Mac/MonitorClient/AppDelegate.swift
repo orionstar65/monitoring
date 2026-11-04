@@ -2870,7 +2870,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         monitorPane.addArrangedSubview(line("IP address", monitorIP))
         for row in [remarkInfoRow, remarkEditRow] { monitorPane.addArrangedSubview(row) }
         let save = action("Save Monitor", "save")
-        monitorPane.addArrangedSubview(line("", save))
+        let saveRow = line("", save)
+        monitorPane.addArrangedSubview(saveRow)
         stack.addArrangedSubview(monitorPane)
         rule()
         let notifications = NSButton(checkboxWithTitle: "Show status notifications",
@@ -2999,7 +3000,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             }
             edit.isHidden = !enrolled || creating || monitorSettingsLocked
             edit.title = editable ? "Cancel" : "Edit"
-            save.isHidden = !editable
+            saveRow.isHidden = !editable
             save.title = creating ? "Add Monitor" : "Save Monitor"
             save.isEnabled = editable && (enrolled || pendingFirstDevice)
             lockSettings.isHidden = !enrolled || creating
@@ -3049,7 +3050,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 directoryError = response?["error"] as? String ??
                     "Cannot load users. Verify the server URL, TLS and enrollment configuration."
             } else if records.isEmpty {
-                directoryError = "No users available. Add a User or Viewer in the web portal."
+                directoryError = "No users available."
             } else {
                 directoryError = nil
             }
