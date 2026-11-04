@@ -137,6 +137,7 @@ class Monitors extends Base {
             $platform = trim($_POST['platform'] ?? '');
             $owner_user_id = filter_var($_POST['owner_user_id']??null,FILTER_VALIDATE_INT)?:null;
             $assignment_locked = isset($_POST['assignment_locked']) ? 1 : 0;
+            $settings_locked = isset($_POST['settings_locked']) ? 1 : 0;
             if($owner_user_id && !$this->db->fetch('SELECT id FROM users WHERE id=:id',['id'=>$owner_user_id])) $error='Unknown account';
             // Validate type
             if(strlen($remark)>500){$error='Remark too long';}
@@ -154,7 +155,8 @@ class Monitors extends Base {
                         'slack_id' => $slack_id,
                         'platform' => !empty($platform) ? $platform : null,
                         'owner_user_id' => $owner_user_id,
-                        'assignment_locked' => $assignment_locked
+                        'assignment_locked' => $assignment_locked,
+                        'settings_locked' => $settings_locked
                     ];
                     
                     $this->db->update('tbl_monitor_ips', $update_data, 'id = :id', ['id' => $id]);
