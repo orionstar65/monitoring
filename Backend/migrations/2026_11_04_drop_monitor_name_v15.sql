@@ -1,0 +1,21 @@
+-- MonitorClient v1.5: remove obsolete monitor Label column.
+-- Apply ONCE after a full MySQL backup and after deploying the matching PHP
+-- backend and native client builds on main.
+--
+-- The monitor identity is tbl_monitor_ips.id, bound to a device session;
+-- the account display name is users.name. A stored monitor "name"/Label
+-- no longer participates in identity, authorization, or dashboard rendering.
+--
+-- Do not apply before older v1.4 migrations: one of them adds remark AFTER name.
+-- Preflight:
+--   SHOW COLUMNS FROM tbl_monitor_ips LIKE 'name';
+--   SHOW COLUMNS FROM tbl_monitor_ips LIKE 'settings_locked';
+--   SELECT COUNT(*) FROM screenshot_metadata;
+--
+-- If the first preflight returns no rows, this migration has already run.
+ALTER TABLE tbl_monitor_ips DROP COLUMN name;
+
+-- Check:
+--   SHOW COLUMNS FROM tbl_monitor_ips;
+--   SELECT id,owner_user_id,platform,type,ip_address,settings_locked
+--   FROM tbl_monitor_ips ORDER BY id DESC LIMIT 10;
