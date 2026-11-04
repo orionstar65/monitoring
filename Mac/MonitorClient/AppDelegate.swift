@@ -2944,6 +2944,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             chooseRadio(machineRadios, value: machineType)
             monitorSettingsLocked = monitor["settings_locked"] as? Bool ??
                 ((monitor["settings_locked"] as? Int ?? 0) == 1)
+            locked = monitorSettingsLocked ||
+                (monitor["assignment_locked"] as? Bool ?? false)
             updateState()
         }
         func refreshMonitors() {
@@ -2990,10 +2992,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             directoryStatus.stringValue = directoryError ?? ""
             directoryStatus.isHidden = directoryError == nil
             let enrolled = !self.clientToken.isEmpty && self.selectedMonitorId > 0
+            let isLocked = enrolled && (locked || monitorSettingsLocked)
             monitorPane.isHidden = !enrolled && pendingUserNo == nil
             unpair.isHidden = !enrolled
-            unpair.isEnabled = enrolled && !locked
-            users.isEnabled = !enrolled || !locked
+            unpair.isEnabled = enrolled && !isLocked
+            users.isEnabled = !isLocked
+            picker.isEnabled = !isLocked
+            ipField.isEnabled = !isLocked
+            portField.isEnabled = !isLocked
+            test.isEnabled = !isLocked
             notice.isHidden = !enrolled || !locked
             if enrolled && locked {
                 notice.stringValue = "User selection is locked. Ask your administrator to edit."
@@ -3001,21 +3008,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             }
             let creating = picker.selectedItem?.representedObject as? Int == -1
             let pendingFirstDevice = pendingUserNo != nil
-            let editable = creating || (monitorEditing && !monitorSettingsLocked)
+            let editable = !isLocked && (creating || monitorEditing)
             for row in [nameEditRow, osEditRow, machineEditRow, remarkEditRow] {
                 row.isHidden = !editable
             }
             for row in [nameInfoRow, osInfoRow, machineInfoRow, remarkInfoRow] {
                 row.isHidden = editable
             }
-            edit.isHidden = !enrolled || creating || monitorSettingsLocked
+            edit.isHidden = !enrolled || creating || isLocked
             edit.title = editable ? "Cancel" : "Edit"
             saveRow.isHidden = !editable
             save.title = creating ? "Add Monitor" : "Save Monitor"
             save.isEnabled = editable && (enrolled || pendingFirstDevice)
             lockSettings.isHidden = !enrolled || creating
-            lockSettings.isEnabled = enrolled && !monitorSettingsLocked
-            lockSettings.title = monitorSettingsLocked ? "Settings Locked" : "Lock Settings"
+            lockSettings.isEnabled = enrolled && !isLocked
+            lockSettings.title = isLocked ? "Settings Locked" : "Lock Settings"
             status.stringValue = self.isServerConnected ? "Server reachable" : "Offline / Not configured"
             self.updateTrayStatusDot()
         }
@@ -3092,6 +3099,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             case let value where value.hasPrefix("machine:"):
                 chooseRadio(machineRadios, value: String(value.dropFirst(8)))
             case "test":
+                guard !(locked || monitorSettingsLocked) else { return }
                 let host = ipField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
                 let port = portField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard let number = Int(port), (1...65535).contains(number), !host.isEmpty,
@@ -3134,7 +3142,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     updateState()
                     return
                 }
-                if !self.clientToken.isEmpty && locked {
+                if !self.clientToken.isEmpty && (locked || monitorSettingsLocked) {
                     showError("User assignment is locked. Ask your administrator to edit the monitor.")
                     refreshMonitors()
                     return
@@ -3176,6 +3184,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 updateState()
                 if !changing { self.startKeyboardMonitoring() }
             case "monitor":
+                if locked || monitorSettingsLocked {
+                    refreshMonitors()
+                    updateState()
+                    return
+                }
                 updateMonitorFields()
                 let id = picker.selectedItem?.representedObject as? Int ?? 0
                 guard !self.clientToken.isEmpty, id > 0 else { return }
@@ -3193,7 +3206,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 }
                 updateState()
             case "disconnect":
-                guard !locked else { showError("User assignment is locked. Ask your administrator to edit the monitor."); return }
+                guard !(locked || monitorSettingsLocked) else { showError("User assignment is locked. Ask your administrator to edit the monitor."); return }
                 _ = self.clientAuthRequest(["action":"logout"],authenticated:true)
                 let query: [String: Any] = [
                     kSecClass as String:kSecClassGenericPassword,
@@ -3208,7 +3221,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 refreshMonitors()
                 updateState()
             case "edit":
-                guard !monitorSettingsLocked, self.selectedMonitorId > 0,
+                guard !(locked || monitorSettingsLocked), self.selectedMonitorId > 0,
                       picker.selectedItem?.representedObject as? Int == self.selectedMonitorId else { return }
                 if monitorEditing {
                     updateMonitorFields() // Cancel: restore server values
@@ -3219,7 +3232,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             case "lock":
                 guard !self.clientToken.isEmpty,
                       picker.selectedItem?.representedObject as? Int == self.selectedMonitorId,
-                      !monitorSettingsLocked else { return }
+                      !(locked || monitorSettingsLocked) else { return }
                 let warning = NSAlert()
                 warning.messageText = "Lock monitor settings?"
                 warning.informativeText = "Only an administrator can unlock this monitor from the web portal."
@@ -3273,7 +3286,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     showError("Select one of your assigned monitors.")
                     return
                 }
-                if id != -1 && monitorSettingsLocked {
+                if id != -1 && (locked || monitorSettingsLocked) {
                     showError("Monitor settings are locked. Ask your administrator to unlock them.")
                     return
                 }
