@@ -134,8 +134,9 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
         );
         
         if ($result) {
-            // Update monitor activity (pass MAC address if available)
-            $dbService->updateMonitorActivity($clientIP, 'monitor', $macAddress);
+            // Update activity for the already authenticated monitor. The
+            // request IP is recorded as last_seen_ip, never used as identity.
+            $dbService->updateMonitorActivity((string)($_SERVER['REMOTE_ADDR']??''), 'monitor');
             
             // Return success response
             echo json_encode([
