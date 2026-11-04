@@ -3155,7 +3155,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 warning.addButton(withTitle: "Lock Settings")
                 warning.addButton(withTitle: "Cancel")
                 guard warning.runModal() == .alertFirstButtonReturn else { return }
-                let result = self.clientAuthRequest(["action":"lock_settings"], authenticated:true)
+                let payload: [String: Any] = [
+                    "action":"lock_settings",
+                    "label":label.stringValue,"remark":remark.stringValue,
+                    "os":selectedRadio(osRadios),
+                    "machine":selectedRadio(machineRadios).lowercased()
+                ]
+                let result = self.clientAuthRequest(payload, authenticated:true)
                 guard result?["success"] as? Bool == true else {
                     showError(result?["error"] as? String ?? "Could not lock settings.")
                     return
