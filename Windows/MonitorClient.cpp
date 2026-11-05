@@ -1874,6 +1874,7 @@ bool restoreClientSession() {
         if(!keyboardHook) setupKeyboardHook();
         if(!usbMonitoringActive)setupUSBMONITORING();
     }
+    connectionStatus.serverConnected=true;
     updateTrayIcon();
     return true;
 }
@@ -2225,7 +2226,7 @@ static void updateUnifiedVisibility(HWND dlg) {
     ShowWindow(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),existing?SW_SHOW:SW_HIDE);
     setDlgUtf8Text(dlg,SETTINGS_LOCK_SETTINGS,locked?"Settings Locked":"Lock Settings");
     setDlgUtf8Text(dlg,SETTINGS_CONNECTION,
-        connectionStatus.serverConnected&&enrolled?"● Connected and active":"● Offline / Not configured");
+        enrolled?(selectedMonitorId.load()>0?"● Signed in · Monitor active":"● Signed in · Select monitor"):"● Not signed in");
     ShowWindow(GetDlgItem(dlg,SETTINGS_NOTIFY),SW_SHOW);
     // Compute each position from its original layout, not the last displayed
     // state: opening / switching / disconnecting must never accumulate offsets.
