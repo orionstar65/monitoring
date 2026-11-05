@@ -27,7 +27,7 @@ $checks=[
  'Full-date timeline API uses bounded density buckets'=>str_contains($keyController,'function api_key_timeline()')&&str_contains($keyController,'LIMIT 3001'),
  'UI loads full-date activity after the initial page'=>str_contains($keyView,'loadFullKeyTimeline(keyRulerState)'),
  'Timeline supports zoom'=>str_contains($keyView,'keyTimelineScale')&&str_contains($keyView,'renderKeyRuler'),
- 'Keylog navigation uses Previous and Next buttons'=>str_contains($keyView,'Previous events')&&str_contains($keyView,'Next events'),
+ 'Keylog navigation is above transcript'=>str_contains($keyView,'id="keyPreviousRange"')&&str_contains($keyView,'id="keyNextRange"')&&str_contains($keyView,"currentTab === 'key'"),
  'Keyboard preview renders Enter and Backspace effects'=>str_contains($keyView,"kind:'newline'")&&str_contains($keyView,"last.deleted=true"),
  'Keyboard preview has timestamp column'=>str_contains($keyView,'key-transcript-time'),
  'Other keyboard events remain visible as badges'=>str_contains($keyView,'key-special-badge'),
