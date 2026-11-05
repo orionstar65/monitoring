@@ -55,20 +55,30 @@ ob_start();
                 </select>
               </div>
               <div class="col-md-6">
-                <label class="form-label" for="platform">OS</label>
-                <select class="form-select" name="platform" id="platform">
-                  <?php foreach([''=>'Not set','Windows'=>'Windows','Mac'=>'Mac','Ubuntu'=>'Ubuntu'] as $value=>$label): ?>
-                    <option value="<?= $e($value) ?>" <?= (string)($_POST['platform']??$monitor['platform']??'')===(string)$value?'selected':'' ?>><?= $e($label) ?></option>
-                  <?php endforeach; ?>
-                </select>
+                <fieldset>
+                  <legend class="form-label">OS</legend>
+                  <div class="d-flex flex-wrap gap-2">
+                    <?php foreach([''=>'Not set','Windows'=>'Windows','Mac'=>'Mac','Ubuntu'=>'Ubuntu'] as $value=>$label): ?>
+                     <label class="btn btn-outline-secondary btn-sm">
+                      <input class="form-check-input me-1" type="radio" name="platform" value="<?= $e($value) ?>" <?= (string)($_POST['platform']??$monitor['platform']??'')===(string)$value?'checked':'' ?>>
+                      <?= $e($label) ?>
+                     </label>
+                    <?php endforeach; ?>
+                  </div>
+                </fieldset>
               </div>
               <div class="col-md-6">
-                <label class="form-label" for="type">Machine</label>
-                <select class="form-select" id="type" name="type" required>
-                  <?php foreach(['desktop'=>'Desktop','laptop'=>'Laptop','server'=>'Server'] as $value=>$label): ?>
-                    <option value="<?= $value ?>" <?= (string)($_POST['type']??$monitor['type']??'desktop')===$value?'selected':'' ?>><?= $label ?></option>
-                  <?php endforeach; ?>
-                </select>
+                <fieldset>
+                  <legend class="form-label">Machine</legend>
+                  <div class="d-flex flex-wrap gap-2">
+                    <?php foreach(['desktop'=>'Desktop','laptop'=>'Laptop','server'=>'Server'] as $value=>$label): ?>
+                     <label class="btn btn-outline-secondary btn-sm">
+                      <input class="form-check-input me-1" type="radio" name="type" value="<?= $e($value) ?>" <?= (string)($_POST['type']??$monitor['type']??'desktop')===$value?'checked':'' ?>>
+                      <?= $label ?>
+                     </label>
+                    <?php endforeach; ?>
+                  </div>
+                </fieldset>
               </div>
               <div class="col-12">
                 <label class="form-label" for="remark">Remark</label>
