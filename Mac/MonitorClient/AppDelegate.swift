@@ -2983,7 +2983,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             // Save is always available to persist server and notification preferences.
             saveRow.isHidden = false
             save.title = creating ? "Add Monitor" : "Save"
-            save.isEnabled = !isLocked
+            save.isEnabled = true
             lockSettings.isHidden = !enrolled || creating || pendingFirstDevice
             lockSettings.isEnabled = enrolled && !isLocked
             lockSettings.title = isLocked ? "Settings Locked" : "Lock Settings"
