@@ -584,6 +584,7 @@ void ConfigDialog::onSaveClicked(){
             QMessageBox::warning(this,"Add monitor","Invalid enrollment response.");return;
         }
         authToken=token;monitorId=created;activeUserNo=pendingUserNo;pendingUserNo.clear();
+        directoryError.clear();
         assignmentLocked=false;settingsLocked=false;
         rememberToken(authToken);refreshMonitors();refreshDirectory();saveSettings();updateUI();
         emit sessionStateChanged();return;
