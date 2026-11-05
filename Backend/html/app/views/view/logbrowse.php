@@ -467,6 +467,24 @@ ob_start();
 .table-responsive { overflow-x: auto; }
 </style>
 
+<style>
+.key-timeline-wrapper{padding:12px;min-width:0}
+.key-timeline-heading{font-weight:700;margin-bottom:12px}
+.key-timeline-heading small{font-weight:400;color:var(--bs-secondary-color);margin-left:8px}
+.key-timeline-scroller{overflow-x:auto;padding:8px 0 15px}
+.key-timeline-track{display:flex;gap:8px;min-width:max-content;border-bottom:2px solid var(--bs-border-color);padding-bottom:6px}
+.key-timeline-event{position:relative;display:flex;flex-direction:column;gap:9px;width:150px;min-height:92px;padding:10px;border:1px solid var(--bs-border-color);border-radius:10px;background:var(--bs-body-bg);text-align:left;color:inherit}
+.key-timeline-event.selected{outline:2px solid var(--bs-primary);outline-offset:1px}
+.key-timeline-time{font-size:.73rem;color:var(--bs-secondary-color)}
+.key-timeline-marker{width:9px;height:9px;border-radius:50%;background:var(--bs-primary)}
+.key-timeline-preview{display:flex;flex-direction:column;gap:3px;overflow-wrap:anywhere}
+.key-timeline-preview small{font-size:.69rem;color:var(--bs-secondary-color)}
+.key-context-panel{margin-top:14px;border:1px solid var(--bs-border-color);border-radius:12px;padding:15px;min-height:90px}
+.key-readable{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6}
+.key-badges{display:flex;flex-wrap:wrap;gap:5px}
+.key-token{font-size:.75rem;padding:5px 7px}
+@media(max-width:700px){.key-timeline-event{width:115px}.key-context-panel{padding:10px}}
+</style>
 <div class="logbrowse-container">
     <!-- Filter Panel -->
     <div class="filter-panel">
@@ -481,8 +499,7 @@ ob_start();
                     <option value="">All Devices</option>
                     <?php foreach ($monitors as $monitor): ?>
                         <option value="<?php echo $monitor['id']; ?>">
-                            <?php echo htmlspecialchars($monitor['username'] ?: 'Unknown'); ?> 
-                            (<?php echo htmlspecialchars($monitor['ip_address']); ?>)
+                            <?= htmlspecialchars(($monitor['user_no']??'—').'('.($monitor['username']?:'Unassigned').'): '.($monitor['last_seen_ip']?:$monitor['ip_address']).' : '.($monitor['platform']??'Unknown OS').'-'.($monitor['type']??'Device'),ENT_QUOTES,'UTF-8') ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
@@ -597,7 +614,7 @@ let currentFilters = {
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', function() {
     // Set default date values
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDateString();
     document.getElementById('startDate').value = today;
     document.getElementById('endDate').value = today;
     
@@ -651,6 +668,11 @@ function loadAvailableDevices() {
         });
 }
 
+function localDateString() {
+    const d = new Date();
+    return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
+}
+
 function switchTab(tab) {
     currentTab = tab;
     currentPage = 1;
@@ -659,7 +681,8 @@ function switchTab(tab) {
     document.querySelectorAll('.log-tabs .nav-link').forEach(link => {
         link.classList.remove('active');
     });
-    event.target.classList.add('active');
+    const activeButton = document.querySelector('.log-tabs .nav-link[onclick="switchTab(\\'' + tab + '\\')"]');
+    if (activeButton) activeButton.classList.add('active');
     
     // Load logs for new tab
     loadLogs();
@@ -682,8 +705,8 @@ function applyFilters() {
 
 function clearFilters() {
     document.getElementById('deviceFilter').value = '';
-    document.getElementById('startDate').value = new Date().toISOString().split('T')[0];
-    document.getElementById('endDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('startDate').value = localDateString();
+    document.getElementById('endDate').value = localDateString();
     applyFilters();
 }
 
@@ -926,12 +949,62 @@ function displayLogs(logs, pagination) {
         return;
     }
     
-    const tableHtml = createTable(logs);
+    const tableHtml = currentTab === 'key' ? createKeyTimeline(logs) : createTable(logs);
     document.getElementById('tableContainer').innerHTML = tableHtml;
     
     // Update pagination
     updatePagination(pagination);
 }
+
+function createKeyTimeline(logs) {
+    const rows = logs.map((log,index) => {
+        const at = escapeHtml(log.date || '');
+        const device = escapeHtml(log.user_no || '—') + '(' + escapeHtml(log.username || 'Unassigned') + '): ' + escapeHtml(log.ip_address || '—');
+        return `<button type="button" class="key-timeline-event" data-key-index="${index}" aria-label="Inspect key context at ${at}">
+          <span class="key-timeline-time">${at}</span>
+          <span class="key-timeline-marker"></span>
+          <span class="key-timeline-preview"><strong>${escapeHtml(log.key||'')}</strong><small>${device} · ${escapeHtml(log.application||'')}</small></span>
+        </button>`;
+    }).join('');
+    window.keyTimelineItems = logs;
+    return `<div class="key-timeline-wrapper">
+      <div class="key-timeline-heading">Key activity timeline <small>Select a marker to see keys within ±2 minutes</small></div>
+      <div class="key-timeline-scroller"><div class="key-timeline-track">${rows}</div></div>
+      <div class="key-context-panel" id="keyContextPanel"><div class="text-muted">Select a time above to inspect the nearby sequence.</div></div>
+    </div>`;
+}
+
+async function inspectKeyContext(index) {
+    const event = (window.keyTimelineItems||[])[index];
+    if (!event) return;
+    document.querySelectorAll('.key-timeline-event').forEach((element,i)=>element.classList.toggle('selected',i===index));
+    const panel = document.getElementById('keyContextPanel');
+    if (!panel) return;
+    panel.textContent='Loading surrounding key events…';
+    const params=new URLSearchParams({device_id:event.monitor_ip_id,at:event.date});
+    try {
+        const response=await fetch(`<?php echo BASE_URL; ?>logbrowse/api_key_context?${params}`);
+        if(!response.ok) throw new Error('HTTP '+response.status);
+        const data=await response.json();
+        if(!data.success) throw new Error(data.error||'Unable to load context');
+        const keys=data.logs||[];
+        let readable='';
+        const badges=keys.map(item=>{
+            const raw=String(item.key_pressed||'');
+            const text=/^(space|spacebar)$/i.test(raw)?' ':raw.length===1?raw:'';
+            readable+=text;
+            return '<span class="badge bg-light text-dark border key-token" title="'+escapeHtml(item.key_date)+'">'+escapeHtml(raw||'—')+'</span>';
+        }).join('');
+        panel.innerHTML='<div class="fw-semibold mb-2">'+escapeHtml(event.date)+' · '+keys.length+' keys'+(data.limited?' (limited to first 2,000)':'')+'</div>'
+           +'<div class="key-readable mb-3">'+escapeHtml(readable||'No printable text in this window')+'</div>'
+           +'<div class="key-badges">'+badges+'</div>';
+    } catch(error){ panel.textContent='Cannot load key context: '+error.message; }
+}
+
+document.addEventListener('click',event=>{
+    const button=event.target.closest('.key-timeline-event');
+    if(button) inspectKeyContext(Number(button.dataset.keyIndex));
+});
 
 function createTable(logs) {
     const headers = getTableHeaders();
