@@ -92,4 +92,3 @@ class Database {
         return $this->query($sql, $params)->rowCount();
     }
 }
-?> 
