@@ -411,7 +411,7 @@ void updateTrayMenu() {
     // Configuration refresh button
     // Configuration refresh is now in the Settings window.
     AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SETTINGS, "Settings...");
-    AppendMenuA(hTrayMenu, MF_STRING | (notificationsEnabled ? MF_CHECKED : MF_UNCHECKED), ID_TRAY_NOTIFICATIONS, "Status notifications");
+    // Notification preference is saved from Settings.
     
     // Actions section
     AppendMenuA(hTrayMenu, MF_SEPARATOR, 0, NULL);
@@ -2186,10 +2186,10 @@ static void updateUnifiedVisibility(HWND dlg) {
     for(int id:{SETTINGS_SIGNIN_USER,SETTINGS_SIGNIN_PASS,4510,4511})ShowWindow(GetDlgItem(dlg,id),enrolled?SW_HIDE:SW_SHOW);
     ShowWindow(GetDlgItem(dlg,SETTINGS_USER),SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_USER_NO),SW_HIDE);
-    ShowWindow(GetDlgItem(dlg,SETTINGS_SEND_ALL),SW_SHOW);
-    ShowWindow(GetDlgItem(dlg,SETTINGS_REFRESH_CONFIG),SW_SHOW);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_SEND_ALL),enrolled?SW_SHOW:SW_HIDE);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_REFRESH_CONFIG),enrolled?SW_SHOW:SW_HIDE);
     EnableWindow(GetDlgItem(dlg,SETTINGS_USER_NO),!locked);
-    EnableWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),!locked);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),enrolled);
     EnableWindow(GetDlgItem(dlg,SETTINGS_MONITOR),!locked);
     EnableWindow(GetDlgItem(dlg,SETTINGS_IP),!locked);
     EnableWindow(GetDlgItem(dlg,SETTINGS_PORT),!locked);
@@ -2253,7 +2253,7 @@ static void updateUnifiedVisibility(HWND dlg) {
     SetWindowPos(GetDlgItem(dlg,SETTINGS_CLOSE),nullptr,332,buttonsY,0,0,
                  SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
     SetWindowPos(dlg,nullptr,0,0,465,
-                 (enrolled||pending)?(hasNotice?652:594):(hasNotice?480:410),
+                 712,
                  SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
     RedrawWindow(dlg,nullptr,nullptr,RDW_INVALIDATE|RDW_ERASE|RDW_ALLCHILDREN);
 }
@@ -2280,7 +2280,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"STATIC","Password",0,13,185,90,20,4511);
         addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_PASSWORD|ES_AUTOHSCROLL,108,181,310,25,SETTINGS_SIGNIN_PASS);
         addControl(dlg,"BUTTON","Sign In",WS_TABSTOP,108,215,132,27,SETTINGS_TEST);
-        addControl(dlg,"STATIC","● Not tested",0,245,152,173,21,SETTINGS_CONNECTION);
+        addControl(dlg,"STATIC","● Not signed in",0,13,252,405,21,SETTINGS_CONNECTION);
         addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,257,405,2,4506);
         addControl(dlg,"STATIC","User:",0,13,202,90,20,SETTINGS_USER);
         addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,199,310,250,SETTINGS_USER_NO);
@@ -2484,11 +2484,6 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             return TRUE;
         }
         if(id==SETTINGS_LOGOUT){
-            if(settingsAssignmentLocked||settingsMonitorLocked){
-                showUtf8Message(dlg,"User assignment is locked. Ask your administrator to edit the monitor.",
-                    "Assignment locked",MB_OK|MB_ICONWARNING);
-                return TRUE;
-            }
             if(!getClientToken().empty()){
                 Json::Value req;req["action"]="logout";callClientAuth(req);
             }
@@ -2497,6 +2492,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             {std::lock_guard<std::mutex> lock(authMutex);clientToken.clear();}
             selectedMonitorId.store(0);
             signedInUsername.clear();
+            setDlgUtf8Text(dlg,SETTINGS_SIGNIN_PASS,"");
             selectDirectoryUser(dlg,"");
             settingsAssignmentLocked=false;
             if(keyboardHook)removeKeyboardHook();
