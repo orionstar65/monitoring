@@ -717,14 +717,15 @@ function startExport() {
 
 function exportDevicesSequentially(devices) {
     let currentDeviceIndex = 0;
+    let failedDevices = 0;
     const totalDevices = devices.length;
     
     function exportNextDevice() {
         if (currentDeviceIndex >= totalDevices) {
             // All devices exported
-            updateProgressStatus('completed', 'Completed');
+            updateProgressStatus(failedDevices ? 'error' : 'completed', failedDevices ? 'Completed with errors' : 'Completed');
             updateProgressBar(100);
-            updateProgressLog('\n✅ All devices exported successfully!\n', true);
+            updateProgressLog(failedDevices ? `\\n⚠ ${failedDevices} of ${totalDevices} devices failed to export. Check the log before downloading.\\n` : '\\n✅ All devices exported successfully!\\n', true);
             showDownloadSection();
             resetExportButtons();
             return;
@@ -759,6 +760,7 @@ function exportDevicesSequentially(devices) {
                 // Export next device after a short delay
                 setTimeout(exportNextDevice, 500);
             } else {
+                failedDevices++;
                 updateProgressLog(`❌ Failed: ${device.username} - ${data.message}\n`, true);
                 currentDeviceIndex++;
                 // Continue with next device even if this one failed
@@ -766,6 +768,7 @@ function exportDevicesSequentially(devices) {
             }
         })
         .catch(error => {
+            failedDevices++;
             updateProgressLog(`❌ Error exporting ${device.username}: ${error.message}\n`, true);
             currentDeviceIndex++;
             // Continue with next device even if this one failed
