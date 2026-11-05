@@ -3124,9 +3124,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     if response?["code"] as? String == "no_monitors" {
                         pendingUserNo = number
                         monitorSettingsLocked = false
+                        availableMonitors = response?["monitors"] as? [[String: Any]] ?? []
                         picker.removeAllItems()
-                        picker.addItem(withTitle: "Add new...")
+                        for monitor in availableMonitors {
+                            let id = monitor["id"] as? Int ?? 0
+                            let platform = monitor["platform"] as? String ?? "—"
+                            let kind = monitor["type"] as? String ?? "—"
+                            let ip = monitor["ip_address"] as? String ?? "—"
+                            picker.addItem(withTitle: "Device #\(id) · \(platform)-\(kind) · \(ip) (assigned)")
+                            picker.lastItem?.representedObject = id
+                        }
+                        picker.addItem(withTitle: "Add new for this computer...")
                         picker.lastItem?.representedObject = -1
+                        picker.selectItem(at: picker.numberOfItems - 1)
+                        directoryError = "Existing monitors are read-only; add a new monitor for this installation."
                         updateMonitorFields()
                         updateState()
                         return
@@ -3216,6 +3227,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 updateState()
             case "save":
                 if let number = pendingUserNo {
+                    guard picker.selectedItem?.representedObject as? Int == -1 else {
+                        showError("This monitor is assigned to another installation. Select Add new, or ask the administrator to reassign it.")
+                        return
+                    }
                     guard saveServer() else { showError("Enter a valid server address."); return }
                     let response = self.clientAuthRequest([
                         "action":"bootstrap_monitor","user_no":number,
