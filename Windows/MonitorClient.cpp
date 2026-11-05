@@ -2185,7 +2185,9 @@ static void updateUnifiedVisibility(HWND dlg) {
     for(int id:monitorControls)ShowWindow(GetDlgItem(dlg,id),(enrolled||pending)?SW_SHOW:SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),enrolled?SW_SHOW:SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_TEST),enrolled?SW_HIDE:SW_SHOW);
-    for(int id:{SETTINGS_SIGNIN_USER,SETTINGS_SIGNIN_PASS,4510,4511})ShowWindow(GetDlgItem(dlg,id),enrolled?SW_HIDE:SW_SHOW);
+    const int signInControls[] = {SETTINGS_SIGNIN_USER, SETTINGS_SIGNIN_PASS, 4510, 4511};
+    for (int id : signInControls)
+        ShowWindow(GetDlgItem(dlg, id), enrolled ? SW_HIDE : SW_SHOW);
     ShowWindow(GetDlgItem(dlg,SETTINGS_USER),SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_USER_NO),SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_SEND_ALL),enrolled?SW_SHOW:SW_HIDE);
