@@ -118,14 +118,14 @@ class Reports extends Base {
         $has_platform = !empty($columns);
         
         if ($has_platform) {
-            $devices_sql = "SELECT m.id, m.ip_address, owner.name AS username, CONCAT('Device #',m.id) AS name, m.type, 
+            $devices_sql = "SELECT m.id, m.ip_address, m.last_seen_ip, owner.name AS username, CONCAT('Device #',m.id) AS name, m.type, 
                                    COALESCE(NULLIF(m.platform, ''), m.type, 'Unknown') as os
                            FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
                            WHERE 1=1 {$device_filter}
                            ORDER BY owner.name ASC, m.ip_address ASC";
         } else {
             // If platform column doesn't exist, use type as OS
-            $devices_sql = "SELECT m.id, m.ip_address, owner.name AS username, CONCAT('Device #',m.id) AS name, m.type, 
+            $devices_sql = "SELECT m.id, m.ip_address, m.last_seen_ip, owner.name AS username, CONCAT('Device #',m.id) AS name, m.type, 
                                    COALESCE(m.type, 'Unknown') as os
                        FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
                        WHERE 1=1 {$device_filter}
@@ -217,10 +217,11 @@ class Reports extends Base {
             
             $stats[] = [
                 'device_id' => $device_id,
-                'ip_address' => $device['ip_address'],
+                'ip_address' => $device['last_seen_ip'] ?: $device['ip_address'],
                 'username' => $device['username'],
                 'name' => $device['name'],
                 'type' => $device['type'],
+                'machine' => ucfirst(strtolower((string)($device['type'] ?: 'Unknown'))),
                 'os' => $device['os'] ?? ($device['type'] ?? 'Unknown'),
                 'period_hours' => $period_hours,
                 'captured_hours' => round($captured_hours, 2),
