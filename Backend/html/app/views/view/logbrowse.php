@@ -647,7 +647,7 @@ function loadAvailableDevices() {
             devices.forEach(device => {
                 const option = document.createElement('option');
                 option.value = String(device.id);
-                option.textContent = `${device.username || 'Unassigned'} (Device #${device.id} · ${device.ip_address || 'Unknown IP'})`;
+                option.textContent = `${device.user_no || '—'}(${device.username || 'Unassigned'}): ${device.last_seen_ip || device.ip_address || '—'} : ${device.platform || 'Unknown OS'}-${device.type || 'Device'}`;
                 fragment.appendChild(option);
             });
             select.replaceChildren(fragment);
@@ -1090,26 +1090,19 @@ function formatDate(dateString) {
 }
 
 function formatDevice(log) {
-    const statusClass = getDeviceStatus(log.username, log.updated_at);
-    return `
-        <div>
-            <div class="fw-bold">${escapeHtml(log.username || 'Unknown')}</div>
-            <div class="small text-muted">${escapeHtml(log.ip_address)}</div>
-            <span class="status-badge ${statusClass}">${getStatusText(statusClass)}</span>
-        </div>
-    `;
+    const statusClass = getDeviceStatus(log.heartbeat_age_seconds);
+    const label = `${log.user_no || '—'}(${log.username || 'Unassigned'}): ${log.ip_address || '—'} : ${log.platform || 'Unknown OS'}-${log.type || 'Device'}`;
+    return `<div class="small">
+        <div class="fw-semibold">${escapeHtml(label)}</div>
+        <span class="status-badge ${statusClass}">${getStatusText(statusClass)}</span>
+    </div>`;
 }
 
-function getDeviceStatus(username, updatedAt) {
-    if (!updatedAt) return 'status-offline';
-    
-    const lastActivity = new Date(updatedAt);
-    const now = new Date();
-    const diffMinutes = (now - lastActivity) / (1000 * 60);
-    
-    // Use same thresholds as PHP calculateClientStatus(): <= 5 min = online, <= 60 min = inactive, > 60 min = offline
-    if (diffMinutes <= 5) return 'status-online';
-    if (diffMinutes <= 60) return 'status-inactive';
+function getDeviceStatus(ageSeconds) {
+    const age = Number(ageSeconds);
+    if (ageSeconds === null || ageSeconds === undefined || !Number.isFinite(age)) return 'status-offline';
+    if (age <= 300) return 'status-online';
+    if (age <= 3600) return 'status-inactive';
     return 'status-offline';
 }
 
