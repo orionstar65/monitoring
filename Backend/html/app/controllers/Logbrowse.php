@@ -193,6 +193,46 @@ class Logbrowse extends Base {
         ]);
     }
     
+    /** Sample activity density across the entire selected date range. */
+    public function api_key_timeline() {
+        $from=(string)($_GET['start_date']??date('Y-m-d'));
+        $to=(string)($_GET['end_date']??date('Y-m-d'));
+        $deviceId=filter_var($_GET['device_id']??null,FILTER_VALIDATE_INT)?:null;
+        foreach([$from,$to] as $date) {
+            $parsed=DateTimeImmutable::createFromFormat('!Y-m-d',$date);
+            if(!$parsed||$parsed->format('Y-m-d')!==$date) {
+                http_response_code(400);$this->json(['success'=>false,'error'=>'Invalid date range']);
+            }
+        }
+        $days=(int)((new DateTimeImmutable($from))->diff(new DateTimeImmutable($to))->format('%r%a'));
+        if($days<0||$days>31) {
+            http_response_code(400);$this->json(['success'=>false,'error'=>'Timeline supports up to 32 calendar days']);
+        }
+        $bucketMinutes=$days<=1?1:($days<=7?5:15);
+        $bucketSeconds=$bucketMinutes*60;
+        $where='k.key_date>=:start_date AND k.key_date<=:end_date';
+        $params=['start_date'=>$from.' 00:00:00','end_date'=>$to.' 23:59:59'];
+        if($deviceId){$where.=' AND k.monitor_ip_id=:device_id';$params['device_id']=$deviceId;}
+        // Bucket before transfer: never send an unbounded stream of key events.
+        $rows=$this->db->fetchAll(
+            "SELECT MIN(k.key_date) AS date,COUNT(*) AS event_count,
+                    k.monitor_ip_id,u.user_no,u.name AS username,m.ip_address,m.platform,m.type
+             FROM key_logs k
+             JOIN tbl_monitor_ips m ON m.id=k.monitor_ip_id
+             LEFT JOIN users u ON u.id=m.owner_user_id
+             WHERE {$where}
+             GROUP BY FLOOR(UNIX_TIMESTAMP(k.key_date)/{$bucketSeconds}),
+                      k.monitor_ip_id,u.user_no,u.name,m.ip_address,m.platform,m.type
+             ORDER BY date ASC LIMIT 3001",$params
+        );
+        $limited=count($rows)>3000;
+        if($limited)$rows=array_slice($rows,0,3000);
+        $this->json([
+            'success'=>true,'events'=>$rows,'bucket_minutes'=>$bucketMinutes,
+            'start_date'=>$from,'end_date'=>$to,'limited'=>$limited
+        ]);
+    }
+
     /** Fetch the ordered key sequence around a selected event. */
     public function api_key_context() {
         $monitorId=filter_var($_GET['device_id']??null,FILTER_VALIDATE_INT);
