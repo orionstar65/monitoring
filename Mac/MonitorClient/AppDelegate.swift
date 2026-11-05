@@ -2922,11 +2922,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             monitorIP.stringValue = monitor["ip_address"] as? String ?? "—"
             chooseRadio(osRadios, value: platform)
             chooseRadio(machineRadios, value: machineType)
-            monitorSettingsLocked = monitor["settings_locked"] as? Bool ??
-                ((monitor["settings_locked"] as? Int ?? 0) == 1)
-            locked = pendingUserNo == nil && (monitorSettingsLocked ||
-                (monitor["assignment_locked"] as? Bool ?? false))
-            if pendingUserNo != nil { monitorSettingsLocked = false }
+            // Only the active monitor can lock the settings window. A
+            // different locked monitor shown in the draft picker must not
+            // trap the user before Save.
+            let isActiveMonitor = id == self.selectedMonitorId
+            monitorSettingsLocked = isActiveMonitor &&
+                ((monitor["settings_locked"] as? Bool) ??
+                 ((monitor["settings_locked"] as? Int ?? 0) == 1))
+            locked = pendingUserNo == nil && isActiveMonitor &&
+                (monitorSettingsLocked || (monitor["assignment_locked"] as? Bool ?? false))
             updateState()
         }
         func refreshMonitors() {
