@@ -2856,6 +2856,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         stack.addArrangedSubview(notifications)
         let lockSettings = action("Lock Settings", "lock")
         let close = action("Close", "close")
+        let sendAllButton = action("Send All Logs", "send-all")
+        let refreshConfigButton = action("Refresh Configuration", "refresh-config")
+        let grantPermissionsButton = action("Grant Permissions", "grant-permissions")
+        let toolsRow = NSStackView(views: [sendAllButton, refreshConfigButton, grantPermissionsButton])
+        toolsRow.orientation = .horizontal
+        toolsRow.spacing = 6
+        stack.addArrangedSubview(toolsRow)
         let footer = NSStackView(views: [lockSettings, close])
         footer.orientation = .horizontal
         footer.spacing = 8
@@ -2865,7 +2872,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let coordinator = UnifiedWindowActions()
         coordinator.window = window
         window.delegate = coordinator
-        for button in [test, unpair, edit, save, lockSettings, close] {
+        for button in [test, unpair, edit, save, lockSettings, close, sendAllButton, refreshConfigButton, grantPermissionsButton] {
             button.target = coordinator
             button.action = #selector(UnifiedWindowActions.activate(_:))
         }
@@ -2961,11 +2968,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             users.toolTip = users.selectedItem?.title
             directoryStatus.stringValue = directoryError ?? ""
             directoryStatus.isHidden = directoryError == nil
-            let enrolled = !self.clientToken.isEmpty && self.selectedMonitorId > 0
+            let enrolled = !self.clientToken.isEmpty
             let isLocked = enrolled && (locked || monitorSettingsLocked)
             monitorPane.isHidden = !enrolled && pendingUserNo == nil
             unpair.isHidden = !enrolled
-            unpair.isEnabled = enrolled && !isLocked
+            unpair.isEnabled = enrolled
             users.isEnabled = false
             userNoField.isHidden = enrolled
             passwordField.isHidden = enrolled
@@ -3191,8 +3198,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     updateState()
                 }
                 updateState()
+            case "send-all":
+                guard self.selectedMonitorId > 0 else { showError("Select a monitor before sending logs."); return }
+                self.sendAllLogs()
+            case "refresh-config":
+                self.manualConfigRefresh()
+            case "grant-permissions":
+                self.grantAllPermissions()
             case "disconnect":
-                guard !(locked || monitorSettingsLocked) else { showError("User assignment is locked. Ask your administrator to edit the monitor."); return }
                 _ = self.clientAuthRequest(["action":"logout"],authenticated:true)
                 let query: [String: Any] = [
                     kSecClass as String:kSecClassGenericPassword,
@@ -3319,7 +3332,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 refreshUserDirectory()
                 updateState()
             case "close":
-                self.notificationsEnabled = notifications.state == .on
                 NSApp.stopModal(withCode: .OK)
                 window.orderOut(nil)
             default: break
@@ -4658,9 +4670,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         menu.addItem(NSMenuItem.separator())
         
         // Configuration refresh
-        let configRefreshItem = NSMenuItem(title: "Refresh Configuration", action: #selector(manualConfigRefresh), keyEquivalent: "r")
-        configRefreshItem.keyEquivalentModifierMask = [.command]
-        menu.addItem(configRefreshItem)
+        // Refresh Configuration is available in Settings.
         
         // Configuration display
         let configDisplayItem = NSMenuItem(title: "Configuration: Loading...", action: nil, keyEquivalent: "")
@@ -4669,14 +4679,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         menu.addItem(configDisplayItem)
         
         // Grant permissions (unified button for both accessibility and screen recording)
-        let grantPermissionsItem = NSMenuItem(title: "Grant Permissions", action: #selector(grantAllPermissions), keyEquivalent: "")
-        menu.addItem(grantPermissionsItem)
+        // Permissions are managed from Settings.
         
         menu.addItem(NSMenuItem.separator())
         
         // Manual test actions
-        let sendAllItem = NSMenuItem(title: "Send All Logs Now", action: #selector(sendAllLogs), keyEquivalent: "")
-        menu.addItem(sendAllItem)
+        // Manual uploads are managed from Settings.
         
         menu.addItem(NSMenuItem.separator())
         
