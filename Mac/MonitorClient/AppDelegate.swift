@@ -3024,6 +3024,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let oldHost = self.storage.string(forKey: "server-ip") ?? ""
             let oldPort = self.storage.string(forKey: "server-port") ?? "8925"
             if host != oldHost || port != oldPort {
+                // Revoke the old server-side session before changing hosts.
+                // The request uses the previously saved host and port.
+                if !self.clientToken.isEmpty {
+                    _ = self.clientAuthRequest(["action":"logout"],authenticated:true)
+                }
                 // Never forward a bearer token to an unsaved, untrusted host.
                 let query: [String: Any] = [
                     kSecClass as String: kSecClassGenericPassword,
