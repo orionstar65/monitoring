@@ -16,7 +16,7 @@ class Logbrowse extends Base {
     public function index() {
         // Get all monitors for device filtering
         $monitors = $this->db->fetchAll(
-            "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.ip_address ASC"
+            "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.ip_address ASC"
         );
         
         $this->view('view/logbrowse', ['monitors' => $monitors]);
@@ -28,14 +28,14 @@ class Logbrowse extends Base {
     public function api_devices() {
         // OPTIMIZED: Remove SQL CASE statement - status calculation done in PHP for better performance
         $devices = $this->db->fetchAll(
-            "SELECT m.id,m.ip_address,m.mac_address,owner.name AS username,CONCAT('Device #',m.id) AS name,m.type,m.updated_at
+            "SELECT m.id,m.ip_address,m.mac_address,owner.name AS username,owner.user_no AS user_no,CONCAT('Device #',m.id) AS name,m.type,m.platform,m.last_seen_ip,m.last_monitor_tic,m.updated_at
              FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
              ORDER BY owner.name ASC,m.ip_address ASC"
         );
         
         // Calculate status in PHP using StatusService for consistency
         foreach ($devices as &$device) {
-            $statusInfo = $this->statusService->calculateClientStatus($device['updated_at'] ?? null);
+            $statusInfo = $this->statusService->calculateClientStatus($device['last_monitor_tic'] ?? null);
             $device['status'] = $statusInfo['status'];
         }
         
@@ -64,12 +64,12 @@ class Logbrowse extends Base {
         }
         
         if ($start_date) {
-            $where_conditions[] = "b.created_at >= :start_date";
+            $where_conditions[] = "b.visit_date >= :start_date";
             $params['start_date'] = $start_date . ' 00:00:00';
         }
         
         if ($end_date) {
-            $where_conditions[] = "b.created_at <= :end_date";
+            $where_conditions[] = "b.visit_date <= :end_date";
             $params['end_date'] = $end_date . ' 23:59:59';
         }
         
@@ -86,15 +86,15 @@ class Logbrowse extends Base {
         $total_pages = ceil($total_entries / $per_page);
         
         // Get paginated data
-        $data_sql = "SELECT b.*, m.ip_address, owner.name AS username, CONCAT('Device #',m.id) AS name, m.type,
-                            b.created_at as date,
+        $data_sql = "SELECT b.*, m.ip_address, owner.name AS username,owner.user_no AS user_no, CONCAT('Device #',m.id) AS name, m.type,m.platform,m.last_monitor_tic,
+                            b.visit_date as date,
                             b.browser,
                             b.url,
                             b.title
                      FROM browser_history_logs b 
                      JOIN tbl_monitor_ips m ON b.monitor_ip_id = m.id LEFT JOIN users owner ON owner.id=m.owner_user_id 
                      {$where_clause}
-                     ORDER BY b.created_at DESC 
+                     ORDER BY b.visit_date DESC 
                      LIMIT :limit OFFSET :offset";
         
         $params['limit'] = $per_page;
@@ -160,7 +160,7 @@ class Logbrowse extends Base {
         $total_pages = ceil($total_entries / $per_page);
         
         // Get paginated data
-        $data_sql = "SELECT k.*, m.ip_address, owner.name AS username, CONCAT('Device #',m.id) AS name, m.type,
+        $data_sql = "SELECT k.*, m.ip_address, owner.name AS username,owner.user_no AS user_no, CONCAT('Device #',m.id) AS name, m.type,m.platform,m.last_monitor_tic,
                             k.key_date as date,
                             k.application,
                             k.key_pressed as `key`,
@@ -190,6 +190,20 @@ class Logbrowse extends Base {
         ]);
     }
     
+    /** Fetch the ordered key sequence around a selected event. */
+    public function api_key_context() {
+        $monitorId=filter_var($_GET['device_id']??null,FILTER_VALIDATE_INT);
+        $center=$_GET['at']??'';
+        if(!$monitorId || !is_string($center) || !preg_match('/^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$/D',$center)){
+            http_response_code(400);$this->json(['success'=>false,'error'=>'Invalid monitor or timestamp']);
+        }
+        $rows=$this->db->fetchAll(
+            "SELECT k.key_date,k.key_pressed,k.application FROM key_logs k WHERE k.monitor_ip_id=:id AND k.key_date BETWEEN DATE_SUB(:start, INTERVAL 2 MINUTE) AND DATE_ADD(:end, INTERVAL 2 MINUTE) ORDER BY k.key_date ASC,k.id ASC LIMIT 2000",
+            ['id'=>$monitorId,'start'=>$center,'end'=>$center]
+        );
+        $this->json(['success'=>true,'logs'=>$rows,'center'=>$center,'limited'=>count($rows)>=2000]);
+    }
+
     /**
      * API endpoint to get USB logs with pagination and filtering
      */
@@ -234,7 +248,7 @@ class Logbrowse extends Base {
         $total_pages = ceil($total_entries / $per_page);
         
         // Get paginated data
-        $data_sql = "SELECT u.*, m.ip_address, owner.name AS username, CONCAT('Device #',m.id) AS name, m.type,
+        $data_sql = "SELECT u.*, m.ip_address, owner.name AS username,owner.user_no AS user_no, CONCAT('Device #',m.id) AS name, m.type,m.platform,m.last_monitor_tic,
                             u.device_date as date,
                             u.device_name as device,
                             u.action,
