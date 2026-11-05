@@ -14,6 +14,9 @@ class Logbrowse extends Base {
      * Main log browsing page
      */
     public function index() {
+        if(($this->user['role']??'')==='viewer'){
+            $this->view('view/aggregate');return;
+        }
         // Get all monitors for device filtering
         $monitors = $this->db->fetchAll(
             "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.ip_address ASC"
@@ -288,6 +291,10 @@ class Logbrowse extends Base {
         
         $where_conditions = [];
         $params = [];
+        if(($this->user['role']??'')==='viewer'){
+            $where_conditions[] = 'monitor_ip_id IN (SELECT id FROM tbl_monitor_ips WHERE owner_user_id=:viewer_id)';
+            $params['viewer_id']=(int)$this->user['id'];
+        }
         
         if ($device_id) {
             $where_conditions[] = "monitor_ip_id = :device_id";
@@ -295,12 +302,12 @@ class Logbrowse extends Base {
         }
         
         if ($start_date) {
-            $where_conditions[] = "created_at >= :start_date";
+            $where_conditions[] = "visit_date >= :start_date";
             $params['start_date'] = $start_date . ' 00:00:00';
         }
         
         if ($end_date) {
-            $where_conditions[] = "created_at <= :end_date";
+            $where_conditions[] = "visit_date <= :end_date";
             $params['end_date'] = $end_date . ' 23:59:59';
         }
         
@@ -312,6 +319,10 @@ class Logbrowse extends Base {
         // Get key logs count (adjust date field)
         $key_where_conditions = [];
         $key_params = [];
+        if(($this->user['role']??'')==='viewer'){
+            $key_where_conditions[] = 'monitor_ip_id IN (SELECT id FROM tbl_monitor_ips WHERE owner_user_id=:viewer_id)';
+            $key_params['viewer_id']=(int)$this->user['id'];
+        }
         if ($device_id) {
             $key_where_conditions[] = "monitor_ip_id = :device_id";
             $key_params['device_id'] = $device_id;
@@ -330,6 +341,10 @@ class Logbrowse extends Base {
         // Get USB logs count (adjust date field)
         $usb_where_conditions = [];
         $usb_params = [];
+        if(($this->user['role']??'')==='viewer'){
+            $usb_where_conditions[] = 'monitor_ip_id IN (SELECT id FROM tbl_monitor_ips WHERE owner_user_id=:viewer_id)';
+            $usb_params['viewer_id']=(int)$this->user['id'];
+        }
         if ($device_id) {
             $usb_where_conditions[] = "monitor_ip_id = :device_id";
             $usb_params['device_id'] = $device_id;
