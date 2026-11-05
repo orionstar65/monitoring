@@ -3238,7 +3238,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 }
                 if let number = pendingUserNo {
                     guard picker.selectedItem?.representedObject as? Int == -1 else {
-                        showError("This monitor is assigned to another installation. Select Add new, or ask the administrator to reassign it.")
+                        showError("To reuse an existing monitor, restore this computer's saved device session. Otherwise choose Add new or ask an administrator.")
                         return
                     }
                     guard saveServer() else { showError("Enter a valid server address."); return }
