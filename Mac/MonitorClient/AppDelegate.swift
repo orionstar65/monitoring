@@ -3328,7 +3328,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // logMessage("=== Permission Check ===", level: .info)
         
         // Check accessibility permission
-        let accessibilityEnabled = isInputMonitoringEnabled()
+        let _ = isInputMonitoringEnabled()
         // logMessage("Accessibility permission: \(accessibilityEnabled ? "GRANTED" : "DENIED")", level: .info)
         
         // Check if we can access browser history directories
@@ -3340,14 +3340,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         ]
         
         for path in testPaths {
-            let exists = FileManager.default.fileExists(atPath: path)
-            let readable = FileManager.default.isReadableFile(atPath: path)
+            _ = FileManager.default.fileExists(atPath: path)
+            _ = FileManager.default.isReadableFile(atPath: path)
             // logMessage("Path \(path): exists=\(exists), readable=\(readable)", level: .info)
         }
         
         // Check if we can write to Documents
         let documentsPath = NSHomeDirectory() + "/Documents"
-        let writable = FileManager.default.isWritableFile(atPath: documentsPath)
+        _ = FileManager.default.isWritableFile(atPath: documentsPath)
         // logMessage("Documents directory writable: \(writable)", level: .info)
         
         // logMessage("=== End Permission Check ===", level: .info)
