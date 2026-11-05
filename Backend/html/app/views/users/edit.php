@@ -89,7 +89,7 @@ ob_start();
             <?php endforeach; ?>
           </select>
           <button type="submit" class="btn btn-sm btn-primary">Apply</button>
-          <button type="submit" class="btn btn-sm btn-outline-danger" name="owner_user_id" value="" title="Un-link monitor">Unlink</button>
+          <button type="submit" class="btn btn-sm btn-outline-danger" onclick="this.form.querySelector('select[name=owner_user_id]').value=''" title="Unlink monitor">Unlink</button>
         </form>
        </td>
      </tr>
