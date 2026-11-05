@@ -544,6 +544,18 @@
                 </a>
             </div>
             <?php endif; ?>
+            <?php if(($_SESSION['role']??'')==='viewer'): ?>
+            <div class="nav-item">
+                <a class="nav-link <?= $active_page==='view'?'active':'' ?>" href="<?= BASE_URL ?>view">
+                    <i class="fas fa-chart-bar"></i><span>Monitoring totals</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a class="nav-link <?= $active_page==='logbrowse'?'active':'' ?>" href="<?= BASE_URL ?>logbrowse">
+                    <i class="fas fa-list-ol"></i><span>Log totals</span>
+                </a>
+            </div>
+            <?php endif; ?>
             <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'password' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>auth/change_password">
                     <i class="fas fa-key"></i><span>Change Password</span>
