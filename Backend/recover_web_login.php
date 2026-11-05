@@ -35,7 +35,7 @@ try {
         exit(1);
     }
     if($list){
-        $rows=$db->query("SELECT id,user_no,name,email,password FROM users WHERE role='admin' ORDER BY id");
+        $rows=$db->query("SELECT id,user_no,name,password FROM users WHERE role='admin' ORDER BY id");
         if(!$rows || $rows->num_rows===0){
             fwrite(STDERR,"No administrator accounts found. Do not create a duplicate account until the database is checked.\n");
             exit(1);
@@ -46,11 +46,11 @@ try {
             $hash=$account['password']??'';
             $hashType=password_get_info($hash)['algoName']??'unknown';
             $passwordStatus=$hashType==='unknown'?'reset needed / legacy unusable hash':'password hash present';
-            fprintf(STDOUT,"ID: %d | User No: %s | Full Name: %s | Email: %s | %s\n",
+            fprintf(STDOUT,"ID: %d | User No: %s | Full Name: %s | %s\n",
                 (int)$account['id'],$number,
-                (string)($account['name']??''),(string)($account['email']??'—'),$passwordStatus);
+                (string)($account['name']??''),$passwordStatus);
         }
-        fwrite(STDOUT,"Use a listed User No or email with the account's existing password.\n");
+        fwrite(STDOUT,"Use a listed User No with the account's existing password.\n");
         exit(0);
     }
 
