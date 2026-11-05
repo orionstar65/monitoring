@@ -452,7 +452,7 @@ void ConfigDialog::updateUI(){
     editButton->setText(editing?"Cancel":"Edit");
     saveButton->setText(adding?"Add Monitor":"Save");
     saveButton->setVisible(true);
-    saveButton->setEnabled(!locked);
+    saveButton->setEnabled(true);
     lockSettingsButton->setVisible(existing);
     lockSettingsButton->setEnabled(existing&&!locked);
     lockSettingsButton->setText(locked?"Settings Locked":"Lock Settings");
