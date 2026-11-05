@@ -15,7 +15,7 @@ class Users extends Base {
                     COUNT(m.id) AS device_count
              FROM users u LEFT JOIN tbl_monitor_ips m ON m.owner_user_id=u.id
              GROUP BY u.id,u.user_no,u.name,u.role,u.created_at,u.must_change_password
-             ORDER BY u.created_at DESC"
+             ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id"
         );
         
         $this->view('users/index', ['users' => $users]);
@@ -57,8 +57,8 @@ class Users extends Base {
             $this->redirect('users');
         }
         
-        $monitors = $this->db->fetchAll('SELECT m.* FROM tbl_monitor_ips m WHERE m.owner_user_id=:uid ORDER BY m.id',['uid'=>$id]);
-        $accounts = $this->db->fetchAll('SELECT u.id,u.user_no,u.name,COUNT(m.id) AS device_count FROM users u LEFT JOIN tbl_monitor_ips m ON m.owner_user_id=u.id GROUP BY u.id,u.user_no,u.name ORDER BY u.name,u.id');
+        $monitors = $this->db->fetchAll('SELECT m.* FROM tbl_monitor_ips m WHERE m.owner_user_id=:uid ORDER BY COALESCE(m.type,''),COALESCE(m.platform,''),INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)),COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address),m.id',['uid'=>$id]);
+        $accounts = $this->db->fetchAll('SELECT u.id,u.user_no,u.name,COUNT(m.id) AS device_count FROM users u LEFT JOIN tbl_monitor_ips m ON m.owner_user_id=u.id GROUP BY u.id,u.user_no,u.name ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id');
         require_once BASEPATH . 'app/services/StatusService.php';
         $statusService=StatusService::getInstance();
         foreach($monitors as &$monitor){$monitor['status_info']=$statusService->calculateClientStatus($monitor['last_monitor_tic']??null);}
