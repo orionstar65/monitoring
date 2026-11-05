@@ -61,5 +61,3 @@ class StatusService {
         return $this->dbService;
     }
 }
-?>
-
