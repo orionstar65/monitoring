@@ -10,8 +10,8 @@ ob_start(); ?>
     <?php if($error): ?><div class="alert alert-danger"><?= htmlspecialchars($error,ENT_QUOTES,'UTF-8') ?></div><?php endif; ?>
     <form method="post" action="<?= htmlspecialchars(BASE_URL,ENT_QUOTES,'UTF-8') ?>auth/change_password">
       <label class="form-label w-100">Current password<input name="current_password" type="password" autocomplete="current-password" required class="form-control"></label>
-      <label class="form-label w-100">New password (12+ characters)<input name="new_password" type="password" autocomplete="new-password" minlength="12" required class="form-control"></label>
-      <label class="form-label w-100">Confirm new password<input name="confirm_password" type="password" autocomplete="new-password" minlength="12" required class="form-control"></label>
+      <label class="form-label w-100">New password (6+ characters)<input name="new_password" type="password" autocomplete="new-password" minlength="6" required class="form-control"></label>
+      <label class="form-label w-100">Confirm new password<input name="confirm_password" type="password" autocomplete="new-password" minlength="6" required class="form-control"></label>
       <button class="btn btn-primary mt-2" type="submit">Update Password</button>
     </form>
   </div>
