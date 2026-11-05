@@ -1122,7 +1122,7 @@ class DatabaseService {
         $stmt->close();
         
         if ($client) {
-            $statusInfo = $this->calculateClientStatus($client['updated_at']);
+            $statusInfo = $this->calculateClientStatus($client['last_monitor_tic'] ?? null);
             $client['status'] = $statusInfo['status'];
             $client['status_class'] = $statusInfo['status_class'];
             $client['status_text'] = $statusInfo['status_text'];
