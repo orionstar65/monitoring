@@ -36,7 +36,7 @@ class Merge extends Base {
      */
     public function api_list() {
         $monitors = $this->db->fetchAll(
-            "SELECT m.id,m.ip_address,u.name AS username,m.mac_address,CONCAT('Device #',m.id) AS name,m.type,m.last_monitor_tic,m.updated_at FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id "
+            "SELECT m.id,m.ip_address,m.last_seen_ip,u.name AS username,u.user_no AS user_no,m.mac_address,CONCAT('Device #',m.id) AS name,m.type,m.platform,m.last_monitor_tic,m.updated_at FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id "
             .($this->isAdmin() ? "ORDER BY m.ip_address" : "WHERE m.owner_user_id=:uid ORDER BY m.ip_address"),
             $this->isAdmin()?[]:['uid'=>$this->user['id']]
         );
