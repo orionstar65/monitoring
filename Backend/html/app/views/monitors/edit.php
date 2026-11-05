@@ -4,9 +4,8 @@ $active_page='monitors';$page_title='Edit Monitor';
 $e=static fn($v)=>htmlspecialchars((string)($v??''),ENT_QUOTES,'UTF-8');
 $locked=!empty($monitor['settings_locked'])||!empty($monitor['assignment_locked']);
 $last=$monitor['last_monitor_tic']??null;
-$age=$last ? time()-strtotime($last) : PHP_INT_MAX;
-$status=$age<=300?'Online':($age<=3600?'Idle':'Offline');
-$statusClass=$age<=300?'success':($age<=3600?'warning':'secondary');
+$status=$monitor['status_info']['status_text']??'Offline';
+$statusClass=$monitor['status_info']['status_class']??'secondary';
 ob_start();
 ?>
 <style>
