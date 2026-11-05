@@ -123,7 +123,7 @@ class Export extends Base {
                 throw new Exception("Database connection not available");
             }
             
-            $devices = $this->db->fetchAll("SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.ip_address ASC");
+            $devices = $this->db->fetchAll("SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.ip_address ASC");
             
             echo json_encode([
                 'success' => true,
@@ -156,7 +156,7 @@ class Export extends Base {
             }
             
             // Get device info
-            $device = $this->db->fetchAll("SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:device_id", [':device_id' => $device_id]);
+            $device = $this->db->fetchAll("SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:device_id", [':device_id' => $device_id]);
             if (empty($device)) {
                 throw new Exception('Device not found');
             }
@@ -252,13 +252,13 @@ class Export extends Base {
             if ($device_ids) {
                 $device_ids_array = explode(',', $device_ids);
                 $placeholders = str_repeat('?,', count($device_ids_array) - 1) . '?';
-                $sql = "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id IN ({$placeholders}) ORDER BY owner.name ASC,m.ip_address ASC";
+                $sql = "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id IN ({$placeholders}) ORDER BY owner.name ASC,m.ip_address ASC";
                 $devices = $this->db->fetchAll($sql, $device_ids_array);
                 
                 // Log selected devices
                 file_put_contents($this->progressFile, "Selected devices: " . implode(', ', $device_ids_array) . "\n", FILE_APPEND);
             } else {
-                $devices = $this->db->fetchAll("SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.ip_address ASC");
+                $devices = $this->db->fetchAll("SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.ip_address ASC");
                 file_put_contents($this->progressFile, "All devices selected\n", FILE_APPEND);
             }
             
@@ -400,7 +400,7 @@ class Export extends Base {
             }
             
             // Get all devices
-            $devices = $this->db->fetchAll("SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.ip_address ASC");
+            $devices = $this->db->fetchAll("SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.ip_address ASC");
             $this->totalSteps = count($devices) * 4; // 4 steps per device (3 logs + screenshots)
             
             $this->logProgress("Found " . count($devices) . " devices to export");
