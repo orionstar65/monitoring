@@ -28,7 +28,7 @@ class Reports extends Base {
     public function api_devices() {
         // OPTIMIZED: Remove SQL CASE statement - status calculation done in PHP for better performance
         $devices = $this->db->fetchAll(
-            "SELECT m.id,m.ip_address,m.mac_address,owner.name AS username,CONCAT('Device #',m.id) AS name,m.type,m.last_monitor_tic,m.updated_at
+            "SELECT m.id,m.ip_address,m.mac_address,owner.name AS username,owner.user_no AS user_no,CONCAT('Device #',m.id) AS name,m.type,m.platform,m.last_seen_ip,m.last_monitor_tic,m.updated_at
              FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
              ORDER BY owner.name ASC,m.ip_address ASC"
         );
