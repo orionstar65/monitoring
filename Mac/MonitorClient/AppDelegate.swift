@@ -4413,18 +4413,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // logMessage("App Path: \(appPath)", level: .info)
         
         // Check if app is in Applications folder
-        let isInApplications = appPath.contains("/Applications/")
+        let _ = appPath.contains("/Applications/")
         // logMessage("In Applications folder: \(isInApplications)", level: .info)
         
         // Check stored permission flags
-        let promptShown = storage.bool(forKey: "accessibility-prompt-shown")
-        let lastTrusted = storage.bool(forKey: "last-accessibility-trusted")
+        _ = storage.bool(forKey: "accessibility-prompt-shown")
+        _ = storage.bool(forKey: "last-accessibility-trusted")
         // logMessage("Stored flags - Prompt shown: \(promptShown), Last trusted: \(lastTrusted)", level: .info)
         
         // Check event tap status
         if let tap = eventTap {
-            let isEnabled = CGEvent.tapIsEnabled(tap: tap)
-            let portValid = CFMachPortIsValid(tap)
+            _ = CGEvent.tapIsEnabled(tap: tap)
+            _ = CFMachPortIsValid(tap)
             // logMessage("Event tap - Enabled: \(isEnabled), Port valid: \(portValid)", level: .info)
         } else {
             // logMessage("Event tap: nil", level: .info)
