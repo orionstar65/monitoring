@@ -1,13 +1,13 @@
 <?php
-$title='Sign up - '.APP_NAME;ob_start();?>
-<div class="container py-5"><div class="card mx-auto shadow-sm" style="max-width:460px"><div class="card-body p-4">
-<h3>Create account</h3><p class="text-muted">Your User No is assigned automatically. Keep it for web sign-in.</p>
-<?php if(!empty($error)):?><div class="alert alert-danger"><?= htmlspecialchars($error,ENT_QUOTES,'UTF-8') ?></div><?php endif;?>
-<form method="post" action="<?= BASE_URL ?>auth/signup">
-<label class="d-block mt-2">Full Name<input class="form-control" name="name" maxlength="150" required></label>
-<label class="d-block mt-2">Email<input class="form-control" type="email" name="email"></label>
-<label class="d-block mt-2">Password (12+ characters)<input class="form-control" type="password" name="password" minlength="12" required></label>
-<button type="submit" class="btn btn-primary w-100 mt-3">Sign up</button></form>
-<p class="mt-3"><a href="<?= BASE_URL ?>auth/login">Already registered? Sign in</a></p>
-</div></div></div>
-<?php $content=ob_get_clean();include BASEPATH.'app/views/layouts/main.php';?>
+$title='Account registration unavailable - '.APP_NAME;
+$page_title='Account registration';
+ob_start();
+?>
+<div class="card mx-auto" style="max-width:540px">
+ <div class="card-body p-4">
+  <h5>Account registration is administrator-managed</h5>
+  <p class="text-muted mb-3">Ask an administrator to create an account and assign a User No.</p>
+  <a class="btn btn-primary" href="<?= BASE_URL ?>auth/login">Return to sign in</a>
+ </div>
+</div>
+<?php $content=ob_get_clean(); include BASEPATH.'app/views/layouts/main.php';
