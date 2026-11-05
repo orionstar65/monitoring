@@ -567,7 +567,7 @@ void ConfigDialog::onSaveClicked(){
     if(!pendingUserNo.isEmpty()){
         if(monitorSelector->currentData().toInt()!=-1){
             QMessageBox::warning(this,"Monitor selection",
-                "This monitor is assigned to another installation. Select Add new, or ask your administrator to reassign it.");
+                "To reuse an existing monitor, restore this computer's saved device session. Otherwise choose Add new or ask an administrator.");
             return;
         }
         QJsonObject request={{"action","bootstrap_monitor"},{"user_no",pendingUserNo},
