@@ -12,6 +12,27 @@ function clientMonitorFields(array $data): array {
     if(!in_array($type,['laptop','desktop'],true))return ['error'=>'Select Laptop or Desktop'];
     return ['platform'=>$platform,'type'=>$type,'remark'=>$remark];
 }
+/**
+ * Discovery only. No token or permission to use an existing monitor is
+ * granted by knowing a User No. Physical installations retain independent
+ * monitor sessions and a locked monitor cannot be claimed by another client.
+ */
+function clientMappedMonitorPreview(mysqli $db, int $userId): array {
+    $st=$db->prepare("SELECT id,ip_address,platform,type,assignment_locked,settings_locked
+        FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY id LIMIT 1000");
+    $st->bind_param('i',$userId);$st->execute();
+    $rows=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
+    return array_map(static fn(array $m)=>[
+        'id'=>(int)$m['id'],
+        'name'=>'Device #'.$m['id'],
+        'ip_address'=>(string)($m['ip_address']??''),
+        'platform'=>(string)($m['platform']??''),
+        'type'=>(string)($m['type']??''),
+        'settings_locked'=>(bool)($m['settings_locked']||$m['assignment_locked']),
+        'assignment_locked'=>(bool)($m['settings_locked']||$m['assignment_locked']),
+        'preview_only'=>true
+    ],$rows);
+}
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
 if(($_SERVER['REQUEST_METHOD']??'')!=='POST'){http_response_code(405);echo json_encode(['error'=>'POST required']);exit;}
@@ -118,9 +139,11 @@ try {
         $st=$db->prepare('SELECT id FROM users WHERE user_no=? LIMIT 1');
         $st->bind_param('s',$userNo);$st->execute();$user=$st->get_result()->fetch_assoc();$st->close();
         if(!$user){http_response_code(404);echo json_encode(['error'=>'User No not found']);exit;}
+        $preview=clientMappedMonitorPreview($db,(int)$user['id']);
         http_response_code(409);
         echo json_encode(['success'=>false,'code'=>'no_monitors',
-            'error'=>'Create a monitor for this installation.','user_no'=>$userNo]);exit;
+            'error'=>'Existing monitors are shown for reference. Add a new monitor for this installation.',
+            'user_no'=>$userNo,'monitors'=>$preview,'device_count'=>count($preview)]);exit;
     }
     if($action==='signup'||$action==='login'){
         http_response_code(410);
@@ -156,9 +179,11 @@ try {
             $db->rollback();
             if(!$target){http_response_code(404);echo json_encode(['error'=>'User No not found']);exit;}
             // Do not switch to another machine's existing monitor.
+            $preview=clientMappedMonitorPreview($db,(int)$target['id']);
             http_response_code(409);
             echo json_encode(['success'=>false,'code'=>'no_monitors',
-                'error'=>'Create a monitor for this installation.','user_no'=>$newNo]);exit;
+                'error'=>'Existing monitors are shown for reference. Add a new monitor for this installation.',
+                'user_no'=>$newNo,'monitors'=>$preview,'device_count'=>count($preview)]);exit;
         }catch(Throwable $failure){$db->rollback();throw $failure;}
     }
     if($action==='restore'){
