@@ -301,7 +301,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    monitors = data.monitors;
+                    monitors = window.sortMonitorOptions(data.monitors);
                     populateSelects();
                 } else {
                     showAlert('Failed to load monitors', 'danger');
