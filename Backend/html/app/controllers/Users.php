@@ -27,6 +27,7 @@ class Users extends Base {
             $userNo=trim((string)($_POST['user_no']??''));
             $name=trim((string)($_POST['name']??''));
             $password=(string)($_POST['password']??'');
+            $usingTemporaryPassword = $password === '';
             $role=(string)($_POST['role']??ROLE_USER);
             if(!in_array($role,['admin','user'],true))$role='user';
             if(!preg_match('/^[1-9][0-9]{0,14}$/D',$userNo)||strlen($name)<2||strlen($name)>150
