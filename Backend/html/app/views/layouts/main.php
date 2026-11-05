@@ -10,6 +10,37 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.datatables.net/3.1.5/css/dataTables.bootstrap5.min.css" rel="stylesheet">
     <link href="https://cdn.datatables.net/colreorder/3.1.2/css/colReorder.bootstrap5.min.css" rel="stylesheet">
+    <script>
+    // Shared stable ordering for web user/device selectors. Keep the label
+    // format independent of sorting, and do not mutate the API response.
+    window.sortMonitorOptions = function(items) {
+      const collator = new Intl.Collator(undefined, {numeric:true, sensitivity:'base'});
+      const value = (item, keys) => {
+        for (const key of keys) {
+          const result = String(item?.[key] ?? '').trim();
+          if (result) return result;
+        }
+        return '';
+      };
+      return [...items].sort((a,b) => {
+        const ano=value(a,['user_no','owner_user_no']);
+        const bno=value(b,['user_no','owner_user_no']);
+        if (!ano !== !bno) return ano ? -1 : 1;
+        for (const keys of [
+          ['user_no','owner_user_no'],
+          ['username','owner_name','full_name'],
+          ['type'],
+          ['platform','os'],
+          ['last_seen_ip','ip_address'],
+          ['id']
+        ]) {
+          const difference=collator.compare(value(a,keys),value(b,keys));
+          if (difference) return difference;
+        }
+        return 0;
+      });
+    };
+    </script>
     <style>
         :root {
             --primary-color: #1976d2;
