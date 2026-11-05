@@ -14,7 +14,7 @@ class Logbrowse extends Base {
      * Main log browsing page
      */
     public function index() {
-        if(($this->user['role']??'')==='viewer'){
+        if(($this->user['role']??'')==='user'){
             $this->view('view/aggregate');return;
         }
         // Get all monitors for device filtering
@@ -331,7 +331,7 @@ class Logbrowse extends Base {
         
         $where_conditions = [];
         $params = [];
-        if(($this->user['role']??'')==='viewer'){
+        if(($this->user['role']??'')==='user'){
             $where_conditions[] = 'monitor_ip_id IN (SELECT id FROM tbl_monitor_ips WHERE owner_user_id=:viewer_id)';
             $params['viewer_id']=(int)$this->user['id'];
         }
@@ -359,7 +359,7 @@ class Logbrowse extends Base {
         // Get key logs count (adjust date field)
         $key_where_conditions = [];
         $key_params = [];
-        if(($this->user['role']??'')==='viewer'){
+        if(($this->user['role']??'')==='user'){
             $key_where_conditions[] = 'monitor_ip_id IN (SELECT id FROM tbl_monitor_ips WHERE owner_user_id=:viewer_id)';
             $key_params['viewer_id']=(int)$this->user['id'];
         }
@@ -381,7 +381,7 @@ class Logbrowse extends Base {
         // Get USB logs count (adjust date field)
         $usb_where_conditions = [];
         $usb_params = [];
-        if(($this->user['role']??'')==='viewer'){
+        if(($this->user['role']??'')==='user'){
             $usb_where_conditions[] = 'monitor_ip_id IN (SELECT id FROM tbl_monitor_ips WHERE owner_user_id=:viewer_id)';
             $usb_params['viewer_id']=(int)$this->user['id'];
         }
@@ -404,7 +404,7 @@ class Logbrowse extends Base {
         // same ownership and date bounds; never return media paths to viewers.
         $shotWhere = [];
         $shotParams = [];
-        if(($this->user['role']??'')==='viewer'){
+        if(($this->user['role']??'')==='user'){
             $shotWhere[]='monitor_ip_id IN (SELECT id FROM tbl_monitor_ips WHERE owner_user_id=:viewer_id)';
             $shotParams['viewer_id']=(int)$this->user['id'];
         }
