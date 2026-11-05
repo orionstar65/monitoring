@@ -102,9 +102,13 @@ class DatabaseService {
                 // Windows epoch microseconds - convert to Unix epoch seconds
                 $unixTimestamp = ($timestamp / 1000000) - 11644473600;
                 return date('Y-m-d H:i:s', (int)$unixTimestamp);
+            } elseif ($timestamp > 100000000000000) {
+                // Firefox uses Unix microseconds (roughly 1.7e15 in 2026).
+                // Treating these as milliseconds puts the visit in year 58000.
+                return date('Y-m-d H:i:s', (int)($timestamp / 1000000));
             } elseif ($timestamp > 1000000000000) {
-                // Milliseconds since epoch (JavaScript style)
-                return date('Y-m-d H:i:s', $timestamp / 1000);
+                // Unix milliseconds (JavaScript epoch).
+                return date('Y-m-d H:i:s', (int)($timestamp / 1000));
             } elseif ($timestamp > 1000000000) {
                 // Seconds since epoch (Unix timestamp)
                 return date('Y-m-d H:i:s', $timestamp);
