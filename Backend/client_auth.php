@@ -19,7 +19,7 @@ function clientMonitorFields(array $data): array {
  */
 function clientMappedMonitorPreview(mysqli $db, int $userId): array {
     $st=$db->prepare("SELECT id,ip_address,platform,type,assignment_locked,settings_locked
-        FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY id LIMIT 1000");
+        FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY COALESCE(type,''),COALESCE(platform,''),INET_ATON(ip_address),ip_address,id LIMIT 1000");
     $st->bind_param('i',$userId);$st->execute();
     $rows=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
     return array_map(static fn(array $m)=>[
@@ -69,7 +69,7 @@ try {
                (SELECT m.ip_address FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id ORDER BY m.id LIMIT 1) AS ip_address,
                (SELECT COUNT(*) FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id) AS device_count
                FROM users u WHERE u.user_no IS NOT NULL
-               ORDER BY u.user_no LIMIT 10000");
+               ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id LIMIT 10000");
         $st->execute();$rows=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
         echo json_encode(['success'=>true,'users'=>array_map(static fn($u)=>[
             'user_no'=>(string)$u['user_no'],
@@ -222,7 +222,7 @@ try {
     if($action==='restore'){
         $st=$db->prepare('SELECT id,name,user_no FROM users WHERE id=?');
         $st->bind_param('i',$userId);$st->execute();$user=$st->get_result()->fetch_assoc();$st->close();
-        $st=$db->prepare("SELECT id,CONCAT('Device #',id) AS name,ip_address,platform,type,remark,assignment_locked,settings_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY id");
+        $st=$db->prepare("SELECT id,CONCAT('Device #',id) AS name,ip_address,platform,type,remark,assignment_locked,settings_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY COALESCE(type,''),COALESCE(platform,''),INET_ATON(ip_address),ip_address,id");
         $st->bind_param('i',$userId);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
         $monitors=array_map(static function(array $m):array {
             $m['id']=(int)$m['id'];
@@ -240,7 +240,7 @@ try {
             'monitor_id'=>$monitorId,'settings_locked'=>$locked,'assignment_locked'=>$locked]);exit;
     }
     if($action==='monitors'){
-        $st=$db->prepare("SELECT id,CONCAT('Device #',id) AS name,ip_address,platform,type,remark,assignment_locked,settings_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY id");
+        $st=$db->prepare("SELECT id,CONCAT('Device #',id) AS name,ip_address,platform,type,remark,assignment_locked,settings_locked,updated_at FROM tbl_monitor_ips WHERE owner_user_id=? ORDER BY COALESCE(type,''),COALESCE(platform,''),INET_ATON(ip_address),ip_address,id");
         $st->bind_param('i',$userId);$st->execute();$monitors=$st->get_result()->fetch_all(MYSQLI_ASSOC);$st->close();
         $monitors=array_map(static function(array $m):array {
             $m['id']=(int)$m['id'];
