@@ -22,7 +22,7 @@ $checks=[
     'Directory includes device counts'=>str_contains($api,"'device_count'"),
     'Directory includes every account role'=>str_contains($api,"FROM users u WHERE u.user_no IS NOT NULL"),
     'Switch user does not transfer monitor ownership'=>!str_contains($api,"UPDATE tbl_monitor_ips SET owner_user_id=? WHERE id=?"),
-    'Switch user selects owned monitor'=>str_contains($api,'JOIN tbl_monitor_ips m ON m.owner_user_id=u.id'),
+    'Switch user previews owned monitors without transfer'=>str_contains($api,'clientMappedMonitorPreview($db,(int)$target[\'id\'])') && str_contains($api,"'user_no'=>$newNo,'monitors'=>$preview"),
     'No-device enrollment returns explicit code'=>str_contains($api,"'code'=>'no_monitors'"),
     'First device requires LAN restricted action'=>str_contains($api,"'bootstrap_monitor'"),
     'Authenticated client can create monitor'=>str_contains($api,"if(\$action==='create_monitor')"),
