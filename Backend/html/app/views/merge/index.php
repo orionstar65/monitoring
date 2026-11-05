@@ -446,7 +446,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        if (!confirm(`Are you sure you want to merge logs from ${sourceMonitor.ip_address} into ${targetMonitor.ip_address}?\n\nThis will:\n- Move all log files\n- Update all database records\n- Delete the source monitor entry\n\nThis action cannot be undone!`)) {
+        if (!confirm(`Are you sure you want to merge logs from ${sourceMonitor.ip_address} into ${targetMonitor.ip_address}?\n\nThis will:\n- Continue across log tables even if some rows fail\n- Preserve original screenshot files and paths\n- Retain the source monitor if records remain\n\nReview warnings afterward; merged records cannot be automatically undone.`)) {
             return;
         }
         
@@ -467,29 +467,26 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                let filesBreakdown = '';
-                if (data.files_moved_by_type) {
-                    filesBreakdown = `<br><strong>Files Moved:</strong><br>` +
-                        `- Logs: ${data.files_moved_by_type.logs || 0}<br>` +
-                        `- Screenshots: ${data.files_moved_by_type.screens || 0}<br>` +
-                        `- Thumbnails: ${data.files_moved_by_type.thumbnails || 0}<br>` +
-                        `- Total: ${data.files_moved || 0}`;
-                } else {
-                    filesBreakdown = `<br><strong>Files Moved:</strong> ${data.files_moved || 0}`;
-                }
-                
+                const stats=data.stats||{};
+                const errors=Array.isArray(data.errors)?data.errors:[];
+                const escapeText=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+                const warnings=errors.length
+                    ? '<hr><strong>Warnings ('+errors.length+'):</strong><ul>'+
+                        errors.map(error=>'<li>'+escapeText(error)+'</li>').join('')+'</ul>'
+                    : '';
                 showAlert(
-                    `Merge completed successfully!<br><br>` +
-                    `<strong>Database Records Updated:</strong><br>` +
-                    `- Browser History Logs: ${data.stats.browser_history_logs}<br>` +
-                    `- Key Logs: ${data.stats.key_logs}<br>` +
-                    `- USB Device Logs: ${data.stats.usb_device_logs}<br>` +
-                    `- Screenshot Metadata: ${data.stats.screenshot_metadata}<br>` +
-                    `- Storage Statistics: ${data.stats.storage_statistics}` +
-                    filesBreakdown,
-                    'success'
+                    '<strong>'+escapeText(data.message||'Merge completed')+'</strong><br>'+
+                    'Browser History: '+(stats.browser_history_logs||0)+'<br>'+
+                    'Key Logs: '+(stats.key_logs||0)+'<br>'+
+                    'USB Logs: '+(stats.usb_device_logs||0)+'<br>'+
+                    'Screenshots: '+(stats.screenshot_metadata||0)+'<br>'+
+                    'Storage Statistics: '+(stats.storage_statistics||0)+'<br>'+
+                    'Source monitor: '+(data.source_deleted?'Removed':'Preserved')+'<br>'+
+                    'Original image/log files: Preserved in their current locations.'+
+                    warnings,
+                    errors.length?'warning':'success'
                 );
-                
+
                 // Reset button to normal state
                 mergeBtn.disabled = false;
                 mergeBtn.innerHTML = '<i class="fas fa-code-branch me-2"></i>Merge Logs';
