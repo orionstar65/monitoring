@@ -55,8 +55,8 @@ try {
     }
 
     $newPassword=getenv('MONITOR_RECOVERY_PASSWORD');
-    if(!is_string($newPassword)||strlen($newPassword)<12||strlen($newPassword)>1024){
-        fwrite(STDERR,"Set MONITOR_RECOVERY_PASSWORD to a new password of 12-1024 characters. Do not pass passwords in command arguments.\n");
+    if(!is_string($newPassword)||strlen($newPassword)<6||strlen($newPassword)>1024){
+        fwrite(STDERR,"Set MONITOR_RECOVERY_PASSWORD to a new password of 6-1024 characters. Do not pass passwords in command arguments.\n");
         exit(2);
     }
     $number=$matches[1];
