@@ -333,12 +333,12 @@ void ConfigDialog::updateMonitorList(const QJsonArray &items){
     monitorSelector->clear();
     for(const auto &value:items){
         const QJsonObject m=value.toObject();
-        monitorSelector->addItem(QString("%1 · %2 · %3 · %4").arg(
-            QString("Device #%1").arg(m.value("id").toInt()),m.value("platform").toString("—"),
-            m.value("type").toString("Desktop"),m.value("ip_address").toString("—")),
+        monitorSelector->addItem(QString("%1 · %2-%3").arg(
+            m.value("ip_address").toString("—"),m.value("platform").toString("—"),
+            m.value("type").toString("Desktop"),QString()),
             m.value("id").toInt());
     }
-    monitorSelector->addItem("Add new for this computer...",-1);
+    monitorSelector->addItem("Add new...",-1);
     const int ix=monitorSelector->findData(monitorId);
     const int newMonitorIndex=monitorSelector->findData(-1);
     monitorSelector->setCurrentIndex(!pendingUserNo.isEmpty()?newMonitorIndex:(ix>=0?ix:newMonitorIndex));
@@ -450,9 +450,9 @@ void ConfigDialog::updateUI(){
     remarkStack->setCurrentIndex(editing?1:0);
     editButton->setVisible(existing&&!locked);
     editButton->setText(editing?"Cancel":"Edit");
-    saveButton->setText(adding?"Add Monitor":enrolled?"Save Monitor":"Save Server");
-    saveButton->setVisible((!enrolled&&!pending)||editing);
-    saveButton->setEnabled((!enrolled&&!pending)||editing);
+    saveButton->setText(adding?"Add Monitor":"Save");
+    saveButton->setVisible(true);
+    saveButton->setEnabled(!locked);
     lockSettingsButton->setVisible(existing);
     lockSettingsButton->setEnabled(existing&&!locked);
     lockSettingsButton->setText(locked?"Settings Locked":"Lock Settings");
@@ -467,7 +467,7 @@ void ConfigDialog::onPairClicked(){
             pendingUserNo=number;
             settingsLocked=false;
             updateMonitorList(result.value("monitors").toArray());
-            directoryError="Existing monitors are read-only; add a new monitor for this installation.";
+            directoryError.clear();
             updateUI();return;
         }
         QMessageBox::warning(this,"User selection failed",result.value("error").toString("Could not load assigned monitors."));
@@ -506,7 +506,7 @@ void ConfigDialog::onSwitchClicked(){
             pendingUserNo=userSelector->currentData().toString();
             settingsLocked=false;
             updateMonitorList(result.value("monitors").toArray());
-            directoryError="Existing monitors are read-only; add a new monitor for this installation.";
+            directoryError.clear();
             updateUI();return;
         }
         QMessageBox::warning(this,"Cannot change user",result.value("error").toString("Ask your administrator to change the assignment."));
