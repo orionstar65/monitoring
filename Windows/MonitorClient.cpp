@@ -33,6 +33,8 @@ typedef ULONG PROPID;
 #include <mutex>
 #include <set>
 #include <algorithm> // for std::replace
+#include <cctype>
+#include <cstdio>
 #include <iomanip>   // for std::put_time
 #include <iphlpapi.h> // for GetAdaptersInfo
 #include <ShellScalingApi.h>
@@ -2099,6 +2101,36 @@ static void selectDirectoryUser(HWND dlg,const std::string& userNo) {
     const int index=(int)SendMessageW(combo,CB_FINDSTRING,(WPARAM)-1,(LPARAM)prefix.c_str());
     SendMessageW(combo,CB_SETCURSEL,index>=0?index:0,0);
 }
+static std::string sortableMonitorField(std::string value,bool ip=false){
+    std::transform(value.begin(),value.end(),value.begin(),
+        [](unsigned char c){return static_cast<char>(std::tolower(c));});
+    if(ip){
+        unsigned a=0,b=0,d=0,e=0;
+        if(std::sscanf(value.c_str(),"%u.%u.%u.%u",&a,&b,&d,&e)==4
+            && a<256&&b<256&&d<256&&e<256){
+            char result[16]{};
+            std::snprintf(result,sizeof(result),"%03u.%03u.%03u.%03u",a,b,d,e);
+            return result;
+        }
+    }
+    return value;
+}
+static void sortMonitorOptions(Json::Value& monitors){
+    if(!monitors.isArray()||monitors.size()<2)return;
+    std::vector<Json::Value> entries;
+    for(const auto& item:monitors)entries.push_back(item);
+    std::stable_sort(entries.begin(),entries.end(),[](const Json::Value& a,const Json::Value& b){
+        for(const char* field:{"type","platform","ip_address"}){
+            const bool ip=std::strcmp(field,"ip_address")==0;
+            const std::string av=sortableMonitorField(a.get(field,"").asString(),ip);
+            const std::string bv=sortableMonitorField(b.get(field,"").asString(),ip);
+            if(av!=bv)return av<bv;
+        }
+        return a.get("id",0).asInt()<b.get("id",0).asInt();
+    });
+    monitors=Json::arrayValue;
+    for(const auto& item:entries)monitors.append(item);
+}
 static void loadUserDirectory(HWND dlg) {
     const HWND selector=GetDlgItem(dlg,SETTINGS_USER_NO);
     settingsDirectoryError.clear();
@@ -2136,6 +2168,7 @@ static void refreshUnifiedMonitors(HWND dlg) {
         const Json::Value answer=callClientAuth(request);
         if(answer.get("success",false).asBool()){
             settingsMonitors=answer.get("monitors",Json::arrayValue);
+            sortMonitorOptions(settingsMonitors);
             settingsAssignmentLocked=answer.get("assignment_locked",false).asBool();
             signedInUsername=answer["user"].get("user_no","").asString();
             selectedMonitorId.store(answer.get("monitor_id",0).asInt());
@@ -2447,6 +2480,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
                 if(response.get("code","").asString()=="no_monitors"){
                     settingsPendingUserNo=number;
                     settingsMonitors=response.get("monitors",Json::arrayValue);
+                    sortMonitorOptions(settingsMonitors);
                     const HWND combo=GetDlgItem(dlg,SETTINGS_MONITOR);
                     SendMessageW(combo,CB_RESETCONTENT,0,0);
                     for(const auto& existing:settingsMonitors){
