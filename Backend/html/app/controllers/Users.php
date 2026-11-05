@@ -30,8 +30,8 @@ class Users extends Base {
             $role=(string)($_POST['role']??ROLE_USER);
             if(!in_array($role,['admin','user'],true))$role='user';
             if(!preg_match('/^[1-9][0-9]{0,14}$/D',$userNo)||strlen($name)<2||strlen($name)>150
-                ||strlen($password)<12||strlen($password)>1024) {
-                $error='Enter a unique numeric User No (1–15 digits), full name, and password of at least 12 characters.';
+                ||strlen($password)<6||strlen($password)>1024) {
+                $error='Enter a unique numeric User No (1–15 digits), full name, and password of at least 6 characters.';
             } elseif($this->db->fetch('SELECT id FROM users WHERE user_no=:n',['n'=>$userNo])) {
                 $error='User No already exists.';
             } else try {
@@ -88,8 +88,8 @@ class Users extends Base {
                     ];
                     
                     if (!empty($password)) {
-                        if(strlen($password)<12 || strlen($password)>1024){
-                            $this->view('users/edit',['user'=>$user,'error'=>'Password must contain at least 12 characters.','monitors'=>$monitors,'accounts'=>$accounts]);
+                        if(strlen($password)<6 || strlen($password)>1024){
+                            $this->view('users/edit',['user'=>$user,'error'=>'Password must contain at least 6 characters.','monitors'=>$monitors,'accounts'=>$accounts]);
                             return;
                         }
                         $data['password'] = password_hash($password, PASSWORD_DEFAULT);
