@@ -2512,6 +2512,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
                 {std::lock_guard<std::mutex> lock(authMutex);clientToken=token;}
                 selectedMonitorId.store(created);
                 signedInUsername=settingsPendingUserNo;settingsPendingUserNo.clear();
+                settingsDirectoryError.clear();
                 rememberClientToken(token);
                 loadUserDirectory(dlg);refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);
                 if(!keyboardHook)setupKeyboardHook();
