@@ -89,7 +89,7 @@ class Logbrowse extends Base {
         $total_pages = ceil($total_entries / $per_page);
         
         // Get paginated data
-        $data_sql = "SELECT b.*, m.ip_address, owner.name AS username,owner.user_no AS user_no, CONCAT('Device #',m.id) AS name, m.type,m.platform,m.last_monitor_tic,
+        $data_sql = "SELECT b.*, m.ip_address, owner.name AS username,owner.user_no AS user_no, CONCAT('Device #',m.id) AS name, m.type,m.platform,m.last_monitor_tic, TIMESTAMPDIFF(SECOND,m.last_monitor_tic,NOW()) AS heartbeat_age_seconds,
                             b.visit_date as date,
                             b.browser,
                             b.url,
@@ -163,7 +163,7 @@ class Logbrowse extends Base {
         $total_pages = ceil($total_entries / $per_page);
         
         // Get paginated data
-        $data_sql = "SELECT k.*, m.ip_address, owner.name AS username,owner.user_no AS user_no, CONCAT('Device #',m.id) AS name, m.type,m.platform,m.last_monitor_tic,
+        $data_sql = "SELECT k.*, m.ip_address, owner.name AS username,owner.user_no AS user_no, CONCAT('Device #',m.id) AS name, m.type,m.platform,m.last_monitor_tic, TIMESTAMPDIFF(SECOND,m.last_monitor_tic,NOW()) AS heartbeat_age_seconds,
                             k.key_date as date,
                             k.application,
                             k.key_pressed as `key`,
@@ -251,7 +251,7 @@ class Logbrowse extends Base {
         $total_pages = ceil($total_entries / $per_page);
         
         // Get paginated data
-        $data_sql = "SELECT u.*, m.ip_address, owner.name AS username,owner.user_no AS user_no, CONCAT('Device #',m.id) AS name, m.type,m.platform,m.last_monitor_tic,
+        $data_sql = "SELECT u.*, m.ip_address, owner.name AS username,owner.user_no AS user_no, CONCAT('Device #',m.id) AS name, m.type,m.platform,m.last_monitor_tic, TIMESTAMPDIFF(SECOND,m.last_monitor_tic,NOW()) AS heartbeat_age_seconds,
                             u.device_date as date,
                             u.device_name as device,
                             u.action,
