@@ -2209,7 +2209,7 @@ static void updateUnifiedVisibility(HWND dlg) {
     setDlgUtf8Text(dlg,SETTINGS_EDIT,editing?"Cancel Edit":"Edit");
     // Save persists server/notification options even when no monitor details are being edited.
     ShowWindow(GetDlgItem(dlg,SETTINGS_SAVE),SW_SHOW);
-    EnableWindow(GetDlgItem(dlg,SETTINGS_SAVE),!locked);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_SAVE),TRUE);
     setDlgUtf8Text(dlg,SETTINGS_SAVE,creating?"Add Monitor":"Save");
     EnableWindow(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),existing&&!locked);
     ShowWindow(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),existing?SW_SHOW:SW_HIDE);
