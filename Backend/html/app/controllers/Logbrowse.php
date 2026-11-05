@@ -236,15 +236,34 @@ class Logbrowse extends Base {
     /** Fetch the ordered key sequence around a selected event. */
     public function api_key_context() {
         $monitorId=filter_var($_GET['device_id']??null,FILTER_VALIDATE_INT);
-        $center=$_GET['at']??'';
-        if(!$monitorId || !is_string($center) || !preg_match('/^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$/D',$center)){
-            http_response_code(400);$this->json(['success'=>false,'error'=>'Invalid monitor or timestamp']);
+        $from=(string)($_GET['from']??'');
+        $to=(string)($_GET['to']??'');
+        $format='!Y-m-d H:i:s';
+        $start=DateTimeImmutable::createFromFormat($format,$from);
+        $end=DateTimeImmutable::createFromFormat($format,$to);
+        if(!$monitorId || !$start || !$end ||
+           $start->format('Y-m-d H:i:s')!==$from ||
+           $end->format('Y-m-d H:i:s')!==$to || $end <= $start) {
+            http_response_code(400);
+            $this->json(['success'=>false,'error'=>'Invalid monitor or time range']);
+            return;
+        }
+        // Large selections remain bounded. The UI can navigate to the next
+        // adjacent range without fetching an unbounded keylog stream.
+        if($end->getTimestamp()-$start->getTimestamp()>32*86400){
+            http_response_code(400);
+            $this->json(['success'=>false,'error'=>'Select a range of 32 days or less']);
+            return;
         }
         $rows=$this->db->fetchAll(
-            "SELECT k.key_date,k.key_pressed,k.application FROM key_logs k WHERE k.monitor_ip_id=:id AND k.key_date BETWEEN DATE_SUB(:start, INTERVAL 2 MINUTE) AND DATE_ADD(:end, INTERVAL 2 MINUTE) ORDER BY k.key_date ASC,k.id ASC LIMIT 2000",
-            ['id'=>$monitorId,'start'=>$center,'end'=>$center]
+            'SELECT k.key_date,k.key_pressed,k.application FROM key_logs k
+             WHERE k.monitor_ip_id=:id AND k.key_date >= :start AND k.key_date <= :end
+             ORDER BY k.key_date ASC,k.id ASC LIMIT 2001',
+            ['id'=>$monitorId,'start'=>$from,'end'=>$to]
         );
-        $this->json(['success'=>true,'logs'=>$rows,'center'=>$center,'limited'=>count($rows)>=2000]);
+        $limited=count($rows)>2000;
+        if($limited)$rows=array_slice($rows,0,2000);
+        $this->json(['success'=>true,'logs'=>$rows,'from'=>$from,'to'=>$to,'limited'=>$limited]);
     }
 
     /**
