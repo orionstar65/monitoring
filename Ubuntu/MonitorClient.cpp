@@ -1388,9 +1388,9 @@ void MonitorClient::setupSystemTray()
     trayMenu->addAction(configureAction);
     trayMenu->addAction(testConnectionAction);
     trayMenu->addAction(testAPIEndpointsAction);
-    trayMenu->addAction(configRefreshAction);
+    // Refresh Configuration moved into Settings.
     trayMenu->addSeparator();
-    trayMenu->addAction(sendAllAction);
+    // Send All Logs moved into Settings.
     trayMenu->addSeparator();
     trayMenu->addAction("Quit", qApp, &QApplication::quit);
     
@@ -1683,6 +1683,8 @@ void MonitorClient::onConfigureAction()
     }
     auto *dialog=new ConfigDialog();
     activeSettingsDialog=dialog;
+    connect(dialog,&ConfigDialog::sendAllRequested,this,&MonitorClient::onSendAllAction);
+    connect(dialog,&ConfigDialog::refreshConfigurationRequested,this,&MonitorClient::onConfigRefreshAction);
     connect(dialog,&ConfigDialog::sessionStateChanged,this,[this,dialog] {
         authToken=dialog->getAuthToken();
         monitorId=dialog->getMonitorId();
