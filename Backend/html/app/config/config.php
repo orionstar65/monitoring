@@ -35,4 +35,3 @@ define('ROLE_USER', 'user');
 if (file_exists(BACKEND_CONFIG_PATH)) {
     require_once BACKEND_CONFIG_PATH;
 }
-?> 
