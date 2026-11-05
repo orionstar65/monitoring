@@ -376,15 +376,8 @@ try {
         echo json_encode(['error'=>'Use Add new... in Monitor Settings to create a device under the selected user.']);exit;
     }
     if($action==='logout'){
-        // The administrator's lock also prevents disconnect/re-enroll flows
-        // from changing the selected user through the normal application UI.
-        $st=$db->prepare('SELECT assignment_locked,settings_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=? LIMIT 1');
-        $mid=(int)($session['monitor_id']??0);
-        $st->bind_param('ii',$mid,$userId);$st->execute();$row=$st->get_result()->fetch_assoc();$st->close();
-        if($row && ((int)$row['assignment_locked']===1||(int)$row['settings_locked']===1)){
-            http_response_code(423);
-            echo json_encode(['error'=>'User assignment is locked. Ask your administrator to edit the monitor.','code'=>'assignment_locked']);exit;
-        }
+        // A lock protects monitor configuration, not the account's ability
+        // to revoke its own authentication token on Sign Out.
         $st=$db->prepare('UPDATE client_sessions SET revoked_at=NOW() WHERE id=? AND user_id=?');
         $st->bind_param('ii',$session['id'],$userId);$st->execute();
         echo json_encode(['success'=>true]);exit;
