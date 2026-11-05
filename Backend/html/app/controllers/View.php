@@ -15,7 +15,7 @@ class View extends Base {
     }
     
     public function index() {
-        if(($this->user['role']??'')==='viewer'){
+        if(($this->user['role']??'')==='user'){
             $this->view('view/aggregate');return;
         }
         // Get monitors from database only (no expensive file scanning)
