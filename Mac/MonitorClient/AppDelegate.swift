@@ -4396,17 +4396,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // logMessage("=== Accessibility Permission Debug ===", level: .info)
         
         // Check current permission status
-        let isTrusted = AXIsProcessTrusted()
+        _ = AXIsProcessTrusted()
         // logMessage("AXIsProcessTrusted(): \(isTrusted)", level: .info)
         
         // Check app bundle identifier
-        if let bundleId = Bundle.main.bundleIdentifier {
+        if Bundle.main.bundleIdentifier != nil {
             // logMessage("Bundle Identifier: \(bundleId)", level: .info)
         }
         
         // Check if app is running from Xcode
-        let isRunningFromXcode = ProcessInfo.processInfo.environment["XPC_SERVICE_NAME"] != nil || 
-                                ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
+        // Environment diagnostics are available through ProcessInfo if needed.
         // logMessage("Running from Xcode: \(isRunningFromXcode)", level: .info)
         
         // Check app path
