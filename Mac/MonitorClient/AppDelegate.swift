@@ -3287,7 +3287,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     pendingUserNo = nil
                     directoryError = nil
                     refreshMonitors()
-                    refreshUserDirectory()
                     updateState()
                     self.startKeyboardMonitoring()
                     return
@@ -3330,7 +3329,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 }
                 self.notificationsEnabled = notifications.state == .on
                 refreshMonitors()
-                refreshUserDirectory()
                 updateState()
             case "close":
                 NSApp.stopModal(withCode: .OK)
