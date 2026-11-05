@@ -410,17 +410,6 @@ void ConfigDialog::onMonitorChanged(int){
     }
     // Choosing a monitor only previews its details. Save commits selection.
     for(const auto &value:assignedMonitors){
-            const auto monitor=value.toObject();
-            if(monitor.value("id").toInt()==id){
-                assignmentLocked=monitor.value("assignment_locked").toBool();
-                settingsLocked=monitor.value("settings_locked").toBool();
-                break;
-            }
-        }
-        saveSettings();
-        emit sessionStateChanged();
-    }
-    for(const auto &value:assignedMonitors){
         const QJsonObject m=value.toObject();
         if(m.value("id").toInt()!=id)continue;
         const QString remark=m.value("remark").toString();
