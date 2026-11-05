@@ -73,7 +73,14 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     serverPortEdit->setRange(1,65535);
     serverForm->addRow("Server IP",serverIPEdit);
     serverForm->addRow("Port",serverPortEdit);
-    testButton=new QPushButton("Test Connection",serverGroup);
+    userNoInput=new QLineEdit(serverGroup);
+    userNoInput->setPlaceholderText("User No");
+    passwordInput=new QLineEdit(serverGroup);
+    passwordInput->setEchoMode(QLineEdit::Password);
+    passwordInput->setPlaceholderText("Password");
+    serverForm->addRow("User No",userNoInput);
+    serverForm->addRow("Password",passwordInput);
+    testButton=new QPushButton("Sign In",serverGroup);
     connectionStatusLabel=new QLabel("● Not tested",serverGroup);
     serverForm->addRow(testButton,connectionStatusLabel);
     content->addWidget(serverGroup);
@@ -86,12 +93,13 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     userSelector->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     userSelector->setMinimumContentsLength(28);
     userForm->addRow("User:",userSelector);
-    logoutButton=new QPushButton("Disconnect",userGroup);
-    userForm->addRow("",logoutButton);
+    logoutButton=new QPushButton("Sign Out",serverGroup);
+    serverForm->addRow("",logoutButton);
     assignmentStatusLabel=new QLabel(userGroup);
     assignmentStatusLabel->setWordWrap(true);
     assignmentStatusLabel->setStyleSheet("color:#bf3838;");
     userForm->addRow("",assignmentStatusLabel);
+    userGroup->setVisible(false); // Password sign-in replaces user directory selection.
     content->addWidget(userGroup);
     divider();
 
@@ -154,7 +162,7 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     buttons->addWidget(lockSettingsButton);
     buttons->addWidget(closeButton);
     outer->addLayout(buttons);
-    connect(testButton,&QPushButton::clicked,this,&ConfigDialog::onTestConnectionClicked);
+    connect(testButton,&QPushButton::clicked,this,&ConfigDialog::onSignInClicked);
     connect(logoutButton,&QPushButton::clicked,this,&ConfigDialog::onLogoutClicked);
     connect(userSelector,QOverload<int>::of(&QComboBox::currentIndexChanged),this,&ConfigDialog::onUserChanged);
     connect(monitorSelector,QOverload<int>::of(&QComboBox::currentIndexChanged),this,&ConfigDialog::onMonitorChanged);
@@ -164,7 +172,6 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     connect(closeButton,&QPushButton::clicked,this,&ConfigDialog::reject);
     loadSettings();
     loadRememberedSession();
-    refreshDirectory();
     refreshMonitors();
     updateUI();
 }
@@ -190,7 +197,7 @@ void ConfigDialog::saveSettings(){
         cfg.setValue("Server/port",getServerPort());
         cfg.setValue("Notifications/enabled",notificationsCheck->isChecked());
         cfg.setValue("Monitor/id",monitorId);
-        cfg.setValue("User/no",userSelector->currentData().toString());
+        cfg.setValue("User/no",activeUserNo);
     }
 }
 QJsonObject ConfigDialog::authRequest(const QJsonObject &payload,bool authenticated){
@@ -225,6 +232,37 @@ bool ConfigDialog::testConnection(){
     const int status=reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     const bool ok=reply->error()==QNetworkReply::NoError&&status>=200&&status<400;
     reply->deleteLater();return ok;
+}
+void ConfigDialog::onSignInClicked(){
+    const QString number=userNoInput->text().trimmed();
+    const QString password=passwordInput->text();
+    if(number.isEmpty()||password.isEmpty()){
+        connectionStatusLabel->setText("Enter User No and password");
+        return;
+    }
+    testButton->setEnabled(false);
+    connectionStatusLabel->setText("Signing in...");
+    QApplication::processEvents();
+    const auto result=authRequest({{"action","login"},{"user_no",number},{"password",password}});
+    passwordInput->clear();
+    testButton->setEnabled(true);
+    if(!result.value("success").toBool()){
+        connectionStatusLabel->setText(result.value("error").toString("Sign in failed"));
+        return;
+    }
+    const QString token=result.value("token").toString();
+    if(token.size()!=64){
+        connectionStatusLabel->setText("Invalid sign-in token");
+        return;
+    }
+    authToken=token;monitorId=result.value("monitor_id").toInt();
+    activeUserNo=number;assignmentLocked=false;settingsLocked=false;
+    rememberToken(token);
+    saveSettings();
+    connectionStatusLabel->setText("Signed in");
+    updateMonitorList(result.value("monitors").toArray());
+    updateUI();
+    emit sessionStateChanged();
 }
 void ConfigDialog::onTestConnectionClicked(){
     testButton->setEnabled(false);
@@ -267,7 +305,7 @@ void ConfigDialog::loadRememberedSession(){
     monitorId=state.value("monitor_id").toInt();
     activeUserNo=state.value("user").toObject().value("user_no").toString();
     assignmentLocked=state.value("assignment_locked").toBool();
-    if(monitorId<1)authToken.clear();
+    // An authenticated session may exist before a monitor is selected.
 }
 bool ConfigDialog::saveServerIfChanged(){
     if(getServerIP().isEmpty()){QMessageBox::warning(this,"Server","Enter a valid server IP.");return false;}
@@ -322,9 +360,7 @@ void ConfigDialog::refreshMonitors(){
     assignmentLocked=result.value("assignment_locked").toBool();
     settingsLocked=false;
     activeUserNo=result.value("user").toObject().value("user_no").toString();
-    const QSignalBlocker blocked(userSelector);
-    const int ix=userSelector->findData(activeUserNo);
-    userSelector->setCurrentIndex(ix>=0?ix:0);
+    if(userNoInput)userNoInput->setText(activeUserNo);
     updateMonitorList(result.value("monitors").toArray());
 }
 void ConfigDialog::updateMonitorList(const QJsonArray &items){
@@ -424,10 +460,13 @@ void ConfigDialog::onUserChanged(int){
     else onSwitchClicked();
 }
 void ConfigDialog::updateUI(){
-    const bool enrolled=!authToken.isEmpty()&&monitorId>0;
+    const bool enrolled=!authToken.isEmpty();
     const bool pending=!pendingUserNo.isEmpty();
     const bool locked=enrolled&&(settingsLocked||assignmentLocked);
     monitorGroup->setVisible(enrolled||pending);
+    testButton->setVisible(!enrolled);
+    userNoInput->setVisible(!enrolled);
+    passwordInput->setVisible(!enrolled);
     logoutButton->setVisible(enrolled);
     logoutButton->setEnabled(enrolled&&!locked);
     userSelector->setEnabled(!locked);
