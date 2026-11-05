@@ -2394,19 +2394,8 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             updateUnifiedVisibility(dlg);
             const int ix=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
             const int chosen=ix<0?0:(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,ix,0);
-            if(chosen>0 && settingsPendingUserNo.empty() && chosen!=selectedMonitorId.load() && !getClientToken().empty()){
-                Json::Value request;request["action"]="select";request["monitor_id"]=chosen;
-                const Json::Value answer=callClientAuth(request);
-                if(!answer.get("success",false).asBool()){
-                    showUtf8Message(dlg,answer.get("error","Cannot select this monitor.").asString(),
-                        "Monitor Selection",MB_OK|MB_ICONWARNING);
-                    refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);return TRUE;
-                }
-                selectedMonitorId.store(chosen);
-                refreshUnifiedMonitors(dlg);
-                updateUnifiedVisibility(dlg);
-                updateTrayIcon();
-            }
+            // Monitor selection is a draft until Save is clicked. Do not
+            // change the active telemetry session on combo-box selection.
             std::string ip="—";
             for(const auto& item:settingsMonitors)
                 if(item.get("id",0).asInt()==chosen){ip=item.get("ip_address","—").asString();break;}
@@ -2567,6 +2556,8 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
                     refreshUnifiedMonitors(dlg);return TRUE;
                 }
                 selectedMonitorId.store(chosen);
+                if(!keyboardHook)setupKeyboardHook();
+                if(!usbMonitoringActive)setupUSBMONITORING();
             }
             if(chosen>0&&!settingsEditing){
                 updateUnifiedVisibility(dlg);return TRUE;
