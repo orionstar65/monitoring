@@ -774,7 +774,7 @@ function populateDeviceFilter(devices) {
     const deviceFilter = document.getElementById('deviceFilter');
     deviceFilter.innerHTML = '<option value="">All Devices</option>';
     
-    devices.forEach(device => {
+    window.sortMonitorOptions(devices).forEach(device => {
         const option = document.createElement('option');
         option.value = device.id;
         option.textContent = `${device.user_no || '—'}(${device.username || 'Unassigned'}): ${device.last_seen_ip || device.ip_address || '—'} : ${device.platform || 'Unknown OS'}-${device.type || 'Device'}`;
