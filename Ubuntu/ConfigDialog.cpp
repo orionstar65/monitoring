@@ -338,9 +338,10 @@ void ConfigDialog::updateMonitorList(const QJsonArray &items){
             m.value("type").toString("Desktop"),m.value("ip_address").toString("—")),
             m.value("id").toInt());
     }
-    monitorSelector->addItem("Add new...",-1);
+    monitorSelector->addItem("Add new for this computer...",-1);
     const int ix=monitorSelector->findData(monitorId);
-    monitorSelector->setCurrentIndex(ix>=0?ix:(monitorSelector->count()?0:-1));
+    const int newMonitorIndex=monitorSelector->findData(-1);
+    monitorSelector->setCurrentIndex(!pendingUserNo.isEmpty()?newMonitorIndex:(ix>=0?ix:newMonitorIndex));
     onMonitorChanged(monitorSelector->currentIndex());
 }
 void ConfigDialog::onMonitorChanged(int){
@@ -461,7 +462,9 @@ void ConfigDialog::onPairClicked(){
         if(result.value("code").toString()=="no_monitors"){
             pendingUserNo=number;
             settingsLocked=false;
-            updateMonitorList({});updateUI();return;
+            updateMonitorList(result.value("monitors").toArray());
+            directoryError="Existing monitors are read-only; add a new monitor for this installation.";
+            updateUI();return;
         }
         QMessageBox::warning(this,"User selection failed",result.value("error").toString("Could not load assigned monitors."));
         {
@@ -498,7 +501,9 @@ void ConfigDialog::onSwitchClicked(){
         if(result.value("code").toString()=="no_monitors"){
             pendingUserNo=userSelector->currentData().toString();
             settingsLocked=false;
-            updateMonitorList({});updateUI();return;
+            updateMonitorList(result.value("monitors").toArray());
+            directoryError="Existing monitors are read-only; add a new monitor for this installation.";
+            updateUI();return;
         }
         QMessageBox::warning(this,"Cannot change user",result.value("error").toString("Ask your administrator to change the assignment."));
         refreshMonitors();saveSettings();updateUI();return;
@@ -556,6 +561,11 @@ void ConfigDialog::onLockSettingsClicked(){
 void ConfigDialog::onSaveClicked(){
     if(!saveServerIfChanged())return;
     if(!pendingUserNo.isEmpty()){
+        if(monitorSelector->currentData().toInt()!=-1){
+            QMessageBox::warning(this,"Monitor selection",
+                "This monitor is assigned to another installation. Select Add new, or ask your administrator to reassign it.");
+            return;
+        }
         QJsonObject request={{"action","bootstrap_monitor"},{"user_no",pendingUserNo},
             {"remark",remarkEdit->text().trimmed()},
             {"os",osRadios->checkedButton()?osRadios->checkedButton()->text():"Ubuntu"},
