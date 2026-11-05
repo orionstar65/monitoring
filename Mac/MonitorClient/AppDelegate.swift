@@ -2277,7 +2277,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         return "Unknown"
     }
     
-    private @objc func applicationDidTerminate(_ notification: Notification) {
+    @objc private func applicationDidTerminate(_ notification: Notification) {
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
               let bundleID = app.bundleIdentifier,
               browserBundleIDs.contains(bundleID) else {
