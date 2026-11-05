@@ -14,6 +14,7 @@ import IOKit.usb
 import os.log
 import UserNotifications
 import Security
+import ScreenCaptureKit
 
 let CHECKER_IDENTIFIER = "com.airentech.MonitorClient"
 
@@ -845,9 +846,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             // logMessage("Calling CGRequestScreenCaptureAccess() to trigger system dialog", level: .info)
             CGRequestScreenCaptureAccess()
             
-            // Method 2: Also try to capture screen as backup - this will trigger the system dialog if permission not granted
-            // logMessage("Attempting to capture screen to trigger permission dialog", level: .info)
-            let _ = CGWindowListCreateImage(CGRect.null, .optionOnScreenOnly, kCGNullWindowID, .bestResolution)
+            // CGRequestScreenCaptureAccess already requests the system permission.
+            // Do not invoke deprecated CGWindowListCreateImage as a second probe.
             
             // Show detailed notification based on previous state
             let notification = UNMutableNotificationContent()
