@@ -505,8 +505,9 @@ ob_start();
                 <thead>
                     <tr>
                         <th>Username</th>
-                        <th>Device</th>
                         <th>OS</th>
+                        <th>Machine</th>
+                        <th>IP address</th>
                         <th>Online Hours</th>
                         <th>Not Monitored Hours</th>
                     </tr>
@@ -944,7 +945,6 @@ function displayReportTable(reportData, reportInfo) {
     }
     body.replaceChildren();
     for (const device of reportData) {
-        const deviceName = device.name || device.ip_address || 'Unknown Device';
         const onlineHours = (device.captured_hours || 0) + (device.not_captured_while_online || 0);
         const notMonitoredHours = device.not_captured_while_online || 0;
         const isLaptop = String(device.type || '').toLowerCase().includes('laptop');
@@ -956,8 +956,9 @@ function displayReportTable(reportData, reportInfo) {
             row.append(td);
         }
         cell(device.username || 'Unknown User');
-        cell(deviceName);
         cell(device.os || 'Unknown');
+        cell(device.machine || device.type || 'Unknown');
+        cell(device.ip_address || '—');
         cell(formatHoursMinutes(onlineHours), 'hours-cell');
         cell(formatNotMonitoredTime(notMonitoredHours),
             isLaptop && notMonitoredHours > 0.5 ? 'hours-cell warning' : 'hours-cell');
@@ -1044,8 +1045,9 @@ function exportReport() {
 function generateCSVContent(data) {
     const headers = [
         'Username',
-        'Device',
         'OS',
+        'Machine',
+        'IP address',
         'Online Hours',
         'Not Monitored Hours'
     ];
@@ -1053,17 +1055,15 @@ function generateCSVContent(data) {
     const csvRows = [headers.join(',')];
     
     data.data.forEach(device => {
-        // Get device name or use IP address as fallback
-        const deviceName = device.name || device.ip_address || 'Unknown Device';
-        
-        // Calculate online hours = captured hours + not monitored hours
+         // Calculate online hours = captured hours + not monitored hours
         const onlineHours = (device.captured_hours || 0) + (device.not_captured_while_online || 0);
         const notMonitoredHours = device.not_captured_while_online || 0;
         
         const row = [
             escapeCSVField(device.username || 'Unknown'),
-            escapeCSVField(deviceName),
             escapeCSVField(device.os || 'Unknown'),
+            escapeCSVField(device.machine || device.type || 'Unknown'),
+            escapeCSVField(device.ip_address || '—'),
             onlineHours.toFixed(2),
             notMonitoredHours.toFixed(2)
         ];
