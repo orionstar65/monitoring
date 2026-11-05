@@ -1278,7 +1278,7 @@ std::string httpPostFile(const std::string& url, const std::string& filePath) {
     // Add capture time to form data
     formData += "--" + boundary + "\r\n";
     formData += "Content-Disposition: form-data; name=\"ctime\"\r\n\r\n";
-    formData += getCurrentDateTimeString() + "\r\n";
+    formData += getWireDateTimeString() + "\r\n";
     
     formData += "--" + boundary + "--\r\n";
     
