@@ -559,8 +559,17 @@ void ConfigDialog::onLogoutClicked(){
     QSettings previous(settingsPath(),QSettings::IniFormat);
     const QString oldHost=previous.value("Server/ip","192.168.1.45").toString();
     const int oldPort=previous.value("Server/port",8924).toInt();
-    if(!authToken.isEmpty()&&oldHost==getServerIP()&&oldPort==getServerPort())
+    if(!authToken.isEmpty()){
+        // Revoke against the server that issued the saved token, even if
+        // different server details were typed but never saved.
+        const QString draftHost=getServerIP();
+        const int draftPort=getServerPort();
+        serverIPEdit->setText(oldHost);
+        serverPortEdit->setValue(oldPort);
         authRequest({{"action","logout"}},true);
+        serverIPEdit->setText(draftHost);
+        serverPortEdit->setValue(draftPort);
+    }
     clearStoredToken(oldHost,oldPort);
     authToken.clear();monitorId=0;assignmentLocked=false;activeUserNo.clear();pendingUserNo.clear();logoutPerformed=true;
     connectionStatusLabel->setText("Signed out");
