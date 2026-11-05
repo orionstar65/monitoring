@@ -21,6 +21,8 @@ $checks=[
  'Reset can redirect to user editor'=>str_contains($userController,"(\$_POST['return_to']??'')==='edit'"),
  'Key context remains scoped to selected device'=>str_contains($keyController,'k.monitor_ip_id=:id'),
  'Key timeline has a single scrubber'=>str_contains($keyView,'id="keyTimelineRange"') && !str_contains($keyView,'key-timeline-event"'),
+ 'Full-date timeline API uses bounded density buckets'=>str_contains($keyController,'function api_key_timeline()')&&str_contains($keyController,'LIMIT 3001'),
+ 'UI loads full-date activity after the initial page'=>str_contains($keyView,'loadFullKeyTimeline(keyRulerState)'),
  'Timeline supports zoom'=>str_contains($keyView,'keyTimelineScale')&&str_contains($keyView,'renderKeyRuler'),
  'Keyboard preview renders Enter and Backspace effects'=>str_contains($keyView,"kind:'newline'")&&str_contains($keyView,"last.deleted=true"),
  'Keyboard preview has timestamp column'=>str_contains($keyView,'key-transcript-time'),
