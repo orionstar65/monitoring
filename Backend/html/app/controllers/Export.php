@@ -423,21 +423,20 @@ class Export extends Base {
 
     private function exportDeviceData($device, $start_date, $end_date) {
         $username = $device['username'] ?: 'Unknown';
-        $ip = str_replace('.', '_', $device['ip_address']);
+        $ip = preg_replace('/[^a-zA-Z0-9_.-]/', '_', (string)$device['ip_address']);
         $deviceId = $device['id'];
         
         // Sanitize username for folder names - remove spaces and special characters
         $sanitizedUsername = $this->sanitizeFolderName($username);
         
-        // Create device folder structure
-        $deviceFolder = $this->exportDir . "/{$sanitizedUsername}_{$ip}";
-        $this->logProgress("Creating folder structure for {$username}...");
-        
-        if (!file_exists($deviceFolder)) {
-            mkdir($deviceFolder, 0755, true);
-            $this->logProgress("Created main device folder: {$sanitizedUsername}_{$ip}");
+        // Per-user and per-device export hierarchy.
+        $userFolder = $this->exportDir . "/" . $sanitizedUsername;
+        $deviceFolder = $userFolder . "/" . $ip;
+        $this->logProgress("Creating export folders for {$username} / {$ip}...");
+        if (!is_dir($deviceFolder) && !mkdir($deviceFolder, 0755, true) && !is_dir($deviceFolder)) {
+            throw new RuntimeException('Unable to create device export folder');
         }
-        
+
         // Create subfolders (no spaces in folder names)
         $screenshotsFolder = $deviceFolder . "/screenshots";
         $keylogFolder = $deviceFolder . "/keylog";
