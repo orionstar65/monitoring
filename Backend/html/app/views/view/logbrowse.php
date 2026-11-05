@@ -1421,6 +1421,12 @@ function getStatusText(statusClass) {
 }
 
 function updatePagination(pagination) {
+    // Keylog range navigation is directly above the transcript, not in a
+    // second page navigator beneath the CCTV timeline.
+    if (currentTab === 'key') {
+        document.getElementById('paginationPanel').style.display = 'none';
+        return;
+    }
     if (pagination.total_pages <= 1) {
         document.getElementById('paginationPanel').style.display = 'none';
         return;
@@ -1434,25 +1440,6 @@ function updatePagination(pagination) {
     document.getElementById('paginationInfo').textContent = 
         `Showing ${start} to ${end} of ${pagination.total_entries.toLocaleString()} entries`;
     
-    // Key timeline uses sequential event navigation instead of page numbers.
-    // The backend still fetches bounded pages to avoid loading all keystrokes.
-    if(currentTab==='key'){
-        const prev= Math.max(1,pagination.current_page-1);
-        const next= pagination.current_page+1;
-        document.getElementById('pagination').innerHTML = `
-          <li class="page-item ${pagination.has_prev?'':'disabled'}">
-            <button type="button" class="page-link" ${pagination.has_prev?'':'disabled'} onclick="changePage(${prev})" aria-label="Previous key events">
-              <i class="fas fa-chevron-left me-1"></i>Previous events
-            </button>
-          </li>
-          <li class="page-item ${pagination.has_next?'':'disabled'}">
-            <button type="button" class="page-link" ${pagination.has_next?'':'disabled'} onclick="changePage(${next})" aria-label="Next key events">
-              Next events<i class="fas fa-chevron-right ms-1"></i>
-            </button>
-          </li>`;
-        return;
-    }
-
     // Generate pagination links
     let paginationHtml = '';
     
