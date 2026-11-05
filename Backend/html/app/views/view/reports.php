@@ -776,7 +776,7 @@ function populateDeviceFilter(devices) {
     devices.forEach(device => {
         const option = document.createElement('option');
         option.value = device.id;
-        option.textContent = `${device.username || 'Unknown'} (${device.ip_address})`;
+        option.textContent = `${device.user_no || '—'}(${device.username || 'Unassigned'}): ${device.last_seen_ip || device.ip_address || '—'} : ${device.platform || 'Unknown OS'}-${device.type || 'Device'}`;
         deviceFilter.appendChild(option);
     });
 }
