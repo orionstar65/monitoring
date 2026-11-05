@@ -1979,7 +1979,7 @@ static void changeMonitorFields(HWND dlg) {
     int id=ix>=0?(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,ix,0):0;
     settingsMonitorLocked=false;
     settingsEditing=(id==-1);
-    setDlgUtf8Text(dlg,SETTINGS_SAVE,id==-1?"Add Monitor":"Save Monitor");
+    setDlgUtf8Text(dlg,SETTINGS_SAVE,id==-1?"Add Monitor":"Save");
     setDlgUtf8Text(dlg,SETTINGS_REMARK,"");
     setDlgUtf8Text(dlg,SETTINGS_INFO_OS,"—");
     setDlgUtf8Text(dlg,SETTINGS_INFO_MACHINE,"—");
@@ -2150,9 +2150,8 @@ static void refreshUnifiedMonitors(HWND dlg) {
     int selected=-1;
     for(const auto& m:settingsMonitors){
         const int id=m.get("id",0).asInt();
-        const std::string label="Device #"+std::to_string(id)+" | "+
-            m.get("platform","-").asString()+" | "+m.get("type","desktop").asString()+
-            " | "+m.get("ip_address","-").asString();
+        const std::string label=m.get("ip_address","-").asString()+" | "+
+            m.get("platform","-").asString()+"-"+m.get("type","desktop").asString();
         const std::wstring wide=utf8ToWide(label);
         const int ix=(int)SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)wide.c_str());
         SendMessageW(selector,CB_SETITEMDATA,ix,id);
@@ -2208,8 +2207,10 @@ static void updateUnifiedVisibility(HWND dlg) {
     for(int id:infoIds)ShowWindow(GetDlgItem(dlg,id),existing&&!editing?SW_SHOW:SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_EDIT),existing&&!locked?SW_SHOW:SW_HIDE);
     setDlgUtf8Text(dlg,SETTINGS_EDIT,editing?"Cancel Edit":"Edit");
-    ShowWindow(GetDlgItem(dlg,SETTINGS_SAVE),(!enrolled&&!pending)||editing?SW_SHOW:SW_HIDE);
-    setDlgUtf8Text(dlg,SETTINGS_SAVE,creating?"Add Monitor":enrolled?"Save Monitor":"Save Server");
+    // Save persists server/notification options even when no monitor details are being edited.
+    ShowWindow(GetDlgItem(dlg,SETTINGS_SAVE),SW_SHOW);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_SAVE),!locked);
+    setDlgUtf8Text(dlg,SETTINGS_SAVE,creating?"Add Monitor":"Save");
     EnableWindow(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),existing&&!locked);
     ShowWindow(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),existing?SW_SHOW:SW_HIDE);
     setDlgUtf8Text(dlg,SETTINGS_LOCK_SETTINGS,locked?"Settings Locked":"Lock Settings");
@@ -2416,18 +2417,16 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
                     SendMessageW(combo,CB_RESETCONTENT,0,0);
                     for(const auto& existing:settingsMonitors){
                         const int existingId=existing.get("id",0).asInt();
-                        const std::string label="Device #"+std::to_string(existingId)+" | "+
-                            existing.get("platform","-").asString()+" | "+
-                            existing.get("type","-").asString()+" | "+
-                            existing.get("ip_address","-").asString()+" (assigned)";
+                        const std::string label=existing.get("ip_address","-").asString()+" | "+
+                            existing.get("platform","-").asString()+"-"+existing.get("type","-").asString();
                         const std::wstring wide=utf8ToWide(label);
                         const int index=(int)SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)wide.c_str());
                         SendMessageW(combo,CB_SETITEMDATA,index,existingId);
                     }
-                    const int i=(int)SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Add new for this computer...");
+                    const int i=(int)SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Add new...");
                     SendMessageW(combo,CB_SETITEMDATA,i,-1);
                     SendMessageW(combo,CB_SETCURSEL,i,0);
-                    settingsDirectoryError="Existing monitors are read-only; add a new monitor for this installation.";
+                    settingsDirectoryError.clear();
                     changeMonitorFields(dlg);updateUnifiedVisibility(dlg);
                     return TRUE;
                 }
