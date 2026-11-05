@@ -12,8 +12,7 @@ class Users extends Base {
         $users = $this->db->fetchAll(
             "SELECT u.id,u.user_no,u.name,u.email,u.role,u.created_at,u.must_change_password,
                     MAX(m.last_monitor_tic) AS last_activity,
-                    (SELECT first_m.ip_address FROM tbl_monitor_ips first_m
-                     WHERE first_m.owner_user_id=u.id ORDER BY first_m.id LIMIT 1) AS ip_address
+                    COUNT(m.id) AS device_count
              FROM users u LEFT JOIN tbl_monitor_ips m ON m.owner_user_id=u.id
              GROUP BY u.id,u.user_no,u.name,u.email,u.role,u.created_at,u.must_change_password
              ORDER BY u.created_at DESC"
@@ -151,9 +150,34 @@ class Users extends Base {
             }
         }
         
-        $this->view('users/edit', ['user' => $user, 'error' => $error ?? null]);
+        $monitors = $this->db->fetchAll('SELECT m.* FROM tbl_monitor_ips m WHERE m.owner_user_id=:uid ORDER BY m.id',['uid'=>$id]);
+        $accounts = $this->db->fetchAll('SELECT u.id,u.user_no,u.name,COUNT(m.id) AS device_count FROM users u LEFT JOIN tbl_monitor_ips m ON m.owner_user_id=u.id GROUP BY u.id,u.user_no,u.name ORDER BY u.name,u.id');
+        require_once BASEPATH . 'app/services/StatusService.php';
+        $statusService=StatusService::getInstance();
+        foreach($monitors as &$monitor){$monitor['status_info']=$statusService->calculateClientStatus($monitor['last_monitor_tic']??null);}
+        unset($monitor);
+        $this->view('users/edit', ['user' => $user, 'error' => $error ?? null, 'monitors'=>$monitors, 'accounts'=>$accounts]);
     }
     
+    /** Administrative reassignment independent of the monitor's client-side lock. */
+    public function remap_monitor($id) {
+        $this->requireAdmin();
+        if (($_SERVER['REQUEST_METHOD']??'')!=='POST') {http_response_code(405);exit('POST required');}
+        $monitorId=filter_var($_POST['monitor_id']??null,FILTER_VALIDATE_INT);
+        $userId=filter_var($_POST['owner_user_id']??null,FILTER_VALIDATE_INT)?:null;
+        if (!$monitorId || !$this->db->fetch('SELECT id FROM users WHERE id=:id',['id'=>$id])){http_response_code(404);exit('User or monitor not found');}
+        if($userId && !$this->db->fetch('SELECT id FROM users WHERE id=:id',['id'=>$userId])){http_response_code(400);exit('Invalid target user');}
+        $monitor=$this->db->fetch('SELECT id,owner_user_id FROM tbl_monitor_ips WHERE id=:monitor AND owner_user_id=:owner',
+            ['monitor'=>$monitorId,'owner'=>$id]);
+        if(!$monitor){http_response_code(409);exit('Monitor is no longer assigned to this user');}
+        if((int)$monitor['owner_user_id']!==(int)$userId){
+            $this->db->update('tbl_monitor_ips',['owner_user_id'=>$userId],'id=:id',['id'=>$monitorId]);
+            $this->db->query('UPDATE client_sessions SET revoked_at=NOW() WHERE monitor_id=:id AND revoked_at IS NULL',['id'=>$monitorId]);
+        }
+        $_SESSION['success_message']=$userId?'Monitor reassigned successfully':'Monitor unlinked successfully';
+        $this->redirect('users/edit/'.$id);
+    }
+
     public function reset_password($id) {
         if (($_SERVER['REQUEST_METHOD']??'') !== 'POST') {
             http_response_code(405);exit('POST required');
