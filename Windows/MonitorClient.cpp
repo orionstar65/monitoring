@@ -2255,8 +2255,12 @@ static void updateUnifiedVisibility(HWND dlg) {
                  SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(dlg,SETTINGS_CLOSE),nullptr,332,buttonsY,0,0,
                  SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
-    SetWindowPos(dlg,nullptr,0,0,465,
-                 712,
+    SetWindowPos(GetDlgItem(dlg,SETTINGS_SEND_ALL),nullptr,13,buttonsY+43,0,0,
+                 SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
+    SetWindowPos(GetDlgItem(dlg,SETTINGS_REFRESH_CONFIG),nullptr,174,buttonsY+43,0,0,
+                 SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
+    const int dialogHeight=(enrolled||pending)?buttonsY+112:buttonsY+78;
+    SetWindowPos(dlg,nullptr,0,0,465,dialogHeight,
                  SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
     RedrawWindow(dlg,nullptr,nullptr,RDW_INVALIDATE|RDW_ERASE|RDW_ALLCHILDREN);
 }
