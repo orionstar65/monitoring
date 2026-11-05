@@ -1001,11 +1001,12 @@ function createKeyTimeline(logs) {
         if(document.getElementById('keyTimelineRuler')){
             renderKeyRuler(true);
             inspectKeyContextAt(keyRulerState.selected);
+            loadFullKeyTimeline(keyRulerState);
         }
     });
     return `<div class="key-timeline-wrapper">
       <div class="key-timeline-heading">
-       <div>Key activity history <small>Drag the playhead or click the time ruler · ±2-minute context</small></div>
+       <div>Key activity history <small id="keyTimelineInfo">Loading full filtered range… · Drag the playhead or click the time ruler</small></div>
        <div class="key-ruler-controls">
         <label for="keyTimelineScale" class="text-muted">Scale</label>
         <select id="keyTimelineScale" class="form-select form-select-sm" aria-label="Timeline scale">
@@ -1021,6 +1022,38 @@ function createKeyTimeline(logs) {
       </div>
       <div class="key-context-panel" id="keyContextPanel" aria-live="polite">Select a moment on the timeline to inspect nearby keys.</div>
     </div>`;
+}
+async function loadFullKeyTimeline(state) {
+    const info=document.getElementById('keyTimelineInfo');
+    const params=new URLSearchParams({
+        start_date:currentFilters.start_date||localDateString(),
+        end_date:currentFilters.end_date||localDateString(),
+        device_id:currentFilters.device_id||''
+    });
+    try{
+        const response=await fetch(`<?php echo BASE_URL; ?>logbrowse/api_key_timeline?${params}`,{credentials:'same-origin'});
+        if(!response.ok)throw new Error('HTTP '+response.status);
+        const data=await response.json();
+        if(!data.success)throw new Error(data.error||'Timeline unavailable');
+        if(state!==keyRulerState||currentTab!=='key')return;
+        const points=(data.events||[]).map(event=>({...event,ms:keyEventMillis(event.date)}))
+            .filter(event=>Number.isFinite(event.ms)&&Number(event.monitor_ip_id)>0);
+        if(points.length){
+            state.events=points.sort((a,b)=>a.ms-b.ms);
+            const start=keyEventMillis(data.start_date+' 00:00:00');
+            const end=keyEventMillis(data.end_date+' 23:59:59');
+            if(Number.isFinite(start)&&Number.isFinite(end)&&end>start){
+                state.start=start;
+                state.end=end;
+            }
+            state.selected=state.events[state.events.length-1].ms;
+            renderKeyRuler(true);
+            inspectKeyContextAt(state.selected);
+        }
+        if(info)info.textContent=`${data.start_date} – ${data.end_date} · ${data.bucket_minutes}-minute activity buckets${data.limited?' · First 3,000 buckets shown':''} · Drag or click to inspect ±2 minutes`;
+    }catch(error){
+        if(state===keyRulerState&&info)info.textContent='Showing current page only ('+error.message+'). Drag or click to inspect ±2 minutes.';
+    }
 }
 function renderKeyRuler(centerPlayhead = false) {
     const state = keyRulerState;
@@ -1042,7 +1075,11 @@ function renderKeyRuler(centerPlayhead = false) {
         const time=keyClock(ms);
         tickParts.push(`<div class="key-cctv-tick major" style="left:${toX(ms)}px"><span class="key-cctv-tick-label">${escapeHtml(time)}</span></div>`);
     }
-    const markers=state.events.map((event,i)=>`<div class="key-cctv-activity" style="left:${toX(event.ms)}px" title="${escapeHtml(event.date)}" aria-hidden="true"></div>`).join('');
+    const markers=state.events.map(event=>{
+        const density=Math.max(1,Number(event.event_count)||1);
+        const height=Math.min(33,Math.max(10,8+Math.log2(density+1)*5));
+        return `<div class="key-cctv-activity" style="left:${toX(event.ms)}px;height:${height}px;top:${83-height}px" title="${escapeHtml(event.date)} · ${density} key events" aria-hidden="true"></div>`;
+    }).join('');
     const selectedSeconds=Math.max(0,Math.min(Math.round(span/1000),Math.round((state.selected-state.start)/1000)));
     ruler.style.width=width+'px';
     ruler.innerHTML='<div class="key-cctv-baseline"></div>'
