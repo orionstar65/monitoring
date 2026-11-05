@@ -398,6 +398,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MonitorClient/TransportInfo.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSAccessibilityUsageDescription = "This app needs accessibility access to monitor keyboard input for system monitoring purposes.";
 				INFOPLIST_KEY_NSFullDiskAccessUsageDescription = "This app needs full disk access to read browser history files for system monitoring.";
@@ -430,6 +431,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MonitorClient/TransportInfo.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSAccessibilityUsageDescription = "This app needs accessibility access to monitor keyboard input for system monitoring purposes.";
 				INFOPLIST_KEY_NSFullDiskAccessUsageDescription = "This app needs full disk access to read browser history files for system monitoring.";
