@@ -142,7 +142,7 @@ try {
         $preview=clientMappedMonitorPreview($db,(int)$user['id']);
         http_response_code(409);
         echo json_encode(['success'=>false,'code'=>'no_monitors',
-            'error'=>'Existing monitors are shown for reference. Add a new monitor for this installation.',
+            'error'=>'To reconnect an existing monitor, restore its saved device session. Otherwise register this device.',
             'user_no'=>$userNo,'monitors'=>$preview,'device_count'=>count($preview)]);exit;
     }
     if($action==='signup'||$action==='login'){
@@ -182,7 +182,7 @@ try {
             $preview=clientMappedMonitorPreview($db,(int)$target['id']);
             http_response_code(409);
             echo json_encode(['success'=>false,'code'=>'no_monitors',
-                'error'=>'Existing monitors are shown for reference. Add a new monitor for this installation.',
+                'error'=>'To reconnect an existing monitor, restore its saved device session. Otherwise register this device.',
                 'user_no'=>$newNo,'monitors'=>$preview,'device_count'=>count($preview)]);exit;
         }catch(Throwable $failure){$db->rollback();throw $failure;}
     }
