@@ -428,7 +428,7 @@ void ConfigDialog::onMonitorChanged(int){
         machineInfo->setText(type);
         for(auto *button:machineRadios->buttons())
             if(button->text()==type)button->setChecked(true);
-        settingsLocked=m.value("settings_locked").toBool();
+        settingsLocked=(id==monitorId)&&m.value("settings_locked").toBool();
         monitorIPLabel->setText(m.value("ip_address").toString("—"));
         break;
     }
