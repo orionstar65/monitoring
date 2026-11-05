@@ -681,7 +681,7 @@ function switchTab(tab) {
     document.querySelectorAll('.log-tabs .nav-link').forEach(link => {
         link.classList.remove('active');
     });
-    const activeButton = document.querySelector('.log-tabs .nav-link[onclick="switchTab(\\'' + tab + '\\')"]');
+    const activeButton = Array.from(document.querySelectorAll('.log-tabs .nav-link')).find(button => button.getAttribute('onclick') === `switchTab('${tab}')`);
     if (activeButton) activeButton.classList.add('active');
     
     // Load logs for new tab
