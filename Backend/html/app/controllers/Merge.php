@@ -7,6 +7,11 @@ class Merge extends Base {
     
     public function __construct() {
         parent::__construct();
+        // Viewer accounts may inspect aggregate counts only. Merging or fixing
+        // logs modifies and exposes detailed monitoring records.
+        if (($this->user['role']??'')==='viewer') {
+            http_response_code(403);exit('Access denied');
+        }
         // Merge operations are restricted to the authenticated user's monitors.
         
         // Initialize DatabaseService
