@@ -16,17 +16,6 @@ ob_start();
             <div class="row">
                 <div class="col-md-6">
                     <div class="mb-3">
-                        <label for="email" class="form-label">Email</label>
-                        <input type="email" class="form-control" id="email" name="email"
-                            value="<?= htmlspecialchars($user['email']??'',ENT_QUOTES,'UTF-8') ?>">
-                    </div>
-                </div>
-
-            </div>
-            
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="mb-3">
                         <label for="password" class="form-label">Password (leave blank to keep current)</label>
                         <input type="password" class="form-control" id="password" name="password">
                     </div>
@@ -36,7 +25,6 @@ ob_start();
                         <label for="role" class="form-label">Role</label>
                         <select class="form-select" id="role" name="role">
                             <option value="<?php echo ROLE_USER; ?>" <?php echo $user['role'] === ROLE_USER ? 'selected' : ''; ?>>User</option>
-                            <option value="viewer" <?php echo $user['role']==='viewer'?'selected':''; ?>>Viewer</option>
                             <option value="<?php echo ROLE_ADMIN; ?>" <?php echo $user['role'] === ROLE_ADMIN ? 'selected' : ''; ?>>Admin</option>
                         </select>
                     </div>
