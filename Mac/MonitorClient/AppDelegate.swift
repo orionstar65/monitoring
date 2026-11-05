@@ -2907,8 +2907,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             chooseRadio(machineRadios, value: machineType)
             monitorSettingsLocked = monitor["settings_locked"] as? Bool ??
                 ((monitor["settings_locked"] as? Int ?? 0) == 1)
-            locked = monitorSettingsLocked ||
-                (monitor["assignment_locked"] as? Bool ?? false)
+            locked = pendingUserNo == nil && (monitorSettingsLocked ||
+                (monitor["assignment_locked"] as? Bool ?? false))
+            if pendingUserNo != nil { monitorSettingsLocked = false }
             updateState()
         }
         func refreshMonitors() {
@@ -2977,12 +2978,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             for row in [osInfoRow, machineInfoRow, remarkInfoRow] {
                 row.isHidden = editable
             }
-            edit.isHidden = !enrolled || creating || isLocked
+            edit.isHidden = !enrolled || creating || isLocked || pendingFirstDevice
             edit.title = editable ? "Cancel" : "Edit"
             saveRow.isHidden = !editable
             save.title = creating ? "Add Monitor" : "Save Monitor"
             save.isEnabled = editable && (enrolled || pendingFirstDevice)
-            lockSettings.isHidden = !enrolled || creating
+            lockSettings.isHidden = !enrolled || creating || pendingFirstDevice
             lockSettings.isEnabled = enrolled && !isLocked
             lockSettings.title = isLocked ? "Settings Locked" : "Lock Settings"
             status.stringValue = self.isServerConnected ? "Server reachable" : "Offline / Not configured"
