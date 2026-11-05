@@ -212,8 +212,10 @@ class Export extends Base {
             }
             
             // Validate date range (max 1 month)
+            if (!is_string($start_date) || !is_string($end_date) || !preg_match('/^\\d{4}-\\d{2}-\\d{2}$/D',$start_date) || !preg_match('/^\\d{4}-\\d{2}-\\d{2}$/D',$end_date)) throw new Exception('Invalid export dates');
             $start = new DateTime($start_date);
             $end = new DateTime($end_date);
+            if ($end < $start) throw new Exception('End date must not precede start date');
             $interval = $start->diff($end);
             
             if ($interval->days > 31) {
@@ -309,6 +311,7 @@ class Export extends Base {
         header('Content-Length: '.filesize($zipPath));
         header('Cache-Control: no-store');
         readfile($zipPath);
+        exit;
     }
 
     public function api_progress() {
@@ -524,13 +527,13 @@ class Export extends Base {
     private function exportBrowserLogs($deviceId, $username, $ip, $start_date, $end_date, $folder) {
         $sql = "SELECT * FROM browser_history_logs 
                 WHERE monitor_ip_id = :device_id 
-                AND created_at >= :start_date 
-                AND created_at <= :end_date 
-                ORDER BY created_at ASC";
+                AND visit_date >= :start_date 
+                AND visit_date <= :end_date 
+                ORDER BY visit_date ASC";
         
         $params = [
             'device_id' => $deviceId,
-            'start_date' => $start_date,
+            'start_date' => $start_date . ' 00:00:00',
             'end_date' => $end_date . ' 23:59:59'
         ];
         
@@ -584,7 +587,7 @@ class Export extends Base {
         
         $params = [
             'device_id' => $deviceId,
-            'start_date' => $start_date,
+            'start_date' => $start_date . ' 00:00:00',
             'end_date' => $end_date . ' 23:59:59'
         ];
         
@@ -637,7 +640,7 @@ class Export extends Base {
         
         $params = [
             'device_id' => $deviceId,
-            'start_date' => $start_date,
+            'start_date' => $start_date . ' 00:00:00',
             'end_date' => $end_date . ' 23:59:59'
         ];
         
@@ -691,7 +694,7 @@ class Export extends Base {
         
         $params = [
             'device_id' => $deviceId,
-            'start_date' => $start_date,
+            'start_date' => $start_date . ' 00:00:00',
             'end_date' => $end_date . ' 23:59:59'
         ];
         
