@@ -2411,12 +2411,23 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             if(!response.get("success",false).asBool()||token.size()!=64||monitor<=0){
                 if(response.get("code","").asString()=="no_monitors"){
                     settingsPendingUserNo=number;
-                    settingsMonitors=Json::arrayValue;
+                    settingsMonitors=response.get("monitors",Json::arrayValue);
                     const HWND combo=GetDlgItem(dlg,SETTINGS_MONITOR);
                     SendMessageW(combo,CB_RESETCONTENT,0,0);
-                    const int i=(int)SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Add new...");
+                    for(const auto& existing:settingsMonitors){
+                        const int existingId=existing.get("id",0).asInt();
+                        const std::string label="Device #"+std::to_string(existingId)+" | "+
+                            existing.get("platform","-").asString()+" | "+
+                            existing.get("type","-").asString()+" | "+
+                            existing.get("ip_address","-").asString()+" (assigned)";
+                        const std::wstring wide=utf8ToWide(label);
+                        const int index=(int)SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)wide.c_str());
+                        SendMessageW(combo,CB_SETITEMDATA,index,existingId);
+                    }
+                    const int i=(int)SendMessageW(combo,CB_ADDSTRING,0,(LPARAM)L"Add new for this computer...");
                     SendMessageW(combo,CB_SETITEMDATA,i,-1);
                     SendMessageW(combo,CB_SETCURSEL,i,0);
+                    settingsDirectoryError="Existing monitors are read-only; add a new monitor for this installation.";
                     changeMonitorFields(dlg);updateUnifiedVisibility(dlg);
                     return TRUE;
                 }
@@ -2480,6 +2491,12 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             notificationsEnabled=IsDlgButtonChecked(dlg,SETTINGS_NOTIFY)==BST_CHECKED;
             saveClientSetting("Client","notifications",notificationsEnabled?"1":"0");
             if(!settingsPendingUserNo.empty()){
+                const int currentIndex=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
+                const int chosen=currentIndex<0?0:(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,currentIndex,0);
+                if(chosen!=-1){
+                    showUtf8Message(dlg,"This monitor belongs to another installation. Select Add new to register this computer, or ask your administrator to reassign the monitor.","Monitor selection",MB_OK|MB_ICONWARNING);
+                    return TRUE;
+                }
                 Json::Value req;req["action"]="bootstrap_monitor";req["user_no"]=settingsPendingUserNo;
                 req["remark"]=editText(dlg,SETTINGS_REMARK);
                 req["os"]=IsDlgButtonChecked(dlg,SETTINGS_OS_MAC)==BST_CHECKED?"Mac":
