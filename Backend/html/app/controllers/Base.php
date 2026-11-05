@@ -10,7 +10,15 @@ class Base {
             $this->redirect('auth/change_password');
         }
         if(($this->user['role']??'')!=='admin' && !in_array(get_class($this),['Auth','Monitors','Dashboard','Merge'],true)){
-            http_response_code(403);exit('Access denied');
+            // Summary pages are available to viewers, but log/media/export
+            // endpoints remain admin-only. Never rely on hiding UI controls.
+            $class=get_class($this);
+            $action=explode('/',trim((string)parse_url($_SERVER['REQUEST_URI']??'',PHP_URL_PATH),'/'));
+            $method=end($action);
+            $viewerSummary=($this->user['role']??'')==='viewer'
+                && (($class==='Logbrowse' && in_array($method,['logbrowse','index','api_stats'],true))
+                    || ($class==='View' && in_array($method,['view','index'],true)));
+            if(!$viewerSummary){http_response_code(403);exit('Access denied');}
         }
     }
     
