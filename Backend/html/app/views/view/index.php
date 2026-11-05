@@ -1544,10 +1544,9 @@ function filterMonitors() {
         filteredMonitors = allMonitors.filter(monitor => {
             const username = (monitor.username || '').toLowerCase();
             const type = (monitor.type || '').toLowerCase();
-            const ip = monitor.ip_address.toLowerCase();
+            const ip = String(monitor.last_seen_ip || monitor.ip_address || '').toLowerCase();
             
-            return 
-                   username.includes(filterText) || 
+            return username.includes(filterText) ||
                    type.includes(filterText) ||
                    ip.includes(filterText);
         });
@@ -1590,7 +1589,10 @@ function loadMonitors() {
             $('#lastLiveRefresh').text('Updated '+new Date().toLocaleTimeString());
         },
         error: function(xhr, status, error) {
-            console.log("Failed to load monitors:", error);
+            console.error('Failed to load monitors:', xhr.status, error);
+            if (!allMonitors.length) {
+                $('#monitorList').html('<div class="p-3 text-danger">Unable to load devices. Please refresh the page.</div>');
+            }
             $('#lastLiveRefresh').text('Status unavailable');
         }
     });
@@ -1647,7 +1649,7 @@ function updateMonitorList(monitors) {
                         </span>
                     </div>
                 </div>
-                <div class="monitor-item-username" title="${user}">
+                <div class="monitor-item-username" title="${label}">
                     <i class="fas fa-desktop me-1"></i>Device #${Number(monitor.id)} · User No ${number}
                 </div>
                 <div class="monitor-item-username">
