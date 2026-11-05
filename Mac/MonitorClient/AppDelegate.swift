@@ -3177,26 +3177,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 updateState()
                 if !changing { self.startKeyboardMonitoring() }
             case "monitor":
-                if locked || monitorSettingsLocked {
-                    refreshMonitors()
-                    updateState()
-                    return
-                }
+                // Choosing a monitor only updates the draft UI. Commit the
+                // session binding when the user explicitly clicks Save.
                 updateMonitorFields()
-                let id = picker.selectedItem?.representedObject as? Int ?? 0
-                guard !self.clientToken.isEmpty, id > 0 else { return }
-                if id != self.selectedMonitorId {
-                    let selected = self.clientAuthRequest(["action":"select", "monitor_id":id],authenticated:true)
-                    if selected?["success"] as? Bool != true {
-                        showError(selected?["error"] as? String ?? "Monitor selection denied.")
-                        refreshMonitors()
-                        updateState()
-                        return
-                    }
-                    self.selectedMonitorId = id
-                    refreshMonitors()
-                    updateState()
-                }
                 updateState()
             case "send-all":
                 guard self.selectedMonitorId > 0 else { showError("Select a monitor before sending logs."); return }
@@ -3257,6 +3240,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 self.storage.set(self.notificationsEnabled, forKey: "notifications-enabled")
                 if !monitorEditing && picker.selectedItem?.representedObject as? Int != -1 {
                     guard saveServer() else { showError("Enter a valid server address."); return }
+                    let chosen = picker.selectedItem?.representedObject as? Int ?? 0
+                    if chosen > 0 && chosen != self.selectedMonitorId {
+                        guard !self.clientToken.isEmpty else {
+                            showError("Sign in before selecting a monitor.")
+                            return
+                        }
+                        let selection=self.clientAuthRequest(["action":"select","monitor_id":chosen],authenticated:true)
+                        guard selection?["success"] as? Bool == true else {
+                            showError(selection?["error"] as? String ?? "Monitor selection denied.")
+                            refreshMonitors()
+                            return
+                        }
+                        self.selectedMonitorId=chosen
+                        self.startKeyboardMonitoring()
+                        refreshMonitors()
+                    }
                     updateState()
                     return
                 }
