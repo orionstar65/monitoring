@@ -56,4 +56,3 @@ function getIPBasedPaths($ip_id, $ip_address = null, $mac_address = null) {
     // Redirect to new function - only monitor_id is used
     return getMonitorPaths($ip_id);
 }
-?> 
