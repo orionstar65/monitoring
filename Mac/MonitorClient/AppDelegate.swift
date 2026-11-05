@@ -3251,6 +3251,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     self.storage.set(number, forKey: "user_no")
                     self.isServerConnected = true
                     pendingUserNo = nil
+                    directoryError = nil
                     refreshMonitors()
                     refreshUserDirectory()
                     updateState()
