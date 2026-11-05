@@ -1163,6 +1163,22 @@ let allMonitors = [];
 let filteredMonitors = [];
 let fullscreenShotMap = new Map();
 let visibleShotMap = new Map();
+function attachScreenshotImageFallback(scope) {
+    scope.find('img[data-full-image]').on('error', function() {
+        const full = this.getAttribute('data-full-image');
+        if (!this.dataset.triedOriginal && full && this.src !== new URL(full, document.baseURI).href) {
+            this.dataset.triedOriginal = '1';
+            this.src = full;
+            return;
+        }
+        // An explicit failure is more useful than a broken-image icon.
+        this.style.display = 'none';
+        const message = document.createElement('div');
+        message.className = 'p-3 text-center text-muted small';
+        message.textContent = 'Screenshot unavailable';
+        this.parentNode.insertBefore(message, this.nextSibling);
+    });
+}
 function escapeViewerText(value) {
     return String(value ?? '').replace(/[&<>"']/g, char => ({
         '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -1308,7 +1324,7 @@ waitForJQuery(function() {
                 <div class="cctv-screenshot-card" data-shot-id="${escapeViewerText(id)}"
                      title="View screenshot">
                     <div class="cctv-status-indicator ${statusClass}" title="Status: ${escapeViewerText(statusText)}"></div>
-                    <img src="${escapeViewerText(thumbnailUrl)}" alt="Screenshot" loading="lazy">
+                    <img src="${escapeViewerText(thumbnailUrl)}" data-full-image="${escapeViewerText(fullUrl)}" alt="Screenshot" loading="lazy">
                     <div class="cctv-screenshot-info">
                         <div class="cctv-user-info">
                             <div class="cctv-username">
@@ -1326,6 +1342,7 @@ waitForJQuery(function() {
         });
         
         $('#fullscreenContainer').html(html);
+        attachScreenshotImageFallback($('#fullscreenContainer'));
     }
 
     function showFullscreenError(message) {
@@ -1813,7 +1830,7 @@ function displayScreenshots(screenshots, pagination = null) {
             // Single monitor view - show enhanced time ago and timestamp
             html += `
                 <div class="screenshot-card" data-shot-id="${escapeViewerText(shotId)}">
-                    <img src="${escapeViewerText(thumbnailUrl)}" alt="Screenshot" loading="lazy">
+                    <img src="${escapeViewerText(thumbnailUrl)}" data-full-image="${escapeViewerText(fullUrl)}" alt="Screenshot" loading="lazy">
                     <div class="screenshot-info">
                         <div class="screenshot-timestamp">
                             <i class="fas fa-${getMonitorTypeIcon(monitor.type)} me-1"></i>${monitor.type || 'Desktop'}
@@ -1832,7 +1849,7 @@ function displayScreenshots(screenshots, pagination = null) {
             
             html += `
                 <div class="screenshot-card" data-shot-id="${escapeViewerText(shotId)}">
-                    <img src="${escapeViewerText(thumbnailUrl)}" alt="Screenshot" loading="lazy">
+                    <img src="${escapeViewerText(thumbnailUrl)}" data-full-image="${escapeViewerText(fullUrl)}" alt="Screenshot" loading="lazy">
                     <div class="screenshot-info">
                         <div class="screenshot-badges">
                             ${usernameHtml}
@@ -1854,6 +1871,7 @@ function displayScreenshots(screenshots, pagination = null) {
     }
     
     container.html(html);
+    attachScreenshotImageFallback(container);
 }
 
 function updateHeaderButtons(isSingleMonitor) {
@@ -2127,7 +2145,7 @@ function navigateScreenshot(direction) {
                 const screenshot = response.screenshot;
                 
                 // Update modal content
-                $("#modalImage").attr("src", screenshot.screenshot);
+                $("#modalImage").attr("src", "<?php echo BASE_URL; ?>" + (screenshot.screenshot || ""));
                 $("#modalTitle").text(`Screenshot - ${screenshot.monitor.username} (${screenshot.monitor.ip_address})`);
                 
                 // Update current screenshot ID
