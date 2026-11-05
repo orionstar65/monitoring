@@ -307,6 +307,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             return
         }
         selectedMonitorId = result["monitor_id"] as? Int ?? 0
+        isServerConnected = true
         if let no = (result["user"] as? [String: Any])?["user_no"] {
             storage.set(String(describing: no), forKey: "user_no")
         }
@@ -3007,7 +3008,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             lockSettings.isHidden = !enrolled || creating || pendingFirstDevice
             lockSettings.isEnabled = enrolled && !isLocked
             lockSettings.title = isLocked ? "Settings Locked" : "Lock Settings"
-            status.stringValue = self.isServerConnected ? "Server reachable" : "Offline / Not configured"
+            status.stringValue = enrolled ? "Signed in" : (self.isServerConnected ? "Server reachable" : "Not signed in")
             self.updateTrayStatusDot()
         }
         func saveServer() -> Bool {
