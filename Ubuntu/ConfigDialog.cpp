@@ -307,7 +307,11 @@ void ConfigDialog::rememberToken(const QString &token){
     QProcess secret;
     secret.start("secret-tool",{"store","--label=MonitorClient v1.5 device",
         "service","acc-monitor-v15","host",getServerIP()+":"+QString::number(getServerPort())});
-    if(!secret.waitForStarted(1500))return;
+    if(!secret.waitForStarted(1500)){
+        QMessageBox::warning(this,"Session storage",
+            "The secure keyring is unavailable. Install secret-tool/libsecret and unlock a Secret Service keyring to stay signed in after restarting the app.");
+        return;
+    }
     secret.write(token.toUtf8());secret.write("\n");secret.closeWriteChannel();
     if(!secret.waitForFinished(3500)||secret.exitCode()!=0)
         QMessageBox::warning(this,"Keyring","Install and unlock a Secret Service keyring to remember your selected user.");
