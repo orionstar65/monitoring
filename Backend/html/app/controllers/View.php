@@ -20,7 +20,7 @@ class View extends Base {
         }
         // Get monitors from database only (no expensive file scanning)
         $monitors = $this->db->fetchAll(
-            "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.id ASC"
+            "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.id ASC"
         );
         
         // Add basic status based on database data only
@@ -59,7 +59,7 @@ class View extends Base {
         if ($specific_monitor_id) {
             // DETAIL DEVICE VIEW: Load paginated screenshots for a specific monitor from database
             $monitor = $this->db->fetch(
-                "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:id",
+                "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:id",
                 ['id' => $specific_monitor_id]
             );
             
@@ -149,7 +149,7 @@ class View extends Base {
             // This is MUCH faster than the correlated subquery approach
             // Include MAC address in JOIN for path resolution
             $latest_screenshots = $this->db->fetchAll(
-                "SELECT s.*, m.id as monitor_id, m.ip_address, m.mac_address, owner.name AS username, CONCAT('Device #',m.id) as monitor_name
+                "SELECT s.*, m.id as monitor_id, m.ip_address, m.mac_address, owner.name AS username,owner.user_no AS user_no, CONCAT('Device #',m.id) as monitor_name
                  FROM (
                      SELECT monitor_ip_id, MAX(id) as max_id
                      FROM screenshot_metadata
@@ -217,7 +217,7 @@ class View extends Base {
     
     public function api_parsed_log($ip_id, $log_type, $file_path) {
         $monitor = $this->db->fetch(
-            "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:id",
+            "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:id",
             ['id' => $ip_id]
         );
         
@@ -369,7 +369,7 @@ class View extends Base {
         $file_hash = $matches[2];
         
         $monitor = $this->db->fetch(
-            "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:id",
+            "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:id",
             ['id' => $monitor_id]
         );
         
@@ -427,7 +427,7 @@ class View extends Base {
         $file_hash = $matches[2];
         
         $monitor = $this->db->fetch(
-            "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:id",
+            "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:id",
             ['id' => $monitor_id]
         );
         
@@ -464,7 +464,7 @@ class View extends Base {
 
         // Get monitor info (by id, not by ip)
         $monitor = $this->db->fetch(
-            "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:id",
+            "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:id",
             ['id' => $monitor_id]
         );
 
@@ -577,7 +577,7 @@ class View extends Base {
     public function logs() {
         // Get monitors from database
         $monitors = $this->db->fetchAll(
-            "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.id ASC"
+            "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.id ASC"
         );
         
         // Add basic status based on database data only
@@ -598,7 +598,7 @@ class View extends Base {
      */
     public function api_logs_paginated($monitor_id) {
         $monitor = $this->db->fetch(
-            "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:id",
+            "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:id",
             ['id' => $monitor_id]
         );
         
@@ -715,7 +715,7 @@ class View extends Base {
      */
     public function api_log_stats($monitor_id) {
         $monitor = $this->db->fetch(
-            "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:id",
+            "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:id",
             ['id' => $monitor_id]
         );
         
