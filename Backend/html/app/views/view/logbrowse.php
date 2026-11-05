@@ -1005,13 +1005,15 @@ function createKeyTimeline(logs) {
     if (!valid.length) return '<div class="p-3 text-muted">No usable timestamps found for this page.</div>';
     const start = Math.floor((valid[0].ms-120000)/60000)*60000;
     const end = Math.ceil((valid[valid.length-1].ms+120000)/60000)*60000;
-    keyRulerState = {events:valid,start,end,scale:'medium',selected:valid[valid.length-1].ms};
+    const rangeEnd=valid[valid.length-1].ms;
+    const rangeStart=Math.max(start,rangeEnd-5*60000);
+    keyRulerState = {events:valid,start,end,scale:'medium',rangeStart,rangeEnd,activeHandle:null};
     // A single continuous ruler contains all loaded events, even across
     // multiple devices. Scrubbing chooses the nearest device as its context.
     requestAnimationFrame(()=>{
         if(document.getElementById('keyTimelineRuler')){
             renderKeyRuler(true);
-            inspectKeyContextAt(keyRulerState.selected);
+            inspectKeyContextRange();
             loadFullKeyTimeline(keyRulerState);
         }
     });
@@ -1068,13 +1070,14 @@ async function loadFullKeyTimeline(state) {
                 state.start=start;
                 state.end=end;
             }
-            state.selected=state.events[state.events.length-1].ms;
+            state.rangeEnd=state.events[state.events.length-1].ms;
+            state.rangeStart=Math.max(state.start,state.rangeEnd-5*60000);
             renderKeyRuler(true);
-            inspectKeyContextAt(state.selected);
+            inspectKeyContextRange();
         }
-        if(info)info.textContent=`${data.start_date} – ${data.end_date} · ${data.bucket_minutes}-minute activity buckets${data.limited?' · First 3,000 buckets shown':''} · Drag or click to inspect ±2 minutes`;
+        if(info)info.textContent=`${data.start_date} – ${data.end_date} · ${data.bucket_minutes}-minute activity buckets${data.limited?' · First 3,000 buckets shown':''} · Drag handles to select a time range`;
     }catch(error){
-        if(state===keyRulerState&&info)info.textContent='Showing current page only ('+error.message+'). Drag or click to inspect ±2 minutes.';
+        if(state===keyRulerState&&info)info.textContent='Showing current page only ('+error.message+'). Drag handles to select a time range.';
     }
 }
 function renderKeyRuler(centerPlayhead = false) {
@@ -1102,25 +1105,68 @@ function renderKeyRuler(centerPlayhead = false) {
         const height=Math.min(33,Math.max(10,8+Math.log2(density+1)*5));
         return `<div class="key-cctv-activity" style="left:${toX(event.ms)}px;height:${height}px;top:${83-height}px" title="${escapeHtml(event.date)} · ${density} key events" aria-hidden="true"></div>`;
     }).join('');
-    const selectedSeconds=Math.max(0,Math.min(Math.round(span/1000),Math.round((state.selected-state.start)/1000)));
     ruler.style.width=width+'px';
     ruler.innerHTML='<div class="key-cctv-baseline"></div>'
         +tickParts.join('')+markers
-        +`<div class="key-cctv-playhead" id="keyTimelinePlayhead" style="left:${toX(state.selected)}px"></div>`
-        +`<input id="keyTimelineRange" class="key-cctv-range" type="range" min="0" max="${Math.round(span/1000)}" step="1" value="${selectedSeconds}" aria-label="Select time on keyboard history timeline">`;
-    document.getElementById('keyTimelineSelected').textContent=keyClock(state.selected,true);
+        +'<div class="key-cctv-selection" id="keyTimelineSelection"></div>';
+    updateKeyRangeVisual();
     if(centerPlayhead){
-        viewport.scrollLeft=Math.max(0,toX(state.selected)-viewport.clientWidth/2);
+        const midpoint=(state.rangeStart+state.rangeEnd)/2;
+        viewport.scrollLeft=Math.max(0,toX(midpoint)-viewport.clientWidth/2);
     }
 }
-function updateKeyPlayhead(seconds) {
+function updateKeyRangeVisual() {
+    const state=keyRulerState;
+    if(!state||!state.width)return;
+    const selected=document.getElementById('keyTimelineSelection');
+    const selectedLabel=document.getElementById('keyTimelineSelected');
+    const startInput=document.getElementById('keyRangeStart');
+    const endInput=document.getElementById('keyRangeEnd');
+    const navLabel=document.getElementById('keyContextRangeLabel');
+    if(selected){
+        const left=(state.rangeStart-state.start)/(state.end-state.start)*state.width;
+        const right=(state.rangeEnd-state.start)/(state.end-state.start)*state.width;
+        selected.style.left=Math.max(0,left)+'px';
+        selected.style.width=Math.max(2,right-left)+'px';
+    }
+    if(selectedLabel)selectedLabel.textContent=keyClock(state.rangeStart,true)+' – '+keyClock(state.rangeEnd,true);
+    if(navLabel)navLabel.textContent=keyClock(state.rangeStart,true)+' – '+keyClock(state.rangeEnd,true);
+    const formatInput=ms=>keyClock(ms,true).replace(' ','T');
+    if(startInput&&document.activeElement!==startInput)startInput.value=formatInput(state.rangeStart);
+    if(endInput&&document.activeElement!==endInput)endInput.value=formatInput(state.rangeEnd);
+    const previous=document.getElementById('keyPreviousRange');
+    const next=document.getElementById('keyNextRange');
+    if(previous)previous.disabled=state.rangeStart<=state.start;
+    if(next)next.disabled=state.rangeEnd>=state.end;
+}
+function updateKeyTimeRange(from,to,load=true) {
+    const state=keyRulerState;
+    if(!state||!Number.isFinite(from)||!Number.isFinite(to))return;
+    const minimum=1000;
+    const start=Math.max(state.start,Math.min(state.end-minimum,from));
+    const end=Math.max(start+minimum,Math.min(state.end,to));
+    state.rangeStart=start;
+    state.rangeEnd=end;
+    updateKeyRangeVisual();
+    if(load)inspectKeyContextRange();
+}
+function shiftKeyTimeRange(direction){
     const state=keyRulerState;
     if(!state)return;
-    state.selected=Math.min(state.end,Math.max(state.start,state.start+Number(seconds)*1000));
-    const playhead=document.getElementById('keyTimelinePlayhead');
-    if(playhead)playhead.style.left=((state.selected-state.start)/(state.end-state.start)*state.width)+'px';
-    const display=document.getElementById('keyTimelineSelected');
-    if(display)display.textContent=keyClock(state.selected,true);
+    const duration=state.rangeEnd-state.rangeStart;
+    const shiftedStart=Math.max(state.start,Math.min(state.end-duration,state.rangeStart+direction*duration));
+    updateKeyTimeRange(shiftedStart,shiftedStart+duration);
+    const viewport=document.getElementById('keyTimelineViewport');
+    if(viewport&&state.width){
+        const midpoint=(state.rangeStart+state.rangeEnd)/2;
+        viewport.scrollLeft=Math.max(0,((midpoint-state.start)/(state.end-state.start)*state.width)-viewport.clientWidth/2);
+    }
+}
+function keyRangePointerTime(event,ruler){
+    const state=keyRulerState;
+    const rect=ruler.getBoundingClientRect();
+    const ratio=Math.max(0,Math.min(1,(event.clientX-rect.left)/Math.max(1,rect.width)));
+    return state.start+ratio*(state.end-state.start);
 }
 function transcriptKeyRows(keys) {
     const applicationName = entry => String(entry?.application || '').trim() || 'Unknown app';
