@@ -1956,58 +1956,71 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
     
     @objc func TakeScreenShotsAndPost() {
-        logMonitoringEvent("Starting screenshot capture")
-        
-        // Check screen recording permission first
-        if !isScreenRecordingEnabled() {
+        guard isScreenRecordingEnabled() else {
             logError("Screen recording permission not granted", context: "Screenshot")
             requestScreenRecordingPermission()
             return
         }
-        
-        // Use CGWindowListCreateImage for screenshot capture (available in macOS 14.0)
-        let displayCount = NSScreen.screens.count
-        
-        if (displayCount == 0) {
-            logError("No displays found", context: "Screenshot")
-            return
-        }
-        
-        logMessage("Found \(displayCount) display(s)", level: .debug)
-        
-        // Capture single screenshot of all displays combined
-        let filename = NSTemporaryDirectory() + "screenshot.jpg"
-        
-        // Use CGWindowListCreateImage to capture the entire screen area
-        if let image = CGWindowListCreateImage(
-            CGRect.null,
-            .optionOnScreenOnly,
-            kCGNullWindowID,
-            .bestResolution
-        ) {
-            let bitmapRep = NSBitmapImageRep(cgImage: image)
-            let options: [NSBitmapImageRep.PropertyKey: Any] = [.compressionFactor: 0.21]
-            
-            if let jpegData = bitmapRep.representation(using: .jpeg, properties: options) {
-                do {
-                    try jpegData.write(to: URL(fileURLWithPath: filename), options: .atomic)
-                    logMessage("Screenshot saved: \(filename) (\(jpegData.count) bytes)", level: .debug)
-                    postImage(path: filename)
-                } catch {
-                    logError("Failed to save screenshot: \(error)", context: "Screenshot")
+        // ScreenCaptureKit replaces deprecated CGWindowListCreateImage.
+        // Stitch individual screens to retain the combined-image upload.
+        Task { [weak self] in
+            guard let self = self else { return }
+            do {
+                let displays = try await SCShareableContent.excludingDesktopWindows(
+                    false, onScreenWindowsOnly: true).displays
+                guard !displays.isEmpty else {
+                    self.logError("No capture displays found", context: "Screenshot")
+                    return
                 }
+                let bounds = displays.reduce(CGRect.null) { $0.union($1.frame) }
+                let scale = displays.map {
+                    CGFloat($0.width) / max(CGFloat(1), $0.frame.width)
+                }.max() ?? 1.0
+                let width = Int(ceil(bounds.width * scale))
+                let height = Int(ceil(bounds.height * scale))
+                guard width > 0, height > 0,
+                      let context = CGContext(
+                        data: nil, width: width, height: height,
+                        bitsPerComponent: 8, bytesPerRow: 0,
+                        space: CGColorSpaceCreateDeviceRGB(),
+                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                      ) else {
+                    self.logError("Invalid screenshot bitmap", context: "Screenshot")
+                    return
+                }
+                context.scaleBy(x: scale, y: scale)
+                for display in displays {
+                    let filter = SCContentFilter(
+                        display: display, excludingApplications: [], exceptingWindows: [])
+                    let config = SCStreamConfiguration()
+                    config.width = display.width
+                    config.height = display.height
+                    config.showsCursor = false
+                    let image = try await SCScreenshotManager.captureImage(
+                        contentFilter: filter, configuration: config)
+                    context.draw(image, in: CGRect(
+                        x: display.frame.minX - bounds.minX,
+                        y: bounds.maxY - display.frame.maxY,
+                        width: display.frame.width,
+                        height: display.frame.height
+                    ))
+                }
+                guard let result = context.makeImage(),
+                      let jpeg = NSBitmapImageRep(cgImage: result).representation(
+                          using: .jpeg, properties: [.compressionFactor: 0.21]) else {
+                    self.logError("Screenshot encoding failed", context: "Screenshot")
+                    return
+                }
+                let filename = NSTemporaryDirectory() + "screenshot.jpg"
+                try jpeg.write(to: URL(fileURLWithPath: filename), options: .atomic)
+                self.postImage(path: filename)
+            } catch {
+                self.logError("ScreenCaptureKit capture failed: \(error)", context: "Screenshot")
             }
-        } else {
-            logError("Failed to capture screenshot", context: "Screenshot")
         }
-        
-        logSuccess("Screenshot capture completed", details: "1 combined screenshot")
     }
-    
 
-    
 
-    
     func waitFor (_ wait: inout Bool) {
         while (wait) {
             RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.1))
