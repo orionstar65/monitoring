@@ -832,4 +832,3 @@ class View extends Base {
         }
     }
 }
-?> 
