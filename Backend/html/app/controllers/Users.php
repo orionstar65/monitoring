@@ -196,7 +196,7 @@ class Users extends Base {
         ],'id=:id',['id'=>$id]);
         $this->db->query('UPDATE client_sessions SET revoked_at=NOW() WHERE user_id=:id AND revoked_at IS NULL',['id'=>$id]);
         $_SESSION['success_message']='Temporary default password applied. User must change it on next sign-in.';
-        $this->redirect('users');
+        $this->redirect(($_POST['return_to']??'')==='edit'?'users/edit/'.$id:'users');
     }
 
     public function delete($id) {
