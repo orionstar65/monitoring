@@ -407,16 +407,9 @@ void ConfigDialog::onMonitorChanged(int){
         // These are directory previews, not authorized device sessions.
         // Do not try to activate another machine's monitor.
         monitorEditing=false;
-    }else if(id>0 && !authToken.isEmpty() && id!=monitorId){
-        const auto response=authRequest({{"action","select"},{"monitor_id",id}},true);
-        if(!response.value("success").toBool()){
-            QMessageBox::warning(this,"Monitor selection",
-                response.value("error").toString("Cannot select this monitor."));
-            refreshMonitors();
-            return;
-        }
-        monitorId=id;
-        for(const auto &value:assignedMonitors){
+    }
+    // Choosing a monitor only previews its details. Save commits selection.
+    for(const auto &value:assignedMonitors){
             const auto monitor=value.toObject();
             if(monitor.value("id").toInt()==id){
                 assignmentLocked=monitor.value("assignment_locked").toBool();
@@ -636,7 +629,20 @@ void ConfigDialog::onSaveClicked(){
     }
     if(authToken.isEmpty()){connectionStatusLabel->setText("● Sign in to select a monitor");return;}
     const int id=monitorSelector->currentData().toInt();
-    if(id>0&&!monitorEditing)return;
+    if(id>0&&!monitorEditing){
+        if(id!=monitorId){
+            const auto result=authRequest({{"action","select"},{"monitor_id",id}},true);
+            if(!result.value("success").toBool()){
+                QMessageBox::warning(this,"Monitor selection",result.value("error").toString("Monitor selection denied."));
+                refreshMonitors();return;
+            }
+            monitorId=id;
+        }
+        saveSettings();
+        refreshMonitors();updateUI();
+        emit sessionStateChanged();
+        return;
+    }
     if((settingsLocked||assignmentLocked)&&id!=-1){
         QMessageBox::warning(this,"Settings locked","Ask your administrator to unlock this monitor.");return;
     }
