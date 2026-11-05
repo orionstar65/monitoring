@@ -16,7 +16,7 @@ class Reports extends Base {
     public function index() {
         // Get all monitors for device filtering
         $monitors = $this->db->fetchAll(
-            "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.ip_address ASC"
+            "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY (owner.id IS NULL), CAST(owner.user_no AS UNSIGNED), owner.name, COALESCE(m.type,''), COALESCE(m.platform,''), INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)), COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address), m.id"
         );
         
         $this->view('view/reports', ['monitors' => $monitors]);
@@ -30,7 +30,7 @@ class Reports extends Base {
         $devices = $this->db->fetchAll(
             "SELECT m.id,m.ip_address,m.mac_address,owner.name AS username,owner.user_no AS user_no,CONCAT('Device #',m.id) AS name,m.type,m.platform,m.last_seen_ip,m.last_monitor_tic,m.updated_at
              FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
-             ORDER BY owner.name ASC,m.ip_address ASC"
+             ORDER BY (owner.id IS NULL), CAST(owner.user_no AS UNSIGNED), owner.name, COALESCE(m.type,''), COALESCE(m.platform,''), INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)), COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address), m.id"
         );
         
         // Calculate status in PHP using StatusService for consistency
@@ -122,14 +122,14 @@ class Reports extends Base {
                                    COALESCE(NULLIF(m.platform, ''), m.type, 'Unknown') as os
                            FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
                            WHERE 1=1 {$device_filter}
-                           ORDER BY owner.name ASC, m.ip_address ASC";
+                           ORDER BY (owner.id IS NULL), CAST(owner.user_no AS UNSIGNED), owner.name, COALESCE(m.type,''), COALESCE(m.platform,''), INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)), COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address), m.id";
         } else {
             // If platform column doesn't exist, use type as OS
             $devices_sql = "SELECT m.id, m.ip_address, m.last_seen_ip, owner.name AS username, CONCAT('Device #',m.id) AS name, m.type, 
                                    COALESCE(m.type, 'Unknown') as os
                        FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
                        WHERE 1=1 {$device_filter}
-                       ORDER BY owner.name ASC, m.ip_address ASC";
+                       ORDER BY (owner.id IS NULL), CAST(owner.user_no AS UNSIGNED), owner.name, COALESCE(m.type,''), COALESCE(m.platform,''), INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)), COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address), m.id";
         }
         
         $devices = $this->db->query($devices_sql, $device_filter ? $params : [])->fetchAll();
