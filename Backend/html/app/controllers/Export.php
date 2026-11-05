@@ -764,7 +764,7 @@ class Export extends Base {
                 }
                 
                 // Create sequential filename for FFmpeg
-                $tempFilename = sprintf("img_%04d.jpg", $index);
+                $tempFilename = sprintf("img_%04d.jpg", $processedCount);
                 $tempPath = $outputFolder . "/" . $tempFilename;
                 
                 // Copy to output folder
@@ -803,17 +803,16 @@ class Export extends Base {
                 $this->logProgress("FFmpeg output: " . implode("\n", $output));
             }
             
-            // Clean up individual image files after video creation
-            $this->cleanupImageFiles($outputFolder);
-            
-            if ($returnCode === 0 && file_exists($videoPath)) {
+            if ($returnCode === 0 && file_exists($videoPath) && filesize($videoPath)>0) {
+                $this->cleanupImageFiles($outputFolder);
                 $fileSize = $this->formatFileSize(filesize($videoPath));
                 $this->logProgress("✓ Video created successfully: {$videoFilename} ({$fileSize})");
                 return $videoPath;
-            } else {
-                $this->logProgress("⚠ FFmpeg failed with return code: {$returnCode}");
-                return false;
             }
+            // Preserve screenshots if the video transcoder fails. An image
+            // archive is more useful than a successful ZIP missing its media.
+            $this->logProgress("⚠ FFmpeg failed with return code: {$returnCode}; preserving screenshot JPGs");
+            return $outputFolder;
             
         } catch (Exception $e) {
             $this->logProgress("⚠ Video creation failed: " . $e->getMessage());
