@@ -309,10 +309,15 @@ void ConfigDialog::loadRememberedSession(){
     authToken=readRememberedToken();
     if(authToken.isEmpty())return;
     auto state=authRequest({{"action","restore"}},true);
-    if(!state.value("success").toBool()){authToken.clear();return;}
+    if(!state.value("success").toBool()){
+        authToken.clear();
+        connectionStatusLabel->setText("Session unavailable · Sign in again");
+        return;
+    }
     monitorId=state.value("monitor_id").toInt();
     activeUserNo=state.value("user").toObject().value("user_no").toString();
     assignmentLocked=state.value("assignment_locked").toBool();
+    connectionStatusLabel->setText("Signed in as "+activeUserNo);
     // An authenticated session may exist before a monitor is selected.
 }
 bool ConfigDialog::saveServerIfChanged(){
@@ -558,7 +563,8 @@ void ConfigDialog::onLogoutClicked(){
         authRequest({{"action","logout"}},true);
     clearStoredToken(oldHost,oldPort);
     authToken.clear();monitorId=0;assignmentLocked=false;activeUserNo.clear();pendingUserNo.clear();logoutPerformed=true;
-    updateMonitorList({});saveSettings();updateUI();
+    connectionStatusLabel->setText("Signed out");
+    updateMonitorList({});updateUI();
     emit sessionStateChanged();
 }
 void ConfigDialog::onEditClicked(){
