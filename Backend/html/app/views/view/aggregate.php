@@ -6,7 +6,7 @@ ob_start();
 <div class="container-fluid px-2 px-md-3">
  <div class="mb-3"><h3 class="mb-1">Monitoring overview</h3>
  <p class="text-muted mb-0">Aggregate activity for your assigned devices. Detailed screenshots, browser history, keystrokes and USB activity are restricted.</p></div>
- <div class="row g-3" id="viewerTotals">
+ <div class="row g-3" id="viewerTotals">\n  <div class="col-6 col-lg-3"><div class="card h-100"><div class="card-body"><div class="text-muted">Screenshots</div><h2 id="viewerScreenshots">—</h2></div></div></div>
   <div class="col-6 col-lg-3"><div class="card h-100"><div class="card-body"><div class="text-muted">Total logs</div><h2 id="viewerTotal">—</h2></div></div></div>
   <div class="col-6 col-lg-3"><div class="card h-100"><div class="card-body"><div class="text-muted">Browser events</div><h2 id="viewerBrowser">—</h2></div></div></div>
   <div class="col-6 col-lg-3"><div class="card h-100"><div class="card-body"><div class="text-muted">Key events</div><h2 id="viewerKeys">—</h2></div></div></div>
@@ -22,7 +22,7 @@ ob_start();
   const data=await response.json();
   if(!data.success)throw new Error('Summary unavailable');
   const s=data.stats;
-  for(const [id,v] of Object.entries({viewerTotal:s.total,viewerBrowser:s.browser_history,viewerKeys:s.key_logs,viewerUsb:s.usb_logs})){
+  for(const [id,v] of Object.entries({viewerTotal:s.total,viewerScreenshots:s.screenshots,viewerBrowser:s.browser_history,viewerKeys:s.key_logs,viewerUsb:s.usb_logs})){
    document.getElementById(id).textContent=Number(v||0).toLocaleString();
   }
   document.getElementById('viewerStatus').textContent='Summary only · Log details are restricted for viewer accounts.';
