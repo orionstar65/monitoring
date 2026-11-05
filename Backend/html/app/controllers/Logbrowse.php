@@ -360,13 +360,28 @@ class Logbrowse extends Base {
         $usb_where_clause = !empty($usb_where_conditions) ? 'WHERE ' . implode(' AND ', $usb_where_conditions) : '';
         $usb_count = $this->db->query("SELECT COUNT(*) as total FROM usb_device_logs {$usb_where_clause}", $usb_params)->fetch()['total'];
         
+        // Include screenshots in the aggregate-only response. Use the
+        // same ownership and date bounds; never return media paths to viewers.
+        $shotWhere = [];
+        $shotParams = [];
+        if(($this->user['role']??'')==='viewer'){
+            $shotWhere[]='monitor_ip_id IN (SELECT id FROM tbl_monitor_ips WHERE owner_user_id=:viewer_id)';
+            $shotParams['viewer_id']=(int)$this->user['id'];
+        }
+        if($device_id){$shotWhere[]='monitor_ip_id=:device_id';$shotParams['device_id']=$device_id;}
+        if($start_date){$shotWhere[]='capture_datetime>=:start_date';$shotParams['start_date']=$start_date.' 00:00:00';}
+        if($end_date){$shotWhere[]='capture_datetime<=:end_date';$shotParams['end_date']=$end_date.' 23:59:59';}
+        $shotClause=$shotWhere?' WHERE '.implode(' AND ',$shotWhere):'';
+        $screenshotCount=(int)$this->db->query('SELECT COUNT(*) AS total FROM screenshot_metadata'.$shotClause,$shotParams)->fetch()['total'];
+
         $this->json([
             'success' => true,
             'stats' => [
+                'screenshots' => $screenshotCount,
                 'browser_history' => $browser_count,
                 'key_logs' => $key_count,
                 'usb_logs' => $usb_count,
-                'total' => $browser_count + $key_count + $usb_count
+                'total' => $browser_count + $key_count + $usb_count + $screenshotCount
             ]
         ]);
     }
