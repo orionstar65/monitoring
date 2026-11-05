@@ -506,7 +506,7 @@
                     <span>Monitor IPs</span>
                 </a>
             </div>
-            <?php if(($_SESSION['role']??'')!=='viewer'): ?>
+            <?php if(($_SESSION['role']??'')!=='user'): ?>
             <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'merge' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>merge">
                     <i class="fas fa-code-branch"></i>
@@ -546,7 +546,7 @@
                 </a>
             </div>
             <?php endif; ?>
-            <?php if(($_SESSION['role']??'')==='viewer'): ?>
+            <?php if(($_SESSION['role']??'')==='user'): ?>
             <div class="nav-item">
                 <a class="nav-link <?= $active_page==='view'?'active':'' ?>" href="<?= BASE_URL ?>view">
                     <i class="fas fa-chart-bar"></i><span>Monitoring totals</span>
