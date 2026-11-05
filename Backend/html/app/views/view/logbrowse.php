@@ -1238,43 +1238,79 @@ function transcriptKeyRows(keys) {
     return '<div class="key-transcript" role="table" aria-label="Keyboard events with timestamps">'+transcript+'</div>'
         +(specials?'<div class="small text-muted mt-3 mb-1">Other key events</div><div class="key-remaining">'+specials+'</div>':'');
 }
-async function inspectKeyContextAt(ms) {
+async function inspectKeyContextRange() {
     const state=keyRulerState;
-    const panel=document.getElementById('keyContextPanel');
+    const panel=document.getElementById('keyContextBody');
     if(!state||!panel||!state.events.length)return;
-    const nearest=state.events.reduce((best,event)=>Math.abs(event.ms-ms)<Math.abs(best.ms-ms)?event:best,state.events[0]);
+    const midpoint=(state.rangeStart+state.rangeEnd)/2;
+    // An all-devices timeline may show many machines; a selected device filter
+    // takes priority. Otherwise choose the device nearest this range.
+    const nearest=state.events.reduce((best,event)=>Math.abs(event.ms-midpoint)<Math.abs(best.ms-midpoint)?event:best,state.events[0]);
     const seq=++keyContextRequestId;
-    const center=keyClock(ms,true);
-    panel.textContent='Loading keyboard events around '+center+'…';
-    const params=new URLSearchParams({device_id:String(nearest.monitor_ip_id),at:center});
+    const from=keyClock(state.rangeStart,true);
+    const to=keyClock(state.rangeEnd,true);
+    panel.textContent='Loading keyboard events for selected range…';
+    const params=new URLSearchParams({device_id:String(currentFilters.device_id||nearest.monitor_ip_id),from,to});
     try{
         const response=await fetch(`<?php echo BASE_URL; ?>logbrowse/api_key_context?${params}`,{credentials:'same-origin'});
         if(!response.ok)throw new Error('HTTP '+response.status);
         const data=await response.json();
-        if(seq!==keyContextRequestId||!panel.isConnected)return;
-        if(!data.success)throw new Error(data.error||'Unable to load context');
-        const keys=(data.logs||[]);
+        if(seq!==keyContextRequestId||!panel.isConnected||state!==keyRulerState)return;
+        if(!data.success)throw new Error(data.error||'Unable to load keylogs');
+        const keys=data.logs||[];
         const device=`${nearest.user_no||'—'}(${nearest.username||'Unassigned'}): ${nearest.ip_address||'—'}`;
-        panel.innerHTML=`<div class="key-context-heading"><strong>${escapeHtml(center)}</strong>
-          <span class="text-muted">${escapeHtml(device)} · ${keys.length} keys${data.limited?' (first 2,000)':''}</span></div>`
-          +(keys.length?transcriptKeyRows(keys):'<div class="text-muted">No keys recorded within two minutes of this point.</div>');
+        panel.innerHTML=`<div class="key-context-heading"><span class="text-muted">${escapeHtml(device)} · ${keys.length} key events${data.limited?' (first 2,000; narrow the range for more)':''}</span></div>`
+            +(keys.length?transcriptKeyRows(keys):'<div class="text-muted">No keys were recorded in this time range.</div>');
     }catch(error){
-        if(seq===keyContextRequestId)panel.textContent='Cannot load key context: '+error.message;
+        if(seq===keyContextRequestId)panel.textContent='Cannot load keylogs: '+error.message;
     }
 }
-document.addEventListener('input',event=>{
-    if(event.target?.id==='keyTimelineRange')updateKeyPlayhead(event.target.value);
+document.addEventListener('pointerdown',event=>{
+    const ruler=event.target.closest?.('#keyTimelineRuler');
+    const state=keyRulerState;
+    if(!ruler||!state)return;
+    const time=keyRangePointerTime(event,ruler);
+    state.activeHandle=Math.abs(time-state.rangeStart)<=Math.abs(time-state.rangeEnd)?'start':'end';
+    ruler.setPointerCapture(event.pointerId);
+    const second=Math.round(time/1000)*1000;
+    if(state.activeHandle==='start')updateKeyTimeRange(second,state.rangeEnd,false);
+    else updateKeyTimeRange(state.rangeStart,second,false);
+});
+document.addEventListener('pointermove',event=>{
+    const ruler=document.getElementById('keyTimelineRuler');
+    const state=keyRulerState;
+    if(!ruler||!state?.activeHandle||!ruler.hasPointerCapture(event.pointerId))return;
+    const second=Math.round(keyRangePointerTime(event,ruler)/1000)*1000;
+    if(state.activeHandle==='start')updateKeyTimeRange(second,state.rangeEnd,false);
+    else updateKeyTimeRange(state.rangeStart,second,false);
+});
+document.addEventListener('pointerup',event=>{
+    const ruler=document.getElementById('keyTimelineRuler');
+    if(!keyRulerState?.activeHandle||!ruler||!ruler.hasPointerCapture(event.pointerId))return;
+    keyRulerState.activeHandle=null;
+    ruler.releasePointerCapture(event.pointerId);
+    inspectKeyContextRange();
+});
+document.addEventListener('pointercancel',event=>{
+    if(keyRulerState)keyRulerState.activeHandle=null;
+});
+document.addEventListener('click',event=>{
+    if(event.target.closest?.('#keyPreviousRange'))shiftKeyTimeRange(-1);
+    if(event.target.closest?.('#keyNextRange'))shiftKeyTimeRange(1);
 });
 document.addEventListener('change',event=>{
-    if(event.target?.id==='keyTimelineScale' && keyRulerState){
-        keyRulerState.scale=event.target.value;
+    const state=keyRulerState;
+    if(!state)return;
+    if(event.target?.id==='keyTimelineScale'){
+        state.scale=event.target.value;
         renderKeyRuler(true);
-    }else if(event.target?.id==='keyTimelineRange' && keyRulerState){
-        updateKeyPlayhead(event.target.value);
-        inspectKeyContextAt(keyRulerState.selected);
+    }else if(event.target?.id==='keyRangeStart'||event.target?.id==='keyRangeEnd'){
+        const parsed=keyEventMillis(event.target.value.replace('T',' '));
+        if(!Number.isFinite(parsed)){updateKeyRangeVisual();return;}
+        if(event.target.id==='keyRangeStart')updateKeyTimeRange(parsed,state.rangeEnd);
+        else updateKeyTimeRange(state.rangeStart,parsed);
     }
 });
-
 function createTable(logs) {
     const headers = getTableHeaders();
     let tableRows = '';
