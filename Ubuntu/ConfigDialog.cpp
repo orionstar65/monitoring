@@ -266,7 +266,14 @@ void ConfigDialog::onSignInClicked(){
     authToken=token;monitorId=result.value("monitor_id").toInt();
     activeUserNo=number;assignmentLocked=false;settingsLocked=false;
     rememberToken(token);
-    saveSettings();
+    // Sign In commits the authenticated server connection, but must not
+    // silently apply draft notification or monitor settings. Those need Save.
+    QDir().mkpath(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)+"/monitorclient");
+    for(const QString &path:{settingsPath(),QStringLiteral("settings.ini")}){
+        QSettings cfg(path,QSettings::IniFormat);
+        cfg.setValue("Server/ip",getServerIP());
+        cfg.setValue("Server/port",getServerPort());
+    }
     connectionStatusLabel->setText("Signed in");
     updateMonitorList(result.value("monitors").toArray());
     updateUI();
