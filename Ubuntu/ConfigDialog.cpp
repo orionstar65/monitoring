@@ -1,5 +1,8 @@
 #include "ConfigDialog.h"
 #include <QApplication>
+#include <QCollator>
+#include <algorithm>
+#include <vector>
 #include <QCheckBox>
 #include <QDir>
 #include <QEventLoop>
@@ -397,11 +400,25 @@ void ConfigDialog::refreshMonitors(){
     updateMonitorList(result.value("monitors").toArray());
 }
 void ConfigDialog::updateMonitorList(const QJsonArray &items){
-    assignedMonitors=items;
+    // Sort once and use the same order for displayed options and draft details.
+    std::vector<QJsonObject> ordered;
+    ordered.reserve(static_cast<size_t>(items.size()));
+    for(const auto &item:items)ordered.push_back(item.toObject());
+    QCollator collator;
+    collator.setNumericMode(true);
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    std::stable_sort(ordered.begin(),ordered.end(),[&](const QJsonObject &a,const QJsonObject &b){
+        for(const char *field:{"type","platform","ip_address"}){
+            const int result=collator.compare(a.value(field).toString(),b.value(field).toString());
+            if(result!=0)return result<0;
+        }
+        return a.value("id").toInt()<b.value("id").toInt();
+    });
+    assignedMonitors=QJsonArray();
+    for(const auto &m:ordered)assignedMonitors.append(m);
     const QSignalBlocker blocked(monitorSelector);
     monitorSelector->clear();
-    for(const auto &value:items){
-        const QJsonObject m=value.toObject();
+    for(const auto &m:ordered){
         monitorSelector->addItem(QString("%1 · %2-%3").arg(
             m.value("ip_address").toString("—"),m.value("platform").toString("—"),
             m.value("type").toString("Desktop")),
