@@ -667,7 +667,7 @@ function loadAvailableDevices() {
             all.value = '';
             all.textContent = 'All Devices';
             fragment.appendChild(all);
-            devices.forEach(device => {
+            window.sortMonitorOptions(devices).forEach(device => {
                 const option = document.createElement('option');
                 option.value = String(device.id);
                 option.textContent = `${device.user_no || '—'}(${device.username || 'Unassigned'}): ${device.last_seen_ip || device.ip_address || '—'} : ${device.platform || 'Unknown OS'}-${device.type || 'Device'}`;
