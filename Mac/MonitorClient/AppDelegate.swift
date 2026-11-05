@@ -2764,8 +2764,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let passwordField = NSSecureTextField()
         passwordField.placeholderString = "Password"
         passwordField.widthAnchor.constraint(equalToConstant: 330).isActive = true
-        server.addArrangedSubview(line("User No", userNoField))
-        server.addArrangedSubview(line("Password", passwordField))
+        let userNoRow = line("User No", userNoField)
+        let passwordRow = line("Password", passwordField)
+        server.addArrangedSubview(userNoRow)
+        server.addArrangedSubview(passwordRow)
         let test = action("Sign In", "test")
         let status = text("Not tested")
         status.textColor = .secondaryLabelColor
@@ -2786,7 +2788,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let userRow = line("User:", users)
         userPane.addArrangedSubview(userRow)
         let unpair = action("Sign Out", "disconnect")
-        server.addArrangedSubview(line("", unpair))
+        let signOutRow = line("", unpair)
+        server.addArrangedSubview(signOutRow)
         let directoryStatus = text("")
         directoryStatus.textColor = .systemRed
         directoryStatus.lineBreakMode = .byWordWrapping
@@ -2800,9 +2803,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         notice.maximumNumberOfLines = 3
         notice.widthAnchor.constraint(equalToConstant: 440).isActive = true
         userPane.addArrangedSubview(notice)
-        userPane.isHidden = true // Replaced by the User No/password controls in Server Settings.
+        userPane.isHidden = true // Legacy directory controls are intentionally not shown.
         stack.addArrangedSubview(userPane)
-        rule()
 
         let monitorPane = section("Monitor Settings")
         let picker = NSPopUpButton()
@@ -2977,10 +2979,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             sendAllButton.isEnabled = enrolled && self.selectedMonitorId > 0
             refreshConfigButton.isEnabled = enrolled && self.selectedMonitorId > 0
             users.isEnabled = false
-            userNoField.isHidden = enrolled
-            passwordField.isHidden = enrolled
+            userNoRow.isHidden = enrolled
+            passwordRow.isHidden = enrolled
             test.isHidden = enrolled
-            unpair.isHidden = !enrolled
+            signOutRow.isHidden = !enrolled
             picker.isEnabled = !isLocked
             ipField.isEnabled = !isLocked
             portField.isEnabled = !isLocked
