@@ -12,8 +12,8 @@ class Monitors extends Base {
     
     public function index() {
         $monitors = $this->isAdmin()
-          ? $this->db->fetchAll("SELECT m.*,u.name AS owner_name,u.user_no AS owner_user_no FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id ORDER BY m.id")
-          : $this->db->fetchAll("SELECT m.*,u.name AS owner_name,u.user_no AS owner_user_no FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id WHERE m.owner_user_id=:uid ORDER BY m.id", ['uid'=>$this->user['id']]);
+          ? $this->db->fetchAll("SELECT m.*,u.name AS owner_name,u.user_no AS owner_user_no FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id ORDER BY (u.id IS NULL), CAST(u.user_no AS UNSIGNED), u.name, COALESCE(m.type,''), COALESCE(m.platform,''), INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)), COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address), m.id")
+          : $this->db->fetchAll("SELECT m.*,u.name AS owner_name,u.user_no AS owner_user_no FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id WHERE m.owner_user_id=:uid ORDER BY (u.id IS NULL), CAST(u.user_no AS UNSIGNED), u.name, COALESCE(m.type,''), COALESCE(m.platform,''), INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)), COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address), m.id", ['uid'=>$this->user['id']]);
         
         // Add dynamic status calculation for each monitor
         foreach ($monitors as &$monitor) {
@@ -112,7 +112,7 @@ class Monitors extends Base {
         
         $accounts=$this->db->fetchAll("SELECT u.id,u.name,u.user_no,
             (SELECT COUNT(*) FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id) AS device_count
-            FROM users u ORDER BY u.name,u.id");
+            FROM users u ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id");
         $this->view('monitors/create', ['error' => $error ?? null,'accounts'=>$accounts]);
     }
     
@@ -169,7 +169,7 @@ class Monitors extends Base {
         
         $accounts=$this->db->fetchAll("SELECT u.id,u.name,u.user_no,
             (SELECT COUNT(*) FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id) AS device_count
-            FROM users u ORDER BY u.name,u.id");
+            FROM users u ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id");
         $monitor['status_info']=$this->statusService->calculateClientStatus($monitor['last_monitor_tic']??null);
         $this->view('monitors/edit', ['monitor'=>$monitor,'accounts'=>$accounts,'error'=>$error??null]);
     }
