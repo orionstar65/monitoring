@@ -313,6 +313,15 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
     
+    function formatMergeMonitorLabel(monitor) {
+        const number = monitor.user_no || '—';
+        const name = monitor.username || 'Unassigned';
+        const ip = monitor.last_seen_ip || monitor.ip_address || '—';
+        const os = monitor.platform || 'Unknown OS';
+        const machine = monitor.type || 'Device';
+        return `${number}(${name}): ${ip} : ${os}-${machine}`;
+    }
+
     function populateSelects() {
         // Clear existing options (except first)
         sourceSelect.innerHTML = '<option value="">-- Select Source Monitor --</option>';
@@ -321,12 +330,12 @@ document.addEventListener('DOMContentLoaded', function() {
         monitors.forEach(monitor => {
             const sourceOption = document.createElement('option');
             sourceOption.value = monitor.id;
-            sourceOption.textContent = `${monitor.ip_address}${monitor.username ? ' - ' + monitor.username : ''}`;
+            sourceOption.textContent = formatMergeMonitorLabel(monitor);
             sourceSelect.appendChild(sourceOption);
             
             const targetOption = document.createElement('option');
             targetOption.value = monitor.id;
-            targetOption.textContent = `${monitor.ip_address}${monitor.username ? ' - ' + monitor.username : ''}`;
+            targetOption.textContent = formatMergeMonitorLabel(monitor);
             targetSelect.appendChild(targetOption);
         });
     }
@@ -518,7 +527,7 @@ document.addEventListener('DOMContentLoaded', function() {
         monitors.forEach(monitor => {
             const option = document.createElement('option');
             option.value = monitor.id;
-            option.textContent = `${monitor.ip_address}${monitor.username ? ' - ' + monitor.username : ''}`;
+            option.textContent = formatMergeMonitorLabel(monitor);
             fixMonitorSelect.appendChild(option);
         });
     }
