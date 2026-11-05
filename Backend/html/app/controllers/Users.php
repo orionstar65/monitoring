@@ -10,11 +10,11 @@ class Users extends Base {
     
     public function index() {
         $users = $this->db->fetchAll(
-            "SELECT u.id,u.user_no,u.name,u.email,u.role,u.created_at,u.must_change_password,
+            "SELECT u.id,u.user_no,u.name,u.role,u.created_at,u.must_change_password,
                     MAX(m.last_monitor_tic) AS last_activity,
                     COUNT(m.id) AS device_count
              FROM users u LEFT JOIN tbl_monitor_ips m ON m.owner_user_id=u.id
-             GROUP BY u.id,u.user_no,u.name,u.email,u.role,u.created_at,u.must_change_password
+             GROUP BY u.id,u.user_no,u.name,u.role,u.created_at,u.must_change_password
              ORDER BY u.created_at DESC"
         );
         
@@ -22,46 +22,34 @@ class Users extends Base {
     }
     
     public function create() {
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $error=null;
+        if (($_SERVER['REQUEST_METHOD']??'GET')==='POST') {
+            $userNo=trim((string)($_POST['user_no']??''));
             $name=trim((string)($_POST['name']??''));
-            $password = $_POST['password'] ?? '';
-            $email = trim((string)($_POST['email'] ?? ''));
-            $role = $_POST['role'] ?? ROLE_USER;
-            if(!in_array($role,['admin','user','viewer'],true))$role='viewer';
-            
-            if (strlen($password)<12 || strlen($password)>1024
-                || strlen($name)<2 || strlen($name)>150
-                || ($email!=='' && !filter_var($email,FILTER_VALIDATE_EMAIL))) {
-                $error = 'Enter a valid full name, optional email and password (12+ characters).';
-            } else {
-                $existing=$email!=='' && $this->db->fetch(
-                    'SELECT id FROM users WHERE email=:email',['email'=>$email]);
-                if($existing){
-                    $error='Email already exists';
-                } else {
-                    $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
-                    
-                    $userId = $this->db->insert('users', [
-                        'name' => $name,
-                        'password' => $hashedPassword,
-                        'email' => $email!==''?$email:null,
-                        'role' => $role,
-                        'created_at' => date('Y-m-d H:i:s')
-                    ]);
-                    
-                    if ($userId) {
-                        $this->db->update('users',['user_no'=>(int)$userId+100000],'id=:id',['id'=>$userId]);
-                        $this->redirect('users');
-                    } else {
-                        $error = 'Failed to create user';
-                    }
-                }
+            $password=(string)($_POST['password']??'');
+            $role=(string)($_POST['role']??ROLE_USER);
+            if(!in_array($role,['admin','user'],true))$role='user';
+            if(!preg_match('/^[1-9][0-9]{0,14}$/D',$userNo)||strlen($name)<2||strlen($name)>150
+                ||strlen($password)<12||strlen($password)>1024) {
+                $error='Enter a unique numeric User No (1–15 digits), full name, and password of at least 12 characters.';
+            } elseif($this->db->fetch('SELECT id FROM users WHERE user_no=:n',['n'=>$userNo])) {
+                $error='User No already exists.';
+            } else try {
+                $this->db->insert('users',[
+                    'user_no'=>$userNo,'name'=>$name,
+                    'password'=>password_hash($password,PASSWORD_DEFAULT),
+                    'role'=>$role,'created_at'=>date('Y-m-d H:i:s')
+                ]);
+                $_SESSION['success_message']='User created successfully.';
+                $this->redirect('users');
+            } catch (PDOException $e) {
+                if($e->getCode()!=='23000')throw $e;
+                $error='User No already exists.';
             }
         }
-        
-        $this->view('users/create', ['error' => $error ?? null]);
+        $this->view('users/create',['error'=>$error]);
     }
-    
+
     public function edit($id) {
         $user = $this->db->fetch("SELECT * FROM users WHERE id = :id", ['id' => $id]);
         
@@ -71,29 +59,24 @@ class Users extends Base {
         
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $name=trim((string)($_POST['name']??''));
-            $email = trim((string)($_POST['email'] ?? ''));
             $role = $_POST['role'] ?? ROLE_USER;
-            if(!in_array($role,['admin','user','viewer'],true))$role='viewer';
+            if(!in_array($role,['admin','user'],true))$role='user';
             $password = $_POST['password'] ?? '';
             $userNo=trim((string)($_POST['user_no']??''));
             // User No is a unique, administrator-managed numeric identifier.
             $validUserNo=preg_match('/^[1-9][0-9]{0,14}$/D',$userNo)===1;
 
             
-            if (!$validUserNo || strlen($name)<2 || strlen($name)>150
-                || ($email!=='' && !filter_var($email,FILTER_VALIDATE_EMAIL))) {
-                $error = 'Enter a valid User No (1-15 digits), full name and optional email.';
+            if (!$validUserNo || strlen($name)<2 || strlen($name)>150) {
+                $error = 'Enter a valid User No (1-15 digits) and full name.';
             } else {
                 $duplicateNo=$this->db->fetch('SELECT id FROM users WHERE user_no=:no AND id!=:id',['no'=>$userNo,'id'=>$id]);
-                if ($duplicateNo || ($email!=='' && $this->db->fetch(
-                        'SELECT id FROM users WHERE email=:email AND id!=:id',
-                        ['email'=>$email,'id'=>$id]))) {
-                    $error = 'User No or email already exists';
+                if ($duplicateNo) {
+                    $error='User No already exists';
                 } else {
                     $data = [
                         'user_no'=>$userNo,
                         'name'=>$name,
-                        'email' => $email!==''?$email:null,
                         'role' => $role
                     ];
                     
@@ -117,7 +100,7 @@ class Users extends Base {
                         $result = $this->db->update('users', $data, 'id = :id', ['id' => $id]);
                     } catch (PDOException $e) {
                         if($e->getCode()==='23000') {
-                            $error='User No or email already exists';
+                            $error='User No already exists';
                             $this->view('users/edit',['user'=>array_merge($user,['user_no'=>$userNo]),'error'=>$error]);
                             return;
                         }
