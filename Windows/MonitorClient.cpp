@@ -2188,6 +2188,8 @@ static void updateUnifiedVisibility(HWND dlg) {
     ShowWindow(GetDlgItem(dlg,SETTINGS_USER_NO),SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_SEND_ALL),enrolled?SW_SHOW:SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_REFRESH_CONFIG),enrolled?SW_SHOW:SW_HIDE);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_SEND_ALL),enrolled&&selectedMonitorId.load()>0);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_REFRESH_CONFIG),enrolled&&selectedMonitorId.load()>0);
     EnableWindow(GetDlgItem(dlg,SETTINGS_USER_NO),!locked);
     EnableWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),enrolled);
     EnableWindow(GetDlgItem(dlg,SETTINGS_MONITOR),!locked);
@@ -2281,7 +2283,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_PASSWORD|ES_AUTOHSCROLL,108,181,310,25,SETTINGS_SIGNIN_PASS);
         addControl(dlg,"BUTTON","Sign In",WS_TABSTOP,108,215,132,27,SETTINGS_TEST);
         addControl(dlg,"STATIC","● Not signed in",0,13,252,405,21,SETTINGS_CONNECTION);
-        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,257,405,2,4506);
+        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,277,405,2,4506);
         addControl(dlg,"STATIC","User:",0,13,202,90,20,SETTINGS_USER);
         addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,199,310,250,SETTINGS_USER_NO);
         SendMessageW(GetDlgItem(dlg,SETTINGS_USER_NO),CB_SETDROPPEDWIDTH,540,0);
