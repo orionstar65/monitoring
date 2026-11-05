@@ -20,7 +20,7 @@ class View extends Base {
         }
         // Get monitors from database only (no expensive file scanning)
         $monitors = $this->db->fetchAll(
-            "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.id ASC"
+            "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY (owner.id IS NULL), CAST(owner.user_no AS UNSIGNED), owner.name, COALESCE(m.type,''), COALESCE(m.platform,''), INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)), COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address), m.id"
         );
         
         // Add basic status based on database data only
@@ -282,7 +282,7 @@ class View extends Base {
             "SELECT m.id,m.ip_address,m.last_seen_ip,m.mac_address,m.platform,
                     owner.name AS username,owner.user_no,CONCAT('Device #',m.id) AS name,m.type,m.last_monitor_tic,m.updated_at,m.created_at
              FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
-             ORDER BY owner.name ASC,m.id ASC"
+             ORDER BY (owner.id IS NULL), CAST(owner.user_no AS UNSIGNED), owner.name, COALESCE(m.type,''), COALESCE(m.platform,''), INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)), COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address), m.id"
         );
         
         // Add status based on database data only
@@ -577,7 +577,7 @@ class View extends Base {
     public function logs() {
         // Get monitors from database
         $monitors = $this->db->fetchAll(
-            "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.id ASC"
+            "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY (owner.id IS NULL), CAST(owner.user_no AS UNSIGNED), owner.name, COALESCE(m.type,''), COALESCE(m.platform,''), INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)), COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address), m.id"
         );
         
         // Add basic status based on database data only
