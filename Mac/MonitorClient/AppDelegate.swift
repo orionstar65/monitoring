@@ -3495,8 +3495,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     
     func getCurrentDateTimeString() -> String {
         let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        dateFormatter.timeZone = TimeZone(identifier: "Asia/Vladivostok") // Set to VLAT
+        // Transmit an ISO-8601 timestamp with the device's actual UTC offset.
+        // The server converts offset-aware values to its database timezone.
+        dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssXXXXX"
+        dateFormatter.timeZone = .current
         return dateFormatter.string(from: Date())
     }
 
