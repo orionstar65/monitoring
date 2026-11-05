@@ -288,7 +288,7 @@ void MonitorClient::processUsbEvent(struct udev_device* dev)
     if (!syspath) return;
 
     QString deviceInfo;
-    QString timestamp = QDateTime::currentDateTime().toTimeZone(QTimeZone("Asia/Vladivostok")).toString("yyyy-MM-dd HH:mm:ss");
+    QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
 
     if (strcmp(action, "add") == 0) {
         deviceInfo = getDeviceInfo(dev);
@@ -650,7 +650,7 @@ void MonitorClient::queryBrowserHistory(const QString& dbPath, const QString& qu
                     QString url = sqlQuery.record().indexOf("url") != -1 ? sqlQuery.record().value("url").toString() : QString();
                     QString title = sqlQuery.record().indexOf("title") != -1 ? sqlQuery.record().value("title").toString() : QString();
                     QJsonObject historyItem;
-                    historyItem["date"] = dt.toString("yyyy-MM-dd HH:mm:ss");
+                    historyItem["date"] = dt.toString(Qt::ISODate);
                     historyItem["browser"] = browserName;
                     historyItem["url"] = url;
                     if (!title.isEmpty()) {
@@ -987,7 +987,7 @@ void MonitorClient::getStorageDevices()
                     QString deviceInfo = getDeviceInfo(dev);
                     usbDeviceInfo[syspath] = deviceInfo;  // Store device info
                     
-                    QString timestamp = QDateTime::currentDateTime().toTimeZone(QTimeZone("Asia/Vladivostok")).toString("yyyy-MM-dd HH:mm:ss");
+                    QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
                     QJsonObject entryObj;
                     entryObj["date"] = timestamp;
                     entryObj["device_name"] = "Connected: " + deviceInfo;
