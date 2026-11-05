@@ -601,11 +601,55 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('startDate').value = today;
     document.getElementById('endDate').value = today;
     
-    // Load initial data
+    // Refresh available devices from the same source used by the live status pages.
+    // Keep server-rendered options if the API is temporarily unavailable.
+    loadAvailableDevices();
     updateFilters();
     loadStats();
     loadLogs();
 });
+
+function loadAvailableDevices() {
+    const select = document.getElementById('deviceFilter');
+    if (!select) return;
+    const previousValue = select.value;
+    fetch(`<?php echo BASE_URL; ?>logbrowse/api_devices`, {credentials: 'same-origin'})
+        .then(response => {
+            if (!response.ok) throw new Error(`Device API returned HTTP ${response.status}`);
+            return response.json();
+        })
+        .then(devices => {
+            if (!Array.isArray(devices)) throw new Error('Invalid device API response');
+            // Never discard valid server-rendered options for a failed/empty API.
+            if (!devices.length && select.options.length > 1) return;
+            const fragment = document.createDocumentFragment();
+            const all = document.createElement('option');
+            all.value = '';
+            all.textContent = 'All Devices';
+            fragment.appendChild(all);
+            devices.forEach(device => {
+                const option = document.createElement('option');
+                option.value = String(device.id);
+                option.textContent = `${device.username || 'Unassigned'} (Device #${device.id} · ${device.ip_address || 'Unknown IP'})`;
+                fragment.appendChild(option);
+            });
+            select.replaceChildren(fragment);
+            if (Array.from(select.options).some(option => option.value === previousValue)) {
+                select.value = previousValue;
+            }
+            currentFilters.device_id = select.value;
+        })
+        .catch(error => {
+            console.error('Unable to refresh log browse device list:', error);
+            if (select.options.length <= 1) {
+                const option = document.createElement('option');
+                option.value = '';
+                option.disabled = true;
+                option.textContent = 'Unable to load devices — refresh page';
+                select.appendChild(option);
+            }
+        });
+}
 
 function switchTab(tab) {
     currentTab = tab;
