@@ -1003,7 +1003,7 @@ function createKeyTimeline(logs) {
             inspectKeyContextAt(keyRulerState.selected);
         }
     });
-    return \`<div class="key-timeline-wrapper">
+    return `<div class="key-timeline-wrapper">
       <div class="key-timeline-heading">
        <div>Key activity history <small>Drag the playhead or click the time ruler · ±2-minute context</small></div>
        <div class="key-ruler-controls">
@@ -1020,7 +1020,7 @@ function createKeyTimeline(logs) {
        <div class="key-cctv-ruler" id="keyTimelineRuler"></div>
       </div>
       <div class="key-context-panel" id="keyContextPanel" aria-live="polite">Select a moment on the timeline to inspect nearby keys.</div>
-    </div>\`;
+    </div>`;
 }
 function renderKeyRuler(centerPlayhead = false) {
     const state = keyRulerState;
@@ -1040,15 +1040,15 @@ function renderKeyRuler(centerPlayhead = false) {
     for(let minute=startMinute;minute*60000<=state.end&&tickParts.length<350;minute+=step){
         const ms=minute*60000;
         const time=keyClock(ms);
-        tickParts.push(\`<div class="key-cctv-tick major" style="left:\${toX(ms)}px"><span class="key-cctv-tick-label">\${escapeHtml(time)}</span></div>\`);
+        tickParts.push(`<div class="key-cctv-tick major" style="left:${toX(ms)}px"><span class="key-cctv-tick-label">${escapeHtml(time)}</span></div>`);
     }
-    const markers=state.events.map((event,i)=>\`<div class="key-cctv-activity" style="left:\${toX(event.ms)}px" title="\${escapeHtml(event.date)}" aria-hidden="true"></div>\`).join('');
+    const markers=state.events.map((event,i)=>`<div class="key-cctv-activity" style="left:${toX(event.ms)}px" title="${escapeHtml(event.date)}" aria-hidden="true"></div>`).join('');
     const selectedSeconds=Math.max(0,Math.min(Math.round(span/1000),Math.round((state.selected-state.start)/1000)));
     ruler.style.width=width+'px';
     ruler.innerHTML='<div class="key-cctv-baseline"></div>'
         +tickParts.join('')+markers
-        +\`<div class="key-cctv-playhead" id="keyTimelinePlayhead" style="left:\${toX(state.selected)}px"></div>\`
-        +\`<input id="keyTimelineRange" class="key-cctv-range" type="range" min="0" max="\${Math.round(span/1000)}" step="1" value="\${selectedSeconds}" aria-label="Select time on keyboard history timeline">\`;
+        +`<div class="key-cctv-playhead" id="keyTimelinePlayhead" style="left:${toX(state.selected)}px"></div>`
+        +`<input id="keyTimelineRange" class="key-cctv-range" type="range" min="0" max="${Math.round(span/1000)}" step="1" value="${selectedSeconds}" aria-label="Select time on keyboard history timeline">`;
     document.getElementById('keyTimelineSelected').textContent=keyClock(state.selected,true);
     if(centerPlayhead){
         viewport.scrollLeft=Math.max(0,toX(state.selected)-viewport.clientWidth/2);
@@ -1102,15 +1102,15 @@ function transcriptKeyRows(keys) {
     }
     const transcript=lines.map(line=>{
         const content=line.tokens.map(token=>{
-            if(token.kind==='char')return \`<span class="\${token.deleted?'key-deleted':''}" title="\${escapeHtml(token.time)}">\${escapeHtml(token.value)}</span>\`;
+            if(token.kind==='char')return `<span class="${token.deleted?'key-deleted':''}" title="${escapeHtml(token.time)}">${escapeHtml(token.value)}</span>`;
             if(token.kind==='newline')return '<span class="key-control-symbol" title="Enter">↵</span>';
-            if(token.kind==='effect')return \`<span class="key-control-symbol" title="Backspace at \${escapeHtml(token.time)}">\${token.value}</span>\`;
-            return \`<span class="key-special-badge" title="\${escapeHtml(token.time)}">\${escapeHtml(token.raw)}</span>\`;
+            if(token.kind==='effect')return `<span class="key-control-symbol" title="Backspace at ${escapeHtml(token.time)}">${token.value}</span>`;
+            return `<span class="key-special-badge" title="${escapeHtml(token.time)}">${escapeHtml(token.raw)}</span>`;
         }).join('');
-        return \`<div class="key-transcript-time">\${escapeHtml((line.time||'').split(' ').pop())}</div>
-            <div class="key-transcript-content">\${content||'<span class="text-muted"> </span>'}</div>\`;
+        return `<div class="key-transcript-time">${escapeHtml((line.time||'').split(' ').pop())}</div>
+            <div class="key-transcript-content">${content||'<span class="text-muted"> </span>'}</div>`;
     }).join('');
-    const specials=extras.map(item=>\`<span class="badge bg-light text-dark border" title="\${escapeHtml(item.time)}">\${escapeHtml(item.raw)}</span>\`).join('');
+    const specials=extras.map(item=>`<span class="badge bg-light text-dark border" title="${escapeHtml(item.time)}">${escapeHtml(item.raw)}</span>`).join('');
     return '<div class="key-transcript" role="table" aria-label="Keyboard events with timestamps">'+transcript+'</div>'
         +(specials?'<div class="small text-muted mt-3 mb-1">Other key events</div><div class="key-remaining">'+specials+'</div>':'');
 }
@@ -1124,15 +1124,15 @@ async function inspectKeyContextAt(ms) {
     panel.textContent='Loading keyboard events around '+center+'…';
     const params=new URLSearchParams({device_id:String(nearest.monitor_ip_id),at:center});
     try{
-        const response=await fetch(\`<?php echo BASE_URL; ?>logbrowse/api_key_context?\${params}\`,{credentials:'same-origin'});
+        const response=await fetch(`<?php echo BASE_URL; ?>logbrowse/api_key_context?${params}`,{credentials:'same-origin'});
         if(!response.ok)throw new Error('HTTP '+response.status);
         const data=await response.json();
         if(seq!==keyContextRequestId||!panel.isConnected)return;
         if(!data.success)throw new Error(data.error||'Unable to load context');
         const keys=(data.logs||[]);
-        const device=\`\${nearest.user_no||'—'}(\${nearest.username||'Unassigned'}): \${nearest.ip_address||'—'}\`;
-        panel.innerHTML=\`<div class="key-context-heading"><strong>\${escapeHtml(center)}</strong>
-          <span class="text-muted">\${escapeHtml(device)} · \${keys.length} keys\${data.limited?' (first 2,000)':''}</span></div>\`
+        const device=`${nearest.user_no||'—'}(${nearest.username||'Unassigned'}): ${nearest.ip_address||'—'}`;
+        panel.innerHTML=`<div class="key-context-heading"><strong>${escapeHtml(center)}</strong>
+          <span class="text-muted">${escapeHtml(device)} · ${keys.length} keys${data.limited?' (first 2,000)':''}</span></div>`
           +(keys.length?transcriptKeyRows(keys):'<div class="text-muted">No keys recorded within two minutes of this point.</div>');
     }catch(error){
         if(seq===keyContextRequestId)panel.textContent='Cannot load key context: '+error.message;
