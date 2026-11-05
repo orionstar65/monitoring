@@ -40,6 +40,7 @@ private slots:
     void onUserChanged(int);
     void onMonitorChanged(int);
     void onTestConnectionClicked();
+    void onSignInClicked();
     void onLockSettingsClicked();
     void onEditClicked();
 private:
@@ -68,6 +69,7 @@ private:
     bool settingsLocked=false;
     bool monitorEditing=false;
     bool logoutPerformed=false;
+    QLineEdit *userNoInput=nullptr,*passwordInput=nullptr;
     QLineEdit *serverIPEdit=nullptr;
     QLineEdit *remarkEdit=nullptr;
     QSpinBox *serverPortEdit=nullptr;
