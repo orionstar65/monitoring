@@ -15,6 +15,9 @@ class View extends Base {
     }
     
     public function index() {
+        if(($this->user['role']??'')==='viewer'){
+            $this->view('view/aggregate');return;
+        }
         // Get monitors from database only (no expensive file scanning)
         $monitors = $this->db->fetchAll(
             "SELECT m.*,owner.name AS username FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY owner.name ASC,m.id ASC"
