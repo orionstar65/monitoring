@@ -2329,7 +2329,6 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         EnableWindow(GetDlgItem(dlg,SETTINGS_TEST),TRUE);
         setDlgUtf8Text(dlg,SETTINGS_CONNECTION,wp?"● Server reachable":"● Server unavailable");
         if(wp && applyUnifiedServer(dlg)){
-            loadUserDirectory(dlg);
             refreshUnifiedMonitors(dlg);
             updateUnifiedVisibility(dlg);
             setDlgUtf8Text(dlg,SETTINGS_CONNECTION,"● Server reachable");
@@ -2536,7 +2535,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
                 signedInUsername=settingsPendingUserNo;settingsPendingUserNo.clear();
                 settingsDirectoryError.clear();
                 rememberClientToken(token);
-                loadUserDirectory(dlg);refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);
+                refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);
                 if(!keyboardHook)setupKeyboardHook();
                 if(!usbMonitoringActive)setupUSBMONITORING();
                 updateTrayIcon();return TRUE;
@@ -2590,7 +2589,6 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
                 }
                 selectedMonitorId.store(created);
             }
-            loadUserDirectory(dlg);
             refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);
             updateTrayIcon();return TRUE;
         }
