@@ -359,7 +359,11 @@ void ConfigDialog::onMonitorChanged(int){
         updateUI();return;
     }
     monitorEditing=false;
-    if(id>0 && !authToken.isEmpty() && id!=monitorId){
+    if(id>0 && !pendingUserNo.isEmpty()){
+        // These are directory previews, not authorized device sessions.
+        // Do not try to activate another machine's monitor.
+        monitorEditing=false;
+    }else if(id>0 && !authToken.isEmpty() && id!=monitorId){
         const auto response=authRequest({{"action","select"},{"monitor_id",id}},true);
         if(!response.value("success").toBool()){
             QMessageBox::warning(this,"Monitor selection",
@@ -439,7 +443,7 @@ void ConfigDialog::updateUI(){
         assignmentStatusLabel->setText(directoryError);
     const int selectedId=monitorSelector->currentData().toInt();
     const bool adding=(enrolled||pending)&&selectedId==-1&&!locked;
-    const bool existing=enrolled&&selectedId>0;
+    const bool existing=enrolled&&selectedId>0&&!pending;
     const bool editing=!locked&&(adding||(existing&&monitorEditing));
     osStack->setCurrentIndex(editing?1:0);
     machineStack->setCurrentIndex(editing?1:0);
