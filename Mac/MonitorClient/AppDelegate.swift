@@ -2759,12 +2759,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let portField = entry("Port", value: storage.string(forKey: "server-port") ?? "8925")
         server.addArrangedSubview(line("Server IP", ipField))
         server.addArrangedSubview(line("Port", portField))
-        let test = action("Test Connection", "test")
+        let userNoField = entry("User No", value: "")
+        let passwordField = NSSecureTextField()
+        passwordField.placeholderString = "Password"
+        passwordField.widthAnchor.constraint(equalToConstant: 330).isActive = true
+        server.addArrangedSubview(line("User No", userNoField))
+        server.addArrangedSubview(line("Password", passwordField))
+        let test = action("Sign In", "test")
         let status = text("Not tested")
         status.textColor = .secondaryLabelColor
         let checkRow = NSStackView(views: [test, status])
         checkRow.spacing = 10
-        server.addArrangedSubview(line("Connection", checkRow))
+        server.addArrangedSubview(line("Account", checkRow))
+        // Sign Out is placed below after its control is constructed.
         stack.addArrangedSubview(server)
         rule()
 
@@ -2777,8 +2784,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         users.widthAnchor.constraint(equalToConstant: 330).isActive = true
         let userRow = line("User:", users)
         userPane.addArrangedSubview(userRow)
-        let unpair = action("Disconnect", "disconnect")
-        userPane.addArrangedSubview(line("", unpair))
+        let unpair = action("Sign Out", "disconnect")
+        server.addArrangedSubview(line("", unpair))
         let directoryStatus = text("")
         directoryStatus.textColor = .systemRed
         directoryStatus.lineBreakMode = .byWordWrapping
@@ -2792,6 +2799,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         notice.maximumNumberOfLines = 3
         notice.widthAnchor.constraint(equalToConstant: 440).isActive = true
         userPane.addArrangedSubview(notice)
+        userPane.isHidden = true // Replaced by the User No/password controls in Server Settings.
         stack.addArrangedSubview(userPane)
         rule()
 
@@ -2871,8 +2879,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             radio.target = coordinator
             radio.action = #selector(UnifiedWindowActions.activate(_:))
         }
-        users.target = coordinator
-        users.action = #selector(UnifiedWindowActions.selectUser(_:))
+        // Account selection is authenticated with User No and password.
         picker.target = coordinator
         picker.action = #selector(UnifiedWindowActions.selectMonitor(_:))
 
@@ -2959,7 +2966,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             monitorPane.isHidden = !enrolled && pendingUserNo == nil
             unpair.isHidden = !enrolled
             unpair.isEnabled = enrolled && !isLocked
-            users.isEnabled = !isLocked
+            users.isEnabled = false
+            userNoField.isHidden = enrolled
+            passwordField.isHidden = enrolled
+            test.isHidden = enrolled
+            unpair.isHidden = !enrolled
             picker.isEnabled = !isLocked
             ipField.isEnabled = !isLocked
             portField.isEnabled = !isLocked
@@ -3063,32 +3074,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             case let value where value.hasPrefix("machine:"):
                 chooseRadio(machineRadios, value: String(value.dropFirst(8)))
             case "test":
-                guard !(locked || monitorSettingsLocked) else { return }
-                let host = ipField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                let port = portField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard let number = Int(port), (1...65535).contains(number), !host.isEmpty,
-                      let url = URL(string: "\(port == "8924" ? "http" : "https")://\(host):\(port)/html/auth/login") else {
-                    status.stringValue = "Invalid server address"
+                guard self.clientToken.isEmpty else { status.stringValue = "Already signed in"; return }
+                let number = userNoField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                let password = passwordField.stringValue
+                guard !number.isEmpty, !password.isEmpty else {
+                    status.stringValue = "Enter User No and password"
                     return
                 }
+                guard saveServer() else {status.stringValue = "Invalid server address";return}
                 test.isEnabled = false
-                status.stringValue = "Checking…"
-                var request = URLRequest(url: url)
-                request.timeoutInterval = 6
-                URLSession.shared.dataTask(with: request) { _, response, error in
-                    DispatchQueue.main.async {
-                        guard self.activeSettingsWindow === window else { return }
-                        test.isEnabled = true
-                        let reachable = error == nil && (response as? HTTPURLResponse)
-                            .map({ (200...399).contains($0.statusCode) }) == true
-                        status.stringValue = reachable ? "Server reachable" : "Server unavailable"
-                        if reachable && saveServer() {
-                            refreshUserDirectory()
-                            refreshMonitors()
-                            updateState()
-                        }
-                    }
-                }.resume()
+                status.stringValue = "Signing in…"
+                let response = self.clientAuthRequest(["action":"login","user_no":number,"password":password])
+                passwordField.stringValue = ""
+                test.isEnabled = true
+                guard response?["success"] as? Bool == true,
+                      let token=response?["token"] as? String,token.count==64 else {
+                    status.stringValue = response?["error"] as? String ?? "Unable to sign in"
+                    return
+                }
+                self.clientToken = token
+                self.keychainSaveToken(token)
+                self.storage.set(number,forKey:"user_no")
+                self.selectedMonitorId = response?["monitor_id"] as? Int ?? 0
+                self.isServerConnected = true
+                status.stringValue = "Signed in"
+                refreshMonitors()
+                updateState()
             case "user":
                 guard let number = users.selectedItem?.representedObject as? String, !number.isEmpty else {
                     if pendingUserNo != nil {
@@ -3314,7 +3325,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             default: break
             }
         }
-        refreshUserDirectory()
         refreshMonitors()
         updateState()
         window.contentView?.layoutSubtreeIfNeeded()
