@@ -2006,8 +2006,9 @@ static void changeMonitorFields(HWND dlg) {
         setDlgUtf8Text(dlg,SETTINGS_INFO_MACHINE,desktop?"Desktop":"Laptop");
         checkSettingsRadio(dlg,SETTINGS_MACHINE,SETTINGS_MACHINE_DESKTOP,0,
             desktop?SETTINGS_MACHINE_DESKTOP:SETTINGS_MACHINE);
-        settingsMonitorLocked=monitor.get("settings_locked",false).asBool() ||
-            monitor.get("settings_locked",0).asInt()==1;
+        settingsMonitorLocked=id==selectedMonitorId.load() &&
+            (monitor.get("settings_locked",false).asBool() ||
+             monitor.get("settings_locked",0).asInt()==1);
         break;
     }
 }
