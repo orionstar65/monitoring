@@ -468,7 +468,7 @@ void ConfigDialog::updateUI(){
     userNoInput->setVisible(!enrolled);
     passwordInput->setVisible(!enrolled);
     logoutButton->setVisible(enrolled);
-    logoutButton->setEnabled(enrolled&&!locked);
+    logoutButton->setEnabled(enrolled);
     userSelector->setEnabled(!locked);
     monitorSelector->setEnabled(!locked);
     serverIPEdit->setEnabled(!locked);
@@ -559,10 +559,6 @@ void ConfigDialog::onSwitchClicked(){
     emit sessionStateChanged();
 }
 void ConfigDialog::onLogoutClicked(){
-    if(assignmentLocked||settingsLocked){
-        QMessageBox::warning(this,"Assignment locked","Ask your administrator to edit this monitor.");
-        return;
-    }
     QSettings previous(settingsPath(),QSettings::IniFormat);
     const QString oldHost=previous.value("Server/ip","192.168.1.45").toString();
     const int oldPort=previous.value("Server/port",8924).toInt();
@@ -628,7 +624,7 @@ void ConfigDialog::onSaveClicked(){
         rememberToken(authToken);refreshMonitors();refreshDirectory();saveSettings();updateUI();
         emit sessionStateChanged();return;
     }
-    if(authToken.isEmpty()){connectionStatusLabel->setText("● Server saved · select User No");return;}
+    if(authToken.isEmpty()){connectionStatusLabel->setText("● Sign in to select a monitor");return;}
     const int id=monitorSelector->currentData().toInt();
     if(id>0&&!monitorEditing)return;
     if((settingsLocked||assignmentLocked)&&id!=-1){
