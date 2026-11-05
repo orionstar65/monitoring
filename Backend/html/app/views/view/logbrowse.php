@@ -483,7 +483,17 @@ ob_start();
 .key-cctv-activity{position:absolute;top:65px;width:3px;height:18px;transform:translateX(-50%);border-radius:3px;background:var(--bs-primary,#3974cc);pointer-events:none;opacity:.8}
 .key-cctv-playhead{position:absolute;top:13px;height:80px;width:2px;background:var(--bs-danger,#e45858);transform:translateX(-50%);pointer-events:none;z-index:3}
 .key-cctv-playhead:before{content:"";position:absolute;left:-6px;top:-3px;border-left:7px solid transparent;border-right:7px solid transparent;border-top:10px solid var(--bs-danger,#e45858)}
-.key-cctv-range{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:ew-resize;z-index:4}
+.key-cctv-selection{position:absolute;top:12px;bottom:12px;background:color-mix(in srgb,var(--bs-primary,#3974cc) 17%,transparent);border-left:2px solid var(--bs-primary,#3974cc);border-right:2px solid var(--bs-primary,#3974cc);pointer-events:none;z-index:2}
+.key-cctv-selection::before,.key-cctv-selection::after{content:"";position:absolute;top:-4px;width:11px;height:17px;border-radius:4px;background:var(--bs-primary,#3974cc);border:2px solid var(--bs-body-bg,#fff)}
+.key-cctv-selection::before{left:-7px}.key-cctv-selection::after{right:-7px}
+.key-cctv-ruler{cursor:crosshair;touch-action:pan-y}
+.key-cctv-ruler:focus-visible{outline:2px solid var(--bs-primary,#3974cc);outline-offset:-2px}
+.key-range-inputs{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:center;margin-top:10px}
+.key-range-inputs label{font-size:.73rem;color:var(--bs-secondary-color);display:flex;gap:7px;align-items:center}
+.key-range-inputs input{min-width:0;width:100%;font-size:.8rem}
+.key-transcript-nav{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.key-transcript-nav .btn{white-space:nowrap}
+@media(max-width:650px){.key-range-inputs{grid-template-columns:1fr}}
 .key-ruler-selected{font-size:.78rem;font-variant-numeric:tabular-nums;font-weight:600}
 .key-context-panel{margin-top:12px;border:1px solid var(--bs-border-color);border-radius:10px;padding:14px;min-height:110px}
 .key-context-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:.83rem}
@@ -1007,7 +1017,7 @@ function createKeyTimeline(logs) {
     });
     return `<div class="key-timeline-wrapper">
       <div class="key-timeline-heading">
-       <div>Key activity history <small id="keyTimelineInfo">Loading full filtered range… · Drag the playhead or click the time ruler</small></div>
+       <div>Key activity history <small id="keyTimelineInfo">Loading activity… · Drag the start/end handles to select a time range</small></div>
        <div class="key-ruler-controls">
         <label for="keyTimelineScale" class="text-muted">Scale</label>
         <select id="keyTimelineScale" class="form-select form-select-sm" aria-label="Timeline scale">
@@ -1019,9 +1029,20 @@ function createKeyTimeline(logs) {
        </div>
       </div>
       <div class="key-timeline-scroller" id="keyTimelineViewport">
-       <div class="key-cctv-ruler" id="keyTimelineRuler"></div>
+       <div class="key-cctv-ruler" id="keyTimelineRuler" tabindex="0" role="group" aria-label="Drag to choose a keyboard history time range"></div>
       </div>
-      <div class="key-context-panel" id="keyContextPanel" aria-live="polite">Select a moment on the timeline to inspect nearby keys.</div>
+      <div class="key-range-inputs">
+       <label for="keyRangeStart">From <input id="keyRangeStart" class="form-control form-control-sm" type="datetime-local" step="1" aria-label="Keylog range start"></label>
+       <label for="keyRangeEnd">To <input id="keyRangeEnd" class="form-control form-control-sm" type="datetime-local" step="1" aria-label="Keylog range end"></label>
+      </div>
+      <div class="key-context-panel" id="keyContextPanel" aria-live="polite">
+       <div class="key-transcript-nav">
+        <button id="keyPreviousRange" type="button" class="btn btn-outline-secondary btn-sm">‹ Previous</button>
+        <strong id="keyContextRangeLabel"></strong>
+        <button id="keyNextRange" type="button" class="btn btn-outline-secondary btn-sm">Next ›</button>
+       </div>
+       <div id="keyContextBody">Select a time range to inspect recorded keys.</div>
+      </div>
     </div>`;
 }
 async function loadFullKeyTimeline(state) {
