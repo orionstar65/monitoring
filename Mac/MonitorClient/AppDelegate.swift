@@ -2973,6 +2973,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             monitorPane.isHidden = !enrolled && pendingUserNo == nil
             unpair.isHidden = !enrolled
             unpair.isEnabled = enrolled
+            sendAllButton.isEnabled = enrolled && self.selectedMonitorId > 0
+            refreshConfigButton.isEnabled = enrolled && self.selectedMonitorId > 0
             users.isEnabled = false
             userNoField.isHidden = enrolled
             passwordField.isHidden = enrolled
