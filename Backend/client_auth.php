@@ -311,7 +311,7 @@ try {
         $currentId=(int)($session['monitor_id']??0);
         $st=$db->prepare('SELECT assignment_locked,settings_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=?');
         $st->bind_param('ii',$currentId,$userId);$st->execute();$current=$st->get_result()->fetch_assoc();$st->close();
-        if(!$current||$current['assignment_locked']||$current['settings_locked']){
+        if($currentId>0 && (!$current||$current['assignment_locked']||$current['settings_locked'])){
             http_response_code(423);echo json_encode(['error'=>'Settings are locked. Ask your administrator.','code'=>'settings_locked']);exit;
         }
         $fields=clientMonitorFields($data);
@@ -327,7 +327,7 @@ try {
             $mid=(int)($session['monitor_id']??0);
             $st=$db->prepare('SELECT assignment_locked,settings_locked FROM tbl_monitor_ips WHERE id=? AND owner_user_id=? FOR UPDATE');
             $st->bind_param('ii',$mid,$userId);$st->execute();$origin=$st->get_result()->fetch_assoc();$st->close();
-            if(!$origin || $origin['assignment_locked'] || $origin['settings_locked']){
+            if($mid>0 && (!$origin || $origin['assignment_locked'] || $origin['settings_locked'])){
                 $db->rollback();http_response_code(423);
                 echo json_encode(['error'=>'Settings are locked. Ask your administrator.','code'=>'settings_locked']);exit;
             }
