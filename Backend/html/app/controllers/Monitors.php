@@ -170,6 +170,7 @@ class Monitors extends Base {
         $accounts=$this->db->fetchAll("SELECT u.id,u.name,u.email,u.user_no,
             (SELECT COUNT(*) FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id) AS device_count
             FROM users u ORDER BY u.name,u.id");
+        $monitor['status_info']=$this->statusService->calculateClientStatus($monitor['last_monitor_tic']??null);
         $this->view('monitors/edit', ['monitor'=>$monitor,'accounts'=>$accounts,'error'=>$error??null]);
     }
     
