@@ -968,54 +968,187 @@ function displayLogs(logs, pagination) {
     updatePagination(pagination);
 }
 
+
+const KEY_RULER_SCALES = {near:55, medium:14, wide:2.5};
+let keyRulerState = null;
+let keyContextRequestId = 0;
+
+function keyEventMillis(stamp) {
+    // MySQL timestamps have no offset; interpret all values consistently
+    // within the ruler rather than mixing browser UTC parsing conventions.
+    if (typeof stamp !== 'string') return NaN;
+    const m = stamp.match(/^(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d):(\d\d)/);
+    return m ? new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]).getTime() : NaN;
+}
+function keyClock(ms, fullDate = false) {
+    const d = new Date(ms);
+    if (!Number.isFinite(d.getTime())) return '—';
+    const two = n => String(n).padStart(2,'0');
+    const time = [d.getHours(),d.getMinutes(),d.getSeconds()].map(two).join(':');
+    return fullDate ? [d.getFullYear(),two(d.getMonth()+1),two(d.getDate())].join('-')+' '+time : time;
+}
 function createKeyTimeline(logs) {
-    const rows = logs.map((log,index) => {
-        const at = escapeHtml(log.date || '');
-        const device = escapeHtml(log.user_no || '—') + '(' + escapeHtml(log.username || 'Unassigned') + '): ' + escapeHtml(log.ip_address || '—');
-        return `<button type="button" class="key-timeline-event" data-key-index="${index}" aria-label="Inspect key context at ${at}">
-          <span class="key-timeline-time">${at}</span>
-          <span class="key-timeline-marker"></span>
-          <span class="key-timeline-preview"><strong>${escapeHtml(log.key||'')}</strong><small>${device} · ${escapeHtml(log.application||'')}</small></span>
-        </button>`;
-    }).join('');
-    window.keyTimelineItems = logs;
-    return `<div class="key-timeline-wrapper">
-      <div class="key-timeline-heading">Key activity timeline <small>Select a marker to see keys within ±2 minutes</small></div>
-      <div class="key-timeline-scroller"><div class="key-timeline-track">${rows}</div></div>
-      <div class="key-context-panel" id="keyContextPanel"><div class="text-muted">Select a time above to inspect the nearby sequence.</div></div>
-    </div>`;
+    const valid = logs.map(log => ({...log, ms:keyEventMillis(log.date)}))
+        .filter(log=>Number.isFinite(log.ms) && Number(log.monitor_ip_id)>0)
+        .sort((a,b)=>a.ms-b.ms);
+    if (!valid.length) return '<div class="p-3 text-muted">No usable timestamps found for this page.</div>';
+    const start = Math.floor((valid[0].ms-120000)/60000)*60000;
+    const end = Math.ceil((valid[valid.length-1].ms+120000)/60000)*60000;
+    keyRulerState = {events:valid,start,end,scale:'medium',selected:valid[valid.length-1].ms};
+    // A single continuous ruler contains all loaded events, even across
+    // multiple devices. Scrubbing chooses the nearest device as its context.
+    requestAnimationFrame(()=>{
+        if(document.getElementById('keyTimelineRuler')){
+            renderKeyRuler(true);
+            inspectKeyContextAt(keyRulerState.selected);
+        }
+    });
+    return \`<div class="key-timeline-wrapper">
+      <div class="key-timeline-heading">
+       <div>Key activity history <small>Drag the playhead or click the time ruler · ±2-minute context</small></div>
+       <div class="key-ruler-controls">
+        <label for="keyTimelineScale" class="text-muted">Scale</label>
+        <select id="keyTimelineScale" class="form-select form-select-sm" aria-label="Timeline scale">
+         <option value="near">15 min / view</option>
+         <option value="medium" selected>1 hour / view</option>
+         <option value="wide">6 hours / view</option>
+        </select>
+        <span class="key-ruler-selected" id="keyTimelineSelected"></span>
+       </div>
+      </div>
+      <div class="key-timeline-scroller" id="keyTimelineViewport">
+       <div class="key-cctv-ruler" id="keyTimelineRuler"></div>
+      </div>
+      <div class="key-context-panel" id="keyContextPanel" aria-live="polite">Select a moment on the timeline to inspect nearby keys.</div>
+    </div>\`;
 }
-
-async function inspectKeyContext(index) {
-    const event = (window.keyTimelineItems||[])[index];
-    if (!event) return;
-    document.querySelectorAll('.key-timeline-event').forEach((element,i)=>element.classList.toggle('selected',i===index));
-    const panel = document.getElementById('keyContextPanel');
-    if (!panel) return;
-    panel.textContent='Loading surrounding key events…';
-    const params=new URLSearchParams({device_id:event.monitor_ip_id,at:event.date});
-    try {
-        const response=await fetch(`<?php echo BASE_URL; ?>logbrowse/api_key_context?${params}`);
-        if(!response.ok) throw new Error('HTTP '+response.status);
-        const data=await response.json();
-        if(!data.success) throw new Error(data.error||'Unable to load context');
-        const keys=data.logs||[];
-        let readable='';
-        const badges=keys.map(item=>{
-            const raw=String(item.key_pressed||'');
-            const text=/^(space|spacebar)$/i.test(raw)?' ':raw.length===1?raw:'';
-            readable+=text;
-            return '<span class="badge bg-light text-dark border key-token" title="'+escapeHtml(item.key_date)+'">'+escapeHtml(raw||'—')+'</span>';
+function renderKeyRuler(centerPlayhead = false) {
+    const state = keyRulerState;
+    const ruler=document.getElementById('keyTimelineRuler');
+    const viewport=document.getElementById('keyTimelineViewport');
+    if(!state||!ruler||!viewport)return;
+    const span=state.end-state.start;
+    const durationMinutes=span/60000;
+    const width=Math.min(24000,Math.max(viewport.clientWidth||800,Math.round(durationMinutes*KEY_RULER_SCALES[state.scale])));
+    const pxPerMinute=width/durationMinutes;
+    const ticks=[1,2,5,10,15,30,60,120,360,720,1440];
+    const step=ticks.find(value=>value*pxPerMinute>=90)||1440;
+    const startMinute=Math.ceil(state.start/60000/step)*step;
+    state.width=width;
+    const toX=ms=>Math.min(width,Math.max(0,(ms-state.start)/span*width));
+    const tickParts=[];
+    for(let minute=startMinute;minute*60000<=state.end&&tickParts.length<350;minute+=step){
+        const ms=minute*60000;
+        const time=keyClock(ms);
+        tickParts.push(\`<div class="key-cctv-tick major" style="left:\${toX(ms)}px"><span class="key-cctv-tick-label">\${escapeHtml(time)}</span></div>\`);
+    }
+    const markers=state.events.map((event,i)=>\`<div class="key-cctv-activity" style="left:\${toX(event.ms)}px" title="\${escapeHtml(event.date)}" aria-hidden="true"></div>\`).join('');
+    const selectedSeconds=Math.max(0,Math.min(Math.round(span/1000),Math.round((state.selected-state.start)/1000)));
+    ruler.style.width=width+'px';
+    ruler.innerHTML='<div class="key-cctv-baseline"></div>'
+        +tickParts.join('')+markers
+        +\`<div class="key-cctv-playhead" id="keyTimelinePlayhead" style="left:\${toX(state.selected)}px"></div>\`
+        +\`<input id="keyTimelineRange" class="key-cctv-range" type="range" min="0" max="\${Math.round(span/1000)}" step="1" value="\${selectedSeconds}" aria-label="Select time on keyboard history timeline">\`;
+    document.getElementById('keyTimelineSelected').textContent=keyClock(state.selected,true);
+    if(centerPlayhead){
+        viewport.scrollLeft=Math.max(0,toX(state.selected)-viewport.clientWidth/2);
+    }
+}
+function updateKeyPlayhead(seconds) {
+    const state=keyRulerState;
+    if(!state)return;
+    state.selected=Math.min(state.end,Math.max(state.start,state.start+Number(seconds)*1000));
+    const playhead=document.getElementById('keyTimelinePlayhead');
+    if(playhead)playhead.style.left=((state.selected-state.start)/(state.end-state.start)*state.width)+'px';
+    const display=document.getElementById('keyTimelineSelected');
+    if(display)display.textContent=keyClock(state.selected,true);
+}
+function transcriptKeyRows(keys) {
+    const lines=[{time:keys[0]?.key_date||'',tokens:[]}];
+    const extras=[];
+    let current=lines[0];
+    const addBadge=(raw,time)=>{
+        current.tokens.push({kind:'badge',raw,time});
+        extras.push({raw,time});
+    };
+    for(const entry of keys) {
+        const raw=String(entry.key_pressed??'');
+        const key=raw.trim().replace(/^\[(.*)\]$/,'$1').replace(/^<(.*)>$/,'$1');
+        const time=String(entry.key_date||'');
+        if(/^(enter|return|numpadenter)$/i.test(key) || raw==='\n' || raw==='\r'){
+            current.tokens.push({kind:'newline'});
+            current={time,tokens:[]};
+            lines.push(current);
+        }else if(/^(backspace|back|bksp|vk_back)$/i.test(key)){
+            let last=null;
+            for(let k=current.tokens.length-1;k>=0;k--){
+                if(current.tokens[k].kind==='char'&&!current.tokens[k].deleted){last=current.tokens[k];break;}
+            }
+            if(last){
+                last.deleted=true;
+                current.tokens.push({kind:'effect',value:'⌫',time});
+            }else addBadge(raw||'Backspace',time);
+        }else if(/^(space|spacebar)$/i.test(key)||raw===' '){
+            current.tokens.push({kind:'char',value:' ',time,deleted:false});
+        }else if(/^tab$/i.test(key)||raw==='\t'){
+            current.tokens.push({kind:'char',value:'    ',time,deleted:false});
+        }else if(raw.length===1){
+            current.tokens.push({kind:'char',value:raw,time,deleted:false});
+        }else{
+            // Modifiers and navigation shortcuts are not inferable text edits.
+            // Preserve the event without inventing a caret position.
+            addBadge(raw||'Unknown',time);
+        }
+    }
+    const transcript=lines.map(line=>{
+        const content=line.tokens.map(token=>{
+            if(token.kind==='char')return \`<span class="\${token.deleted?'key-deleted':''}" title="\${escapeHtml(token.time)}">\${escapeHtml(token.value)}</span>\`;
+            if(token.kind==='newline')return '<span class="key-control-symbol" title="Enter">↵</span>';
+            if(token.kind==='effect')return \`<span class="key-control-symbol" title="Backspace at \${escapeHtml(token.time)}">\${token.value}</span>\`;
+            return \`<span class="key-special-badge" title="\${escapeHtml(token.time)}">\${escapeHtml(token.raw)}</span>\`;
         }).join('');
-        panel.innerHTML='<div class="fw-semibold mb-2">'+escapeHtml(event.date)+' · '+keys.length+' keys'+(data.limited?' (limited to first 2,000)':'')+'</div>'
-           +'<div class="key-readable mb-3">'+escapeHtml(readable||'No printable text in this window')+'</div>'
-           +'<div class="key-badges">'+badges+'</div>';
-    } catch(error){ panel.textContent='Cannot load key context: '+error.message; }
+        return \`<div class="key-transcript-time">\${escapeHtml((line.time||'').split(' ').pop())}</div>
+            <div class="key-transcript-content">\${content||'<span class="text-muted"> </span>'}</div>\`;
+    }).join('');
+    const specials=extras.map(item=>\`<span class="badge bg-light text-dark border" title="\${escapeHtml(item.time)}">\${escapeHtml(item.raw)}</span>\`).join('');
+    return '<div class="key-transcript" role="table" aria-label="Keyboard events with timestamps">'+transcript+'</div>'
+        +(specials?'<div class="small text-muted mt-3 mb-1">Other key events</div><div class="key-remaining">'+specials+'</div>':'');
 }
-
-document.addEventListener('click',event=>{
-    const button=event.target.closest('.key-timeline-event');
-    if(button) inspectKeyContext(Number(button.dataset.keyIndex));
+async function inspectKeyContextAt(ms) {
+    const state=keyRulerState;
+    const panel=document.getElementById('keyContextPanel');
+    if(!state||!panel||!state.events.length)return;
+    const nearest=state.events.reduce((best,event)=>Math.abs(event.ms-ms)<Math.abs(best.ms-ms)?event:best,state.events[0]);
+    const seq=++keyContextRequestId;
+    const center=keyClock(ms,true);
+    panel.textContent='Loading keyboard events around '+center+'…';
+    const params=new URLSearchParams({device_id:String(nearest.monitor_ip_id),at:center});
+    try{
+        const response=await fetch(\`<?php echo BASE_URL; ?>logbrowse/api_key_context?\${params}\`,{credentials:'same-origin'});
+        if(!response.ok)throw new Error('HTTP '+response.status);
+        const data=await response.json();
+        if(seq!==keyContextRequestId||!panel.isConnected)return;
+        if(!data.success)throw new Error(data.error||'Unable to load context');
+        const keys=(data.logs||[]);
+        const device=\`\${nearest.user_no||'—'}(\${nearest.username||'Unassigned'}): \${nearest.ip_address||'—'}\`;
+        panel.innerHTML=\`<div class="key-context-heading"><strong>\${escapeHtml(center)}</strong>
+          <span class="text-muted">\${escapeHtml(device)} · \${keys.length} keys\${data.limited?' (first 2,000)':''}</span></div>\`
+          +(keys.length?transcriptKeyRows(keys):'<div class="text-muted">No keys recorded within two minutes of this point.</div>');
+    }catch(error){
+        if(seq===keyContextRequestId)panel.textContent='Cannot load key context: '+error.message;
+    }
+}
+document.addEventListener('input',event=>{
+    if(event.target?.id==='keyTimelineRange')updateKeyPlayhead(event.target.value);
+});
+document.addEventListener('change',event=>{
+    if(event.target?.id==='keyTimelineScale' && keyRulerState){
+        keyRulerState.scale=event.target.value;
+        renderKeyRuler(true);
+    }else if(event.target?.id==='keyTimelineRange' && keyRulerState){
+        updateKeyPlayhead(event.target.value);
+        inspectKeyContextAt(keyRulerState.selected);
+    }
 });
 
 function createTable(logs) {
