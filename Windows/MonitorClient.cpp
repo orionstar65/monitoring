@@ -2196,7 +2196,7 @@ static void updateUnifiedVisibility(HWND dlg) {
     const int index=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
     const int chosen=index<0?0:(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,index,0);
     const bool creating=(enrolled||pending)&&chosen==-1&&!locked;
-    const bool existing=enrolled&&chosen>0;
+    const bool existing=enrolled&&chosen>0&&!pending;
     const bool editing=!locked&&(creating || (existing&&settingsEditing));
     // Existing records have a real information view; inputs exist only in Edit
     // or Add new modes. Never leave controls from the previous user visible.
@@ -2357,7 +2357,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             updateUnifiedVisibility(dlg);
             const int ix=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
             const int chosen=ix<0?0:(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,ix,0);
-            if(chosen>0 && chosen!=selectedMonitorId.load() && !getClientToken().empty()){
+            if(chosen>0 && settingsPendingUserNo.empty() && chosen!=selectedMonitorId.load() && !getClientToken().empty()){
                 Json::Value request;request["action"]="select";request["monitor_id"]=chosen;
                 const Json::Value answer=callClientAuth(request);
                 if(!answer.get("success",false).asBool()){
