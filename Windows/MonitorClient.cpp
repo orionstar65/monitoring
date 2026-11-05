@@ -409,13 +409,13 @@ void updateTrayMenu() {
     AppendMenuA(hTrayMenu, MF_STRING | MF_DISABLED, ID_TRAY_STATUS, "=== CONFIGURATION ===");
     
     // Configuration refresh button
-    AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_CONFIG_REFRESH, "Refresh Configuration");
+    // Configuration refresh is now in the Settings window.
     AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SETTINGS, "Settings...");
     AppendMenuA(hTrayMenu, MF_STRING | (notificationsEnabled ? MF_CHECKED : MF_UNCHECKED), ID_TRAY_NOTIFICATIONS, "Status notifications");
     
     // Actions section
     AppendMenuA(hTrayMenu, MF_SEPARATOR, 0, NULL);
-    AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SEND_ALL, "Send All Requests Now");
+    // Manual log upload is now in Settings.
     AppendMenuA(hTrayMenu, MF_SEPARATOR, 0, NULL);
     AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_EXIT, "Quit MonitorClient");
 }
@@ -1934,7 +1934,9 @@ enum {
     SETTINGS_SWITCH=4221, SETTINGS_NOTICE=4222,
     SETTINGS_OS_MAC=4223, SETTINGS_OS_UBUNTU=4224,
     SETTINGS_MACHINE_DESKTOP=4225, SETTINGS_LOCK_SETTINGS=4226,
-    SETTINGS_EDIT=4227,SETTINGS_INFO_NAME=4228,SETTINGS_INFO_OS=4229,
+    SETTINGS_EDIT=4227,SETTINGS_SIGNIN_USER=4232,SETTINGS_SIGNIN_PASS=4233,
+    SETTINGS_SEND_ALL=4234,SETTINGS_REFRESH_CONFIG=4235,
+    SETTINGS_INFO_NAME=4228,SETTINGS_INFO_OS=4229,
     SETTINGS_INFO_MACHINE=4230,SETTINGS_INFO_REMARK=4231
 };
 static HWND addControl(HWND parent,const char* cls,const char* label,DWORD style,
@@ -2169,7 +2171,7 @@ static void refreshUnifiedMonitors(HWND dlg) {
     setDlgUtf8Text(dlg,SETTINGS_MONITOR_IP,ip);
 }
 static void updateUnifiedVisibility(HWND dlg) {
-    const bool enrolled=!getClientToken().empty()&&selectedMonitorId.load()>0;
+    const bool enrolled=!getClientToken().empty();
     const bool pending=!settingsPendingUserNo.empty();
     const bool locked=enrolled&&(settingsAssignmentLocked||settingsMonitorLocked);
     const int monitorControls[] = {
@@ -2180,6 +2182,12 @@ static void updateUnifiedVisibility(HWND dlg) {
     };
     for(int id:monitorControls)ShowWindow(GetDlgItem(dlg,id),(enrolled||pending)?SW_SHOW:SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),enrolled?SW_SHOW:SW_HIDE);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_TEST),enrolled?SW_HIDE:SW_SHOW);
+    for(int id:{SETTINGS_SIGNIN_USER,SETTINGS_SIGNIN_PASS,4510,4511})ShowWindow(GetDlgItem(dlg,id),enrolled?SW_HIDE:SW_SHOW);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_USER),SW_HIDE);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_USER_NO),SW_HIDE);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_SEND_ALL),SW_SHOW);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_REFRESH_CONFIG),SW_SHOW);
     EnableWindow(GetDlgItem(dlg,SETTINGS_USER_NO),!locked);
     EnableWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),!locked);
     EnableWindow(GetDlgItem(dlg,SETTINGS_MONITOR),!locked);
@@ -2267,13 +2275,17 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"EDIT",serverIP.c_str(),WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,82,310,25,SETTINGS_IP);
         addControl(dlg,"STATIC","Port",0,13,118,91,20,4505);
         addControl(dlg,"EDIT",serverPort.c_str(),WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,115,310,25,SETTINGS_PORT);
-        addControl(dlg,"BUTTON","Test Connection",WS_TABSTOP,108,148,132,27,SETTINGS_TEST);
+        addControl(dlg,"STATIC","User No",0,13,150,90,20,4510);
+        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,146,310,25,SETTINGS_SIGNIN_USER);
+        addControl(dlg,"STATIC","Password",0,13,185,90,20,4511);
+        addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_PASSWORD|ES_AUTOHSCROLL,108,181,310,25,SETTINGS_SIGNIN_PASS);
+        addControl(dlg,"BUTTON","Sign In",WS_TABSTOP,108,215,132,27,SETTINGS_TEST);
         addControl(dlg,"STATIC","● Not tested",0,245,152,173,21,SETTINGS_CONNECTION);
-        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,181,405,2,4506);
+        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,257,405,2,4506);
         addControl(dlg,"STATIC","User:",0,13,202,90,20,SETTINGS_USER);
         addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,199,310,250,SETTINGS_USER_NO);
         SendMessageW(GetDlgItem(dlg,SETTINGS_USER_NO),CB_SETDROPPEDWIDTH,540,0);
-        addControl(dlg,"BUTTON","Disconnect",WS_TABSTOP,298,234,120,27,SETTINGS_LOGOUT);
+        addControl(dlg,"BUTTON","Sign Out",WS_TABSTOP,298,215,120,27,SETTINGS_LOGOUT);
         addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,267,405,2,4507);
         addControl(dlg,"STATIC","",SS_LEFT,16,276,430,54,SETTINGS_NOTICE);
         addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,336,405,2,SETTINGS_MONITOR_DIVIDER);
@@ -2296,11 +2308,14 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,539,310,25,SETTINGS_REMARK);
         addControl(dlg,"STATIC","—",0,108,542,310,21,SETTINGS_INFO_REMARK);
         addControl(dlg,"BUTTON","Show status notifications",BS_AUTOCHECKBOX|WS_TABSTOP,108,572,250,24,SETTINGS_NOTIFY);
+        addControl(dlg,"BUTTON","Send All Logs",WS_TABSTOP,13,625,150,28,SETTINGS_SEND_ALL);
+        addControl(dlg,"BUTTON","Refresh Configuration",WS_TABSTOP,174,625,210,28,SETTINGS_REFRESH_CONFIG);
         CheckDlgButton(dlg,SETTINGS_NOTIFY,notificationsEnabled?BST_CHECKED:BST_UNCHECKED);
         addControl(dlg,"BUTTON","Lock Settings",WS_TABSTOP,214,607,112,30,SETTINGS_LOCK_SETTINGS);
         addControl(dlg,"BUTTON","Save Monitor",WS_TABSTOP|BS_DEFPUSHBUTTON,108,607,96,30,SETTINGS_SAVE);
         addControl(dlg,"BUTTON","Close",WS_TABSTOP,332,607,86,30,SETTINGS_CLOSE);
-        loadUserDirectory(dlg);
+        ShowWindow(GetDlgItem(dlg,SETTINGS_USER),SW_HIDE);
+        ShowWindow(GetDlgItem(dlg,SETTINGS_USER_NO),SW_HIDE);
         refreshUnifiedMonitors(dlg);
         updateUnifiedVisibility(dlg);
         return TRUE;
@@ -2321,23 +2336,44 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
     case WM_COMMAND:{
         const int id=LOWORD(wp);
         if(id==SETTINGS_CLOSE||id==IDCANCEL){
-            notificationsEnabled=IsDlgButtonChecked(dlg,SETTINGS_NOTIFY)==BST_CHECKED;
-            saveClientSetting("Client","notifications",notificationsEnabled?"1":"0");
             EndDialog(dlg,IDCANCEL);return TRUE;
         }
         if(id==SETTINGS_TEST){
-            if(settingsAssignmentLocked||settingsMonitorLocked)return TRUE;
-            const std::string host=editText(dlg,SETTINGS_IP),port=editText(dlg,SETTINGS_PORT);
-            if(host.empty()||port.empty()||port.find_first_not_of("0123456789")!=std::string::npos){
-                showUtf8Message(dlg,"Enter a server IP and numeric port.","Test Connection",MB_OK|MB_ICONWARNING);
+            const std::string userNo=editText(dlg,SETTINGS_SIGNIN_USER);
+            const std::string password=editText(dlg,SETTINGS_SIGNIN_PASS);
+            if(userNo.empty()||password.empty()){
+                setDlgUtf8Text(dlg,SETTINGS_CONNECTION,"Enter User No and password");
                 return TRUE;
             }
+            if(!applyUnifiedServer(dlg))return TRUE;
             EnableWindow(GetDlgItem(dlg,SETTINGS_TEST),FALSE);
-            setDlgUtf8Text(dlg,SETTINGS_CONNECTION,"● Testing...");
-            std::thread([dlg,host,port]{
-                const bool ok=testServerAddress(host,port);
-                if(IsWindow(dlg))PostMessageW(dlg,WM_APP+0x143,ok?1:0,0);
-            }).detach();
+            setDlgUtf8Text(dlg,SETTINGS_CONNECTION,"● Signing in...");
+            Json::Value req;req["action"]="login";req["user_no"]=userNo;req["password"]=password;
+            const Json::Value answer=callClientAuth(req);
+            setDlgUtf8Text(dlg,SETTINGS_SIGNIN_PASS,"");
+            EnableWindow(GetDlgItem(dlg,SETTINGS_TEST),TRUE);
+            const std::string token=answer.get("token","").asString();
+            if(!answer.get("success",false).asBool()||token.size()!=64){
+                setDlgUtf8Text(dlg,SETTINGS_CONNECTION,answer.get("error","Sign in failed").asString());
+                return TRUE;
+            }
+            {std::lock_guard<std::mutex> guard(authMutex);clientToken=token;}
+            rememberClientToken(token);
+            signedInUsername=userNo;
+            selectedMonitorId.store(answer.get("monitor_id",0).asInt());
+            connectionStatus.serverConnected=true;
+            setDlgUtf8Text(dlg,SETTINGS_CONNECTION,"● Signed in");
+            refreshUnifiedMonitors(dlg);
+            updateUnifiedVisibility(dlg);
+            updateTrayIcon();
+            return TRUE;
+        }
+        if(id==SETTINGS_SEND_ALL){
+            std::thread([]{sendInitialDataRequests();}).detach();
+            return TRUE;
+        }
+        if(id==SETTINGS_REFRESH_CONFIG){
+            std::thread([]{manualConfigRefresh();}).detach();
             return TRUE;
         }
         if(id==SETTINGS_EDIT && HIWORD(wp)==BN_CLICKED){
