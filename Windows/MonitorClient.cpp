@@ -2493,7 +2493,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
                 const int currentIndex=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
                 const int chosen=currentIndex<0?0:(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,currentIndex,0);
                 if(chosen!=-1){
-                    showUtf8Message(dlg,"This monitor belongs to another installation. Select Add new to register this computer, or ask your administrator to reassign the monitor.","Monitor selection",MB_OK|MB_ICONWARNING);
+                    showUtf8Message(dlg,"To reuse an existing monitor, restore this computer's saved device session. Otherwise select Add new or ask an administrator for help.","Monitor selection",MB_OK|MB_ICONWARNING);
                     return TRUE;
                 }
                 Json::Value req;req["action"]="bootstrap_monitor";req["user_no"]=settingsPendingUserNo;
