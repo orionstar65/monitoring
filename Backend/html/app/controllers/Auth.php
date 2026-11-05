@@ -53,7 +53,7 @@ class Auth extends Base {
             $new=(string)($_POST['new_password']??'');
             $confirm=(string)($_POST['confirm_password']??'');
             if(!password_verify($old,$user['password']))$error='Current password is incorrect.';
-            elseif(strlen($new)<12 || strlen($new)>1024)$error='New password must be at least 12 characters.';
+            elseif(strlen($new)<6 || strlen($new)>1024)$error='New password must be at least 6 characters.';
             elseif(!hash_equals($new,$confirm))$error='New passwords do not match.';
             elseif(password_verify($new,$user['password']))$error='Choose a different password.';
             else {
