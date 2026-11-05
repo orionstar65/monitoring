@@ -17,7 +17,7 @@ ob_start();
                 <div class="col-md-6">
                     <div class="mb-3">
                         <label for="password" class="form-label">Password (leave blank to keep current)</label>
-                        <input type="password" class="form-control" id="password" name="password">
+                        <input type="password" class="form-control" id="password" name="password" minlength="6" maxlength="1024" autocomplete="new-password">
                     </div>
                 </div>
                 <div class="col-md-6">
