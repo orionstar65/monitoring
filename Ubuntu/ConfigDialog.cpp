@@ -153,6 +153,14 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
 
     notificationsCheck=new QCheckBox("Show status notifications",page);
     content->addWidget(notificationsCheck);
+    auto *toolsRow=new QHBoxLayout();
+    sendAllButton=new QPushButton("Send All Logs",page);
+    refreshConfigButton=new QPushButton("Refresh Configuration",page);
+    toolsRow->addWidget(sendAllButton);
+    toolsRow->addWidget(refreshConfigButton);
+    content->addLayout(toolsRow);
+    connect(sendAllButton,&QPushButton::clicked,this,[this](){emit sendAllRequested();});
+    connect(refreshConfigButton,&QPushButton::clicked,this,[this](){emit refreshConfigurationRequested();});
     auto *buttons=new QHBoxLayout();
     saveButton=new QPushButton("Save",this);
     lockSettingsButton=new QPushButton("Lock Settings",this);
@@ -469,6 +477,8 @@ void ConfigDialog::updateUI(){
     passwordInput->setVisible(!enrolled);
     logoutButton->setVisible(enrolled);
     logoutButton->setEnabled(enrolled);
+    sendAllButton->setEnabled(enrolled&&monitorId>0);
+    refreshConfigButton->setEnabled(enrolled&&monitorId>0);
     userSelector->setEnabled(!locked);
     monitorSelector->setEnabled(!locked);
     serverIPEdit->setEnabled(!locked);
