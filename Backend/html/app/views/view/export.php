@@ -544,7 +544,7 @@ function renderDeviceList() {
     const deviceList = document.getElementById('deviceList');
     deviceList.innerHTML = '';
     
-    allDevices.forEach(device => {
+    window.sortMonitorOptions(allDevices).forEach(device => {
         const deviceDiv = document.createElement('div');
         deviceDiv.className = 'device-option';
         deviceDiv.innerHTML = `
