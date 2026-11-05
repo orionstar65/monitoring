@@ -61,8 +61,11 @@ class DatabaseService {
                 }
                 
                 // Handle different platform data formats
-                $lastVisit = $this->normalizeDateTime($browserHistory['last_visit'] ?? null);
-                $visitDate = $this->normalizeDateTime($browserHistory['date'] ?? null);
+                $hasVisitTime = isset($browserHistory['last_visit']) && $browserHistory['last_visit'] !== '';
+                $lastVisit = $hasVisitTime ? $this->normalizeDateTime($browserHistory['last_visit']) : $this->normalizeDateTime($browserHistory['date'] ?? null);
+                // visit_date represents the actual browser visit, not the time
+                // the batch was uploaded. Clients may upload older events later.
+                $visitDate = $lastVisit;
                 
                 $stmt->bind_param("isssss", $monitor_id, $browser, $url, $title, $lastVisit, $visitDate);
                 if ($stmt->execute()) {
