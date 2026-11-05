@@ -108,4 +108,3 @@ if (file_exists($controller_file)) {
     http_response_code(404);
     echo "Controller not found: $controller";
 }
-?> 
