@@ -1112,10 +1112,20 @@ function transcriptKeyRows(keys) {
         const raw=String(entry.key_pressed??'');
         const key=raw.trim().replace(/^\[(.*)\]$/,'$1').replace(/^<(.*)>$/,'$1');
         const time=String(entry.key_date||'');
-        if(/^(enter|return|numpadenter)$/i.test(key) || raw==='\n' || raw==='\r'){
+        if(/^(?:(?:shift|alt)\+)?(?:enter|return|numpadenter)$/i.test(key) || raw==='\n' || raw==='\r'){
             current.tokens.push({kind:'newline'});
             current={time,tokens:[]};
             lines.push(current);
+        }else if(/^(?:ctrl|control)\+(?:backspace|back)$/i.test(key)){
+            let count=0,started=false;
+            for(let k=current.tokens.length-1;k>=0;k--){
+                const token=current.tokens[k];
+                if(token.kind!=='char'||token.deleted)continue;
+                if(token.value.trim()==='' && started)break;
+                token.deleted=true;count++;started=true;
+            }
+            if(count)current.tokens.push({kind:'effect',value:'⌫ word',time});
+            else addBadge(raw||'Ctrl+Backspace',time);
         }else if(/^(backspace|back|bksp|vk_back)$/i.test(key)){
             let last=null;
             for(let k=current.tokens.length-1;k>=0;k--){
