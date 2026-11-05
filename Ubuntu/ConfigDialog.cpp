@@ -613,7 +613,7 @@ void ConfigDialog::onSaveClicked(){
         authToken=token;monitorId=created;activeUserNo=pendingUserNo;pendingUserNo.clear();
         directoryError.clear();
         assignmentLocked=false;settingsLocked=false;
-        rememberToken(authToken);refreshMonitors();refreshDirectory();saveSettings();updateUI();
+        rememberToken(authToken);refreshMonitors();saveSettings();updateUI();
         emit sessionStateChanged();return;
     }
     if(authToken.isEmpty()){connectionStatusLabel->setText("● Sign in to select a monitor");return;}
@@ -661,6 +661,6 @@ void ConfigDialog::onSaveClicked(){
         }
         monitorId=created;
     }
-    saveSettings();refreshMonitors();refreshDirectory();updateUI();
+    saveSettings();refreshMonitors();updateUI();
     emit sessionStateChanged();
 }
