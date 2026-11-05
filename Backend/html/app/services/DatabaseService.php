@@ -502,9 +502,26 @@ class DatabaseService {
      * @return array Status information: ['status' => 'online'|'inactive'|'offline', 'status_class' => 'success'|'warning'|'danger', 'status_text' => 'Online'|'Inactive'|'Offline', 'time_diff' => seconds, 'updated_at_timestamp' => unix timestamp]
      */
     public function calculateClientStatus($updated_at) {
+        // Heartbeats are written using MySQL NOW(). Compare them using the same
+        // database clock/session timezone; PHP's local timezone may be different.
         $updated_at_value = $updated_at ?? null;
-        $updated_at_timestamp = ($updated_at_value !== null && $updated_at_value !== '') ? strtotime($updated_at_value) : 0;
-        $time_diff = time() - $updated_at_timestamp;
+        $time_diff = PHP_INT_MAX;
+        $updated_at_timestamp = 0;
+        if ($updated_at_value !== null && $updated_at_value !== '') {
+            $stmt = $this->mysqli->prepare('SELECT TIMESTAMPDIFF(SECOND, ?, NOW()) AS age_seconds');
+            if ($stmt) {
+                $stmt->bind_param('s', $updated_at_value);
+                if ($stmt->execute()) {
+                    $result = $stmt->get_result();
+                    $row = $result ? $result->fetch_assoc() : null;
+                    if ($row && $row['age_seconds'] !== null) {
+                        $time_diff = (int)$row['age_seconds'];
+                        $updated_at_timestamp = time() - $time_diff;
+                    }
+                }
+                $stmt->close();
+            }
+        }
         
         // Use exact UI logic:
         // time_diff <= 300 (5 minutes) = 'online'
