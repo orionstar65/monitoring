@@ -145,9 +145,42 @@ try {
             'error'=>'To reconnect an existing monitor, restore its saved device session. Otherwise register this device.',
             'user_no'=>$userNo,'monitors'=>$preview,'device_count'=>count($preview)]);exit;
     }
-    if($action==='signup'||$action==='login'){
-        http_response_code(410);
-        echo json_encode(['error'=>'Desktop passwords were retired. Select User No in Monitor Settings.','code'=>'use_user_no']);exit;
+    // Desktop sign-in: account password is verified on the server and never
+    // persisted on the client. The revocable device-session token does not
+    // expire automatically, but password resets and explicit sign-out revoke it.
+    if($action==='login'){
+        $userNo=trim((string)($data['user_no']??''));
+        $password=(string)($data['password']??'');
+        if(!preg_match('/^[1-9][0-9]{0,14}$/D',$userNo)
+            || $password==='' || strlen($password)>1024){
+            http_response_code(400);echo json_encode(['success'=>false,'error'=>'Enter User No and password']);exit;
+        }
+        $key=hash('sha256',($_SERVER['REMOTE_ADDR']??'').'|desktop-login|'.$userNo);
+        $st=$db->prepare('SELECT COUNT(*) AS n FROM login_attempts WHERE attempt_key=? AND attempted_at>DATE_SUB(NOW(),INTERVAL 15 MINUTE)');
+        $st->bind_param('s',$key);$st->execute();$hits=(int)$st->get_result()->fetch_assoc()['n'];$st->close();
+        if($hits>=8){http_response_code(429);echo json_encode(['success'=>false,'error'=>'Too many login attempts. Try again later.']);exit;}
+        $st=$db->prepare('SELECT id,name,user_no,password,must_change_password FROM users WHERE user_no=? LIMIT 1');
+        $st->bind_param('s',$userNo);$st->execute();$user=$st->get_result()->fetch_assoc();$st->close();
+        if(!$user||!password_verify($password,(string)$user['password'])){
+            $st=$db->prepare('INSERT INTO login_attempts(attempt_key) VALUES (?)');
+            $st->bind_param('s',$key);$st->execute();$st->close();
+            http_response_code(401);echo json_encode(['success'=>false,'error'=>'Invalid User No or password']);exit;
+        }
+        if(!empty($user['must_change_password'])){
+            http_response_code(403);echo json_encode(['success'=>false,'code'=>'password_change_required',
+                'error'=>'Change your temporary password in the web portal before signing in on this device.']);exit;
+        }
+        $token=bin2hex(random_bytes(32));$hash=hash('sha256',$token);
+        $uid=(int)$user['id'];
+        $st=$db->prepare("INSERT INTO client_sessions(token_hash,user_id,monitor_id,session_type,expires_at) VALUES (?,?,NULL,'device',NULL)");
+        $st->bind_param('si',$hash,$uid);$st->execute();$st->close();
+        $monitors=clientMappedMonitorPreview($db,$uid);
+        echo json_encode(['success'=>true,'token'=>$token,'monitor_id'=>0,
+            'user'=>['id'=>$uid,'name'=>$user['name'],'user_no'=>(string)$user['user_no']],
+            'monitors'=>$monitors]);exit;
+    }
+    if($action==='signup'){
+        http_response_code(410);echo json_encode(['error'=>'Sign up using the web portal']);exit;
     }
     $session=clientAuthenticatedSession($db,false);
     if(!$session || ($session['session_type']??'')!=='device'){
