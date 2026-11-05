@@ -23,8 +23,8 @@ ob_start();
      <option value="admin" <?= ($_POST['role']??'')==='admin'?'selected':'' ?>>Admin</option></select>
      <div class="form-text">User sees aggregate monitoring totals; Admin can manage accounts, logs and devices.</div></div>
     <div class="col-md-6"><label for="password" class="form-label">Password <span class="text-danger">*</span></label>
-     <input type="password" id="password" name="password" class="form-control" minlength="12" maxlength="1024" autocomplete="new-password" required>
-     <div class="form-text">At least 12 characters. Never include this password in a URL or log.</div></div>
+     <input type="password" id="password" name="password" class="form-control" minlength="6" maxlength="1024" autocomplete="new-password" required>
+     <div class="form-text">Minimum six characters.</div></div>
    </div></div>
   </div>
   <div class="d-flex flex-wrap justify-content-end gap-2"><a href="<?= BASE_URL ?>users" class="btn btn-outline-secondary">Cancel</a>
