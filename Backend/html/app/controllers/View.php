@@ -317,8 +317,11 @@ class View extends Base {
         header('X-Content-Type-Options: nosniff');
         header('Cache-Control: private, max-age=120');
         header('Content-Length: '.filesize($absolute));
-        if(($_SERVER['REQUEST_METHOD']??'GET')==='HEAD')return;
+        // Binary responses must terminate the front controller immediately.
+        // Otherwise trailing PHP/template output can corrupt JPEG/PNG payloads.
+        if(($_SERVER['REQUEST_METHOD']??'GET')==='HEAD')exit;
         readfile($absolute);
+        exit;
     }
 
     private function preferredScreenshotPath(array $shot): string {
