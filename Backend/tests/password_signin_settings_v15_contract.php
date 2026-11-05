@@ -14,7 +14,18 @@ $mac=$read('Mac/MonitorClient/AppDelegate.swift');
 $linux=$read('Ubuntu/ConfigDialog.cpp');
 $linuxHeader=$read('Ubuntu/ConfigDialog.h');
 $linuxClient=$read('Ubuntu/MonitorClient.cpp');
+$usersController=$read('Backend/html/app/controllers/Users.php');
+$authController=$read('Backend/html/app/controllers/Auth.php');
+$createForm=$read('Backend/html/app/views/users/create.php');
+$editForm=$read('Backend/html/app/views/users/edit.php');
+$changeForm=$read('Backend/html/app/views/auth/change_password.php');
+$adminBootstrap=$read('Backend/create_admin.php');
+$loginRecovery=$read('Backend/recover_web_login.php');
 $checks=[
+ 'Create/edit controller allows 6-char password'=>str_contains($usersController,'strlen($password)<6')&&!str_contains($usersController,'strlen($password)<12'),
+ 'Change password endpoint allows 6-char password'=>str_contains($authController,'strlen($new)<6'),
+ 'Create/edit/change forms use 6-character minimum'=>str_contains($createForm,'minlength="6"')&&str_contains($editForm,'minlength="6"')&&substr_count($changeForm,'minlength="6"')===2,
+ 'CLI password policies use six chars'=>str_contains($adminBootstrap,'strlen($password)<6')&&str_contains($loginRecovery,'strlen($newPassword)<6'),
  'Desktop password login action'=>str_contains($api,"if(\$action==='login')"),
  'Password verified server-side'=>str_contains($api,'password_verify($password'),
  'Temporary passwords require web change'=>str_contains($api,"'password_change_required'"),
