@@ -31,6 +31,8 @@ public:
 
 signals:
     void sessionStateChanged();
+    void sendAllRequested();
+    void refreshConfigurationRequested();
 
 private slots:
     void onSaveClicked();
@@ -81,5 +83,6 @@ private:
     QCheckBox *notificationsCheck=nullptr;
     QGroupBox *monitorGroup=nullptr;
     QPushButton *testButton=nullptr,*logoutButton=nullptr,*saveButton=nullptr,*lockSettingsButton=nullptr,*editButton=nullptr;
+    QPushButton *sendAllButton=nullptr,*refreshConfigButton=nullptr;
 };
 #endif
