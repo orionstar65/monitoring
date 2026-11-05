@@ -2837,7 +2837,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     machineInfoRow, machineEditRow] { monitorPane.addArrangedSubview(row) }
         monitorPane.addArrangedSubview(line("IP address", monitorIP))
         for row in [remarkInfoRow, remarkEditRow] { monitorPane.addArrangedSubview(row) }
-        let save = action("Save Monitor", "save")
+        let save = action("Save", "save")
         let saveRow = line("", save)
         monitorPane.addArrangedSubview(saveRow)
         stack.addArrangedSubview(monitorPane)
@@ -2940,7 +2940,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 let platform = monitor["platform"] as? String ?? "—"
                 let type = monitor["type"] as? String ?? "Desktop"
                 let ip = monitor["ip_address"] as? String ?? "—"
-                picker.addItem(withTitle: "Device #\(id) · \(platform) · \(type) · \(ip)")
+                picker.addItem(withTitle: "\(ip) · \(platform)-\(type)")
                 picker.lastItem?.representedObject = id
             }
             picker.addItem(withTitle: "Add new...")
@@ -2980,9 +2980,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             }
             edit.isHidden = !enrolled || creating || isLocked || pendingFirstDevice
             edit.title = editable ? "Cancel" : "Edit"
-            saveRow.isHidden = !editable
-            save.title = creating ? "Add Monitor" : "Save Monitor"
-            save.isEnabled = editable && (enrolled || pendingFirstDevice)
+            // Save is always available to persist server and notification preferences.
+            saveRow.isHidden = false
+            save.title = creating ? "Add Monitor" : "Save"
+            save.isEnabled = !isLocked
             lockSettings.isHidden = !enrolled || creating || pendingFirstDevice
             lockSettings.isEnabled = enrolled && !isLocked
             lockSettings.title = isLocked ? "Settings Locked" : "Lock Settings"
@@ -3132,13 +3133,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                             let platform = monitor["platform"] as? String ?? "—"
                             let kind = monitor["type"] as? String ?? "—"
                             let ip = monitor["ip_address"] as? String ?? "—"
-                            picker.addItem(withTitle: "Device #\(id) · \(platform)-\(kind) · \(ip) (assigned)")
+                            picker.addItem(withTitle: "\(ip) · \(platform)-\(kind)")
                             picker.lastItem?.representedObject = id
                         }
-                        picker.addItem(withTitle: "Add new for this computer...")
+                        picker.addItem(withTitle: "Add new...")
                         picker.lastItem?.representedObject = -1
                         picker.selectItem(at: picker.numberOfItems - 1)
-                        directoryError = "Existing monitors are read-only; add a new monitor for this installation."
+                        directoryError = nil
                         updateMonitorFields()
                         updateState()
                         return
@@ -3227,6 +3228,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 refreshMonitors()
                 updateState()
             case "save":
+                // The global Save button must work independently of monitor edit mode.
+                self.notificationsEnabled = notifications.state == .on
+                self.storage.set(self.notificationsEnabled, forKey: "notifications-enabled")
+                if !monitorEditing && picker.selectedItem?.representedObject as? Int != -1 {
+                    guard saveServer() else { showError("Enter a valid server address."); return }
+                    updateState()
+                    return
+                }
                 if let number = pendingUserNo {
                     guard picker.selectedItem?.representedObject as? Int == -1 else {
                         showError("This monitor is assigned to another installation. Select Add new, or ask the administrator to reassign it.")
