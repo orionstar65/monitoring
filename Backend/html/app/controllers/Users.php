@@ -57,6 +57,13 @@ class Users extends Base {
             $this->redirect('users');
         }
         
+        $monitors = $this->db->fetchAll('SELECT m.* FROM tbl_monitor_ips m WHERE m.owner_user_id=:uid ORDER BY m.id',['uid'=>$id]);
+        $accounts = $this->db->fetchAll('SELECT u.id,u.user_no,u.name,COUNT(m.id) AS device_count FROM users u LEFT JOIN tbl_monitor_ips m ON m.owner_user_id=u.id GROUP BY u.id,u.user_no,u.name ORDER BY u.name,u.id');
+        require_once BASEPATH . 'app/services/StatusService.php';
+        $statusService=StatusService::getInstance();
+        foreach($monitors as &$monitor){$monitor['status_info']=$statusService->calculateClientStatus($monitor['last_monitor_tic']??null);}
+        unset($monitor);
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $name=trim((string)($_POST['name']??''));
             $role = $_POST['role'] ?? ROLE_USER;
@@ -82,7 +89,7 @@ class Users extends Base {
                     
                     if (!empty($password)) {
                         if(strlen($password)<12 || strlen($password)>1024){
-                            $this->view('users/edit',['user'=>$user,'error'=>'Password must contain at least 12 characters.']);
+                            $this->view('users/edit',['user'=>$user,'error'=>'Password must contain at least 12 characters.','monitors'=>$monitors,'accounts'=>$accounts]);
                             return;
                         }
                         $data['password'] = password_hash($password, PASSWORD_DEFAULT);
@@ -92,7 +99,7 @@ class Users extends Base {
                     if($user['role']==='admin' && $role!=='admin'){
                         $admins=(int)$this->db->fetch("SELECT COUNT(*) AS n FROM users WHERE role='admin'")['n'];
                         if($admins<=1){
-                            $this->view('users/edit',['user'=>$user,'error'=>'Cannot demote the last administrator.']);
+                            $this->view('users/edit',['user'=>$user,'error'=>'Cannot demote the last administrator.','monitors'=>$monitors,'accounts'=>$accounts]);
                             return;
                         }
                     }
@@ -101,7 +108,7 @@ class Users extends Base {
                     } catch (PDOException $e) {
                         if($e->getCode()==='23000') {
                             $error='User No already exists';
-                            $this->view('users/edit',['user'=>array_merge($user,['user_no'=>$userNo]),'error'=>$error]);
+                            $this->view('users/edit',['user'=>array_merge($user,['user_no'=>$userNo]),'error'=>$error,'monitors'=>$monitors,'accounts'=>$accounts]);
                             return;
                         }
                         throw $e;
@@ -133,12 +140,6 @@ class Users extends Base {
             }
         }
         
-        $monitors = $this->db->fetchAll('SELECT m.* FROM tbl_monitor_ips m WHERE m.owner_user_id=:uid ORDER BY m.id',['uid'=>$id]);
-        $accounts = $this->db->fetchAll('SELECT u.id,u.user_no,u.name,COUNT(m.id) AS device_count FROM users u LEFT JOIN tbl_monitor_ips m ON m.owner_user_id=u.id GROUP BY u.id,u.user_no,u.name ORDER BY u.name,u.id');
-        require_once BASEPATH . 'app/services/StatusService.php';
-        $statusService=StatusService::getInstance();
-        foreach($monitors as &$monitor){$monitor['status_info']=$statusService->calculateClientStatus($monitor['last_monitor_tic']??null);}
-        unset($monitor);
         $this->view('users/edit', ['user' => $user, 'error' => $error ?? null, 'monitors'=>$monitors, 'accounts'=>$accounts]);
     }
     
