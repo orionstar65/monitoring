@@ -731,9 +731,11 @@ class Export extends Base {
             // Create video slideshow for this date
             $videoPath = $this->createVideoSlideshow($dateScreenshots, $dateFolder, $username, $ip, $date);
             
-            if ($videoPath) {
+            if ($videoPath && is_file($videoPath)) {
                 $totalVideosCreated++;
                 $this->logProgress("✓ Created video: " . basename($videoPath));
+            } elseif ($videoPath && is_dir($videoPath)) {
+                $this->logProgress("✓ Preserved screenshots as JPEG files for {$date}");
             } else {
                 $this->logProgress("⚠ Failed to create video for date: {$date}");
             }
