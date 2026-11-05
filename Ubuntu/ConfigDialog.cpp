@@ -326,6 +326,15 @@ bool ConfigDialog::saveServerIfChanged(){
     const QString oldHost=previous.value("Server/ip","192.168.1.45").toString();
     const int oldPort=previous.value("Server/port",8924).toInt();
     if(oldHost!=getServerIP()||oldPort!=getServerPort()){
+        if(!authToken.isEmpty()){
+            const QString draftHost=getServerIP();
+            const int draftPort=getServerPort();
+            serverIPEdit->setText(oldHost);
+            serverPortEdit->setValue(oldPort);
+            authRequest({{"action","logout"}},true);
+            serverIPEdit->setText(draftHost);
+            serverPortEdit->setValue(draftPort);
+        }
         clearStoredToken(oldHost,oldPort);
         authToken.clear();monitorId=0;assignmentLocked=false;activeUserNo.clear();
         emit sessionStateChanged();
