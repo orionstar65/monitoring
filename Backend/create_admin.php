@@ -6,8 +6,8 @@ $adminNo=getenv('MONITOR_ADMIN_USER_NO')?:'';
 
 $name=getenv('MONITOR_ADMIN_NAME')?:'';
 $password=getenv('MONITOR_ADMIN_PASSWORD')?:'';
-if(!preg_match('/^[1-9][0-9]{0,14}$/D',$adminNo)||strlen($password)<12||strlen($name)<2){
-    fwrite(STDERR,"Set MONITOR_ADMIN_USER_NO, MONITOR_ADMIN_NAME, MONITOR_ADMIN_PASSWORD (12+ chars).\n");
+if(!preg_match('/^[1-9][0-9]{0,14}$/D',$adminNo)||strlen($password)<6||strlen($name)<2){
+    fwrite(STDERR,"Set MONITOR_ADMIN_USER_NO, MONITOR_ADMIN_NAME, MONITOR_ADMIN_PASSWORD (6+ chars).\n");
     exit(1);
 }
 try{
