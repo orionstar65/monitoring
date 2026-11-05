@@ -2912,6 +2912,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 (monitorSettingsLocked || (monitor["assignment_locked"] as? Bool ?? false))
             updateState()
         }
+        func sortMonitorOptions(_ monitors: [[String: Any]]) -> [[String: Any]] {
+            let fields = ["type", "platform", "ip_address"]
+            return monitors.sorted { lhs, rhs in
+                for field in fields {
+                    let l = (lhs[field] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    let r = (rhs[field] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    let comparison = l.localizedStandardCompare(r)
+                    if comparison != .orderedSame { return comparison == .orderedAscending }
+                }
+                return (lhs["id"] as? Int ?? 0) < (rhs["id"] as? Int ?? 0)
+            }
+        }
         func refreshMonitors() {
             guard !self.clientToken.isEmpty else {
                 availableMonitors = []
@@ -2926,7 +2938,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 picker.removeAllItems()
                 return
             }
-            availableMonitors = restored?["monitors"] as? [[String: Any]] ?? []
+            availableMonitors = sortMonitorOptions(restored?["monitors"] as? [[String: Any]] ?? [])
             let currentNo = String(describing: (restored?["user"] as? [String: Any])?["user_no"] ?? "")
             if let item = users.itemArray.first(where: { ($0.representedObject as? String) == currentNo }) {
                 users.select(item)
@@ -3137,7 +3149,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     if response?["code"] as? String == "no_monitors" {
                         pendingUserNo = number
                         monitorSettingsLocked = false
-                        availableMonitors = response?["monitors"] as? [[String: Any]] ?? []
+                        availableMonitors = sortMonitorOptions(response?["monitors"] as? [[String: Any]] ?? [])
                         picker.removeAllItems()
                         for monitor in availableMonitors {
                             let id = monitor["id"] as? Int ?? 0
