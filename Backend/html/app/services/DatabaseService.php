@@ -1142,235 +1142,135 @@ class DatabaseService {
      * @return array Result with success status and details
      */
     public function mergeMonitorLogs($source_ip_id, $target_ip_id) {
-        // Validate inputs
-        if ($source_ip_id == $target_ip_id) {
-            return [
-                'success' => false,
-                'error' => 'Source and target cannot be the same'
-            ];
+        $sourceId=(int)$source_ip_id;
+        $targetId=(int)$target_ip_id;
+        if($sourceId<=0||$targetId<=0||$sourceId===$targetId){
+            return ['success'=>false,'error'=>'Select two different existing monitors'];
         }
-        
-        // Get source and target monitor info
-        $source_stmt = $this->mysqli->prepare("SELECT * FROM tbl_monitor_ips WHERE id = ?");
-        $source_stmt->bind_param("i", $source_ip_id);
-        $source_stmt->execute();
-        $source_result = $source_stmt->get_result();
-        $source_monitor = $source_result->fetch_assoc();
-        $source_stmt->close();
-        
-        if (!$source_monitor) {
-            return [
-                'success' => false,
-                'error' => 'Source monitor not found'
-            ];
+        $stmt=$this->mysqli->prepare('SELECT id,ip_address,platform,slack_id FROM tbl_monitor_ips WHERE id IN (?,?)');
+        $stmt->bind_param('ii',$sourceId,$targetId);
+        $stmt->execute();
+        $found=[];
+        foreach($stmt->get_result()->fetch_all(MYSQLI_ASSOC) as $monitor)$found[(int)$monitor['id']]=$monitor;
+        $stmt->close();
+        if(!isset($found[$sourceId],$found[$targetId])){
+            return ['success'=>false,'error'=>'Source or target monitor no longer exists'];
         }
-        
-        $target_stmt = $this->mysqli->prepare("SELECT * FROM tbl_monitor_ips WHERE id = ?");
-        $target_stmt->bind_param("i", $target_ip_id);
-        $target_stmt->execute();
-        $target_result = $target_stmt->get_result();
-        $target_monitor = $target_result->fetch_assoc();
-        $target_stmt->close();
-        
-        if (!$target_monitor) {
-            return [
-                'success' => false,
-                'error' => 'Target monitor not found'
-            ];
-        }
-        
-        $source_ip = $source_monitor['ip_address'];
-        $target_ip = $target_monitor['ip_address'];
-        
-        // Start transaction
+
+        $tables=['browser_history_logs','key_logs','usb_device_logs','screenshot_metadata'];
+        $stats=array_fill_keys(array_merge($tables,['storage_statistics']),0);
+        $errors=[];
         $this->mysqli->begin_transaction();
-        
-        try {
-            $stats = [
-                'browser_history_logs' => 0,
-                'key_logs' => 0,
-                'usb_device_logs' => 0,
-                'screenshot_metadata' => 0,
-                'storage_statistics' => 0
-            ];
-            
-            // Update browser_history_logs
-            $stmt = $this->mysqli->prepare("UPDATE browser_history_logs SET monitor_ip_id = ? WHERE monitor_ip_id = ?");
-            $stmt->bind_param("ii", $target_ip_id, $source_ip_id);
-            $stmt->execute();
-            $stats['browser_history_logs'] = $stmt->affected_rows;
-            $stmt->close();
-            
-            // Update key_logs
-            $stmt = $this->mysqli->prepare("UPDATE key_logs SET monitor_ip_id = ? WHERE monitor_ip_id = ?");
-            $stmt->bind_param("ii", $target_ip_id, $source_ip_id);
-            $stmt->execute();
-            $stats['key_logs'] = $stmt->affected_rows;
-            $stmt->close();
-            
-            // Update usb_device_logs
-            $stmt = $this->mysqli->prepare("UPDATE usb_device_logs SET monitor_ip_id = ? WHERE monitor_ip_id = ?");
-            $stmt->bind_param("ii", $target_ip_id, $source_ip_id);
-            $stmt->execute();
-            $stats['usb_device_logs'] = $stmt->affected_rows;
-            $stmt->close();
-            
-            // Update screenshot_metadata
-            $stmt = $this->mysqli->prepare("UPDATE screenshot_metadata SET monitor_ip_id = ? WHERE monitor_ip_id = ?");
-            $stmt->bind_param("ii", $target_ip_id, $source_ip_id);
-            $stmt->execute();
-            $stats['screenshot_metadata'] = $stmt->affected_rows;
-            $stmt->close();
-            
-            // Update storage_statistics
-            $stmt = $this->mysqli->prepare("UPDATE storage_statistics SET monitor_ip_id = ? WHERE monitor_ip_id = ?");
-            $stmt->bind_param("ii", $target_ip_id, $source_ip_id);
-            $stmt->execute();
-            $stats['storage_statistics'] = $stmt->affected_rows;
-            $stmt->close();
-            
-            // Copy slack_id from source to target if source has one
-            if (!empty($source_monitor['slack_id'])) {
-                $stmt = $this->mysqli->prepare("UPDATE tbl_monitor_ips SET slack_id = ? WHERE id = ?");
-                $stmt->bind_param("si", $source_monitor['slack_id'], $target_ip_id);
-                $stmt->execute();
-                $stmt->close();
-            }
-            
-            // Copy platform from source to target if source has one
-            if (!empty($source_monitor['platform'])) {
-                $stmt = $this->mysqli->prepare("UPDATE tbl_monitor_ips SET platform = ? WHERE id = ?");
-                $stmt->bind_param("si", $source_monitor['platform'], $target_ip_id);
-                $stmt->execute();
-                $stmt->close();
-            }
-            
-            // Move files from logs, screens, and thumbnails folders
-            // Use BASEPATH if defined, otherwise construct from __DIR__
-            if (defined('BASEPATH')) {
-                $base_path = BASEPATH;
-            } else {
-                $base_path = __DIR__ . '/../../';
-            }
-            
-            $directories_to_move = ['logs', 'screens', 'thumbnails'];
-            $files_moved = 0;
-            $files_moved_by_type = [
-                'logs' => 0,
-                'screens' => 0,
-                'thumbnails' => 0
-            ];
-            
-            foreach ($directories_to_move as $dir_type) {
-                $source_dir = $base_path . 'data/' . $dir_type . '/ip_' . $source_ip . '/';
-                $target_dir = $base_path . 'data/' . $dir_type . '/ip_' . $target_ip . '/';
-                
-                if (file_exists($source_dir) && is_dir($source_dir)) {
-                    // Create target directory if it doesn't exist
-                    if (!file_exists($target_dir)) {
-                        @mkdir($target_dir, 0755, true);
-                    }
-                    
-                    // Move all files and subdirectories
-                    $iterator = new RecursiveIteratorIterator(
-                        new RecursiveDirectoryIterator($source_dir, RecursiveDirectoryIterator::SKIP_DOTS),
-                        RecursiveIteratorIterator::SELF_FIRST
-                    );
-                    
-                    // Prepare IP address strings for filename replacement
-                    $source_ip_filename = str_replace('.', '_', $source_ip);
-                    $target_ip_filename = str_replace('.', '_', $target_ip);
-                    
-                    foreach ($iterator as $item) {
-                        $source_path = $item->getPathname();
-                        $relative_path = substr($source_path, strlen($source_dir));
-                        
-                        if ($item->isDir()) {
-                            // For directories, just create in target
-                            $target_path = $target_dir . $relative_path;
-                            if (!file_exists($target_path)) {
-                                @mkdir($target_path, 0755, true);
-                            }
-                        } else {
-                            // For files, replace source IP with target IP in filename
-                            $filename = basename($relative_path);
-                            $directory = dirname($relative_path);
-                            
-                            // Replace source IP in filename with target IP
-                            $new_filename = str_replace($source_ip_filename, $target_ip_filename, $filename);
-                            
-                            // Construct target path
-                            if ($directory && $directory !== '.') {
-                                $target_path = $target_dir . $directory . '/' . $new_filename;
-                            } else {
-                                $target_path = $target_dir . $new_filename;
-                            }
-                            
-                            // Create subdirectory if needed
-                            if ($directory && $directory !== '.') {
-                                $target_subdir = $target_dir . $directory;
-                                if (!file_exists($target_subdir)) {
-                                    @mkdir($target_subdir, 0755, true);
-                                }
-                            }
-                            
-                            // Handle conflicts by appending timestamp
-                            if (file_exists($target_path)) {
-                                $path_info = pathinfo($target_path);
-                                $timestamp = date('YmdHis');
-                                $target_path = $path_info['dirname'] . '/' . $path_info['filename'] . '_' . $timestamp . '.' . $path_info['extension'];
-                            }
-                            
-                            if (@rename($source_path, $target_path)) {
-                                $files_moved++;
-                                $files_moved_by_type[$dir_type]++;
-                            } else {
-                                // If rename fails, try copy then delete
-                                if (@copy($source_path, $target_path)) {
-                                    @unlink($source_path);
-                                    $files_moved++;
-                                    $files_moved_by_type[$dir_type]++;
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Remove empty source directory
-                    @rmdir($source_dir);
+        try{
+            // Savepoints let a single damaged/duplicate table fail without
+            // rolling back all the independent log categories.
+            foreach($tables as $table){
+                $this->mysqli->query('SAVEPOINT merge_table');
+                try{
+                    $st=$this->mysqli->prepare("UPDATE `{$table}` SET monitor_ip_id=? WHERE monitor_ip_id=?");
+                    $st->bind_param('ii',$targetId,$sourceId);
+                    $st->execute();
+                    $stats[$table]=$st->affected_rows;
+                    $st->close();
+                    $this->mysqli->query('RELEASE SAVEPOINT merge_table');
+                }catch(Throwable $e){
+                    $this->mysqli->query('ROLLBACK TO SAVEPOINT merge_table');
+                    $this->mysqli->query('RELEASE SAVEPOINT merge_table');
+                    $errors[]="{$table}: ".$e->getMessage();
+                    error_log("Partial merge {$sourceId} -> {$targetId}: {$table}: ".$e->getMessage());
                 }
             }
-            
-            // Delete source monitor entry
-            $stmt = $this->mysqli->prepare("DELETE FROM tbl_monitor_ips WHERE id = ?");
-            $stmt->bind_param("i", $source_ip_id);
-            $stmt->execute();
-            $stmt->close();
-            
-            // Commit transaction
+
+            // Storage statistics have a unique (monitor, category, month)
+            // index: combine counts instead of blindly changing monitor IDs.
+            $this->mysqli->query('SAVEPOINT merge_stats');
+            try{
+                $st=$this->mysqli->prepare(
+                    'INSERT INTO storage_statistics (monitor_ip_id,data_type,month_year,record_count,total_size,last_updated)
+                     SELECT ?,data_type,month_year,record_count,total_size,NOW()
+                     FROM storage_statistics WHERE monitor_ip_id=?
+                     ON DUPLICATE KEY UPDATE
+                      record_count=COALESCE(record_count,0)+VALUES(record_count),
+                      total_size=COALESCE(total_size,0)+VALUES(total_size),
+                      last_updated=NOW()'
+                );
+                $st->bind_param('ii',$targetId,$sourceId);$st->execute();$st->close();
+                $st=$this->mysqli->prepare('DELETE FROM storage_statistics WHERE monitor_ip_id=?');
+                $st->bind_param('i',$sourceId);$st->execute();
+                $stats['storage_statistics']=$st->affected_rows;$st->close();
+                $this->mysqli->query('RELEASE SAVEPOINT merge_stats');
+            }catch(Throwable $e){
+                $this->mysqli->query('ROLLBACK TO SAVEPOINT merge_stats');
+                $this->mysqli->query('RELEASE SAVEPOINT merge_stats');
+                $errors[]='storage_statistics: '.$e->getMessage();
+            }
+
+            // Do not overwrite target device identity; fill missing metadata.
+            foreach(['slack_id','platform'] as $field){
+                if(empty($found[$sourceId][$field])||!empty($found[$targetId][$field]))continue;
+                $this->mysqli->query('SAVEPOINT merge_meta');
+                try{
+                    $st=$this->mysqli->prepare("UPDATE tbl_monitor_ips SET {$field}=? WHERE id=?");
+                    $st->bind_param('si',$found[$sourceId][$field],$targetId);$st->execute();$st->close();
+                    $this->mysqli->query('RELEASE SAVEPOINT merge_meta');
+                }catch(Throwable $e){
+                    $this->mysqli->query('ROLLBACK TO SAVEPOINT merge_meta');
+                    $this->mysqli->query('RELEASE SAVEPOINT merge_meta');
+                    $errors[]="monitor {$field}: ".$e->getMessage();
+                }
+            }
+
+            // Never delete the source while log rows remain. FK ON DELETE
+            // CASCADE would otherwise irreversibly erase the failed category.
+            $remaining=0;
+            foreach(array_keys($stats) as $table){
+                try{
+                    $st=$this->mysqli->prepare("SELECT COUNT(*) AS n FROM `{$table}` WHERE monitor_ip_id=?");
+                    $st->bind_param('i',$sourceId);$st->execute();
+                    $remaining+=(int)$st->get_result()->fetch_assoc()['n'];$st->close();
+                }catch(Throwable $e){
+                    $remaining++;
+                    $errors[]="Cannot verify {$table}: ".$e->getMessage();
+                }
+            }
+            $sourceDeleted=false;
+            if($remaining===0){
+                $this->mysqli->query('SAVEPOINT merge_delete');
+                try{
+                    $st=$this->mysqli->prepare('DELETE FROM tbl_monitor_ips WHERE id=?');
+                    $st->bind_param('i',$sourceId);$st->execute();
+                    $sourceDeleted=$st->affected_rows>0;$st->close();
+                    $this->mysqli->query('RELEASE SAVEPOINT merge_delete');
+                }catch(Throwable $e){
+                    $this->mysqli->query('ROLLBACK TO SAVEPOINT merge_delete');
+                    $this->mysqli->query('RELEASE SAVEPOINT merge_delete');
+                    $errors[]='Source monitor retained: '.$e->getMessage();
+                }
+            }else{
+                $errors[]="Source monitor retained ({$remaining} records still require merging)";
+            }
+            // File paths in screenshot_metadata point at the ORIGINAL disk
+            // location. Do not rename them here: moving screenshot folders
+            // without a synchronized path update breaks the web preview.
             $this->mysqli->commit();
-            
             return [
-                'success' => true,
-                'message' => 'Logs merged successfully',
-                'stats' => $stats,
-                'files_moved' => $files_moved,
-                'files_moved_by_type' => $files_moved_by_type,
-                'source_ip' => $source_ip,
-                'target_ip' => $target_ip
+                'success'=>true,
+                'partial'=>count($errors)>0,
+                'message'=>count($errors)>0?'Best-effort merge completed with warnings':'Logs merged successfully',
+                'stats'=>$stats,'errors'=>$errors,
+                'source_deleted'=>$sourceDeleted,
+                'files_moved'=>0,
+                'files_preserved'=>true,
+                'source_ip'=>$found[$sourceId]['ip_address'],
+                'target_ip'=>$found[$targetId]['ip_address']
             ];
-            
-        } catch (Exception $e) {
-            // Rollback transaction on error
+        }catch(Throwable $fatal){
             $this->mysqli->rollback();
-            error_log("Merge logs error: " . $e->getMessage());
-            
-            return [
-                'success' => false,
-                'error' => 'Merge failed: ' . $e->getMessage()
-            ];
+            error_log('Merge fatal error: '.$fatal->getMessage());
+            return ['success'=>false,'error'=>'Merge failed: '.$fatal->getMessage()];
         }
     }
-    
+
     /**
      * Fix mismatched IP addresses in filenames for a given monitor IP
      * Renames files that have wrong IP addresses in their filenames
