@@ -335,7 +335,7 @@ void ConfigDialog::updateMonitorList(const QJsonArray &items){
         const QJsonObject m=value.toObject();
         monitorSelector->addItem(QString("%1 · %2-%3").arg(
             m.value("ip_address").toString("—"),m.value("platform").toString("—"),
-            m.value("type").toString("Desktop"),QString()),
+            m.value("type").toString("Desktop")),
             m.value("id").toInt());
     }
     monitorSelector->addItem("Add new...",-1);
