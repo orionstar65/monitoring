@@ -534,6 +534,11 @@ async function loadDevices() {
     }
 }
 
+function escapeDeviceLabel(device) {
+    const identity = `${device.user_no || '—'}(${device.username || 'Unassigned'}): ${device.last_seen_ip || device.ip_address || '—'} : ${device.platform || 'Unknown OS'}-${device.type || 'Device'}`;
+    return identity.replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
 // Render device list in the multiselect
 function renderDeviceList() {
     const deviceList = document.getElementById('deviceList');
@@ -549,7 +554,7 @@ function renderDeviceList() {
                    ${selectedDevices.includes(device.id) ? 'checked' : ''}
                    onchange="toggleDevice(${device.id})">
             <label for="device_${device.id}">
-                ${device.username || 'Unknown'} (${device.ip_address})
+                ${escapeDeviceLabel(device)}
                 ${device.name ? `<br><small style="color: #666;">${device.name}</small>` : ''}
             </label>
         `;
