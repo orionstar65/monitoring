@@ -38,43 +38,12 @@ class Auth extends Base {
         $this->view('auth/login', ['error' => $error ?? null]);
     }
     
+    // Accounts are provisioned by administrators using a manually assigned User No.
     public function signup() {
-        if($_SERVER['REQUEST_METHOD']==='POST'){
-            $name=trim((string)($_POST['name']??''));
-            $email=trim((string)($_POST['email']??''));
-            $password=(string)($_POST['password']??'');
-            if(strlen($name)<2||strlen($name)>150
-                ||preg_match('/[<>\\x00-\\x1f\\x7f]/',$name)
-                ||($email!=='' && !filter_var($email,FILTER_VALIDATE_EMAIL))
-                ||strlen($email)>254||strlen($password)<12||strlen($password)>1024){
-                $error='Enter a full name, optional valid email and password of at least 12 characters.';
-            }else{
-                // Enforce the same signup rate limit as the desktop API.
-                $key=hash('sha256',($_SERVER['REMOTE_ADDR']??'').'|signup');
-                $attempts=(int)$this->db->fetch(
-                    'SELECT COUNT(*) AS hits FROM login_attempts WHERE attempt_key=:k AND attempted_at>DATE_SUB(NOW(),INTERVAL 15 MINUTE)',
-                    ['k'=>$key])['hits'];
-                if($attempts>=10){
-                    http_response_code(429);
-                    $this->view('auth/signup',['error'=>'Too many registration attempts. Please try later.']);
-                    return;
-                }
-                $this->db->insert('login_attempts',['attempt_key'=>$key]);
-                $existing=$email==='' ? false
-                    : $this->db->fetch('SELECT id FROM users WHERE email=:email',['email'=>$email]);
-                if($existing)$error='Email already registered.';
-                else try{
-                    $newId=(int)$this->db->insert('users',['name'=>$name,'email'=>$email!==''?$email:null,
-                        'password'=>password_hash($password,PASSWORD_DEFAULT),'role'=>'viewer',
-                        'created_at'=>date('Y-m-d H:i:s')]);
-                    $this->db->update('users',['user_no'=>$newId+100000],'id=:id',['id'=>$newId]);
-                    $_SESSION['success_message']='Account created. Your User No is '.($newId+100000).'. Use this number to sign in.';
-                    $this->redirect('auth/login');
-                }catch(PDOException $e){$error='Could not create account.';}
-            }
-        }
-        $this->view('auth/signup',['error'=>$error??null]);
+        http_response_code(403);
+        $this->redirect('auth/login');
     }
+
     public function change_password() {
         if(empty($_SESSION['user_id']))$this->redirect('auth/login');
         $user=$this->db->fetch('SELECT password,must_change_password FROM users WHERE id=:id',
