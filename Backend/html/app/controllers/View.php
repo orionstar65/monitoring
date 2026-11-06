@@ -19,8 +19,12 @@ class View extends Base {
             $this->view('view/aggregate');return;
         }
         // Get monitors from database only (no expensive file scanning)
+        [$scope,$scopeParams]=$this->monitorScope('m');
         $monitors = $this->db->fetchAll(
-            "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY (owner.id IS NULL), CAST(owner.user_no AS UNSIGNED), owner.name, COALESCE(m.type,''), COALESCE(m.platform,''), INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)), COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address), m.id"
+            "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m
+             LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE {$scope}
+             ORDER BY CAST(owner.user_no AS UNSIGNED),owner.name,m.type,m.platform,m.id",
+            $scopeParams
         );
         
         // Add basic status based on database data only
@@ -44,21 +48,29 @@ class View extends Base {
 
     /** Settings panel data: admin-only, existing monitor plus same-owner merge targets. */
     public function api_monitor_settings() {
-        $this->requireAdmin();
+        $this->requireManager();
         $id=filter_var($_GET['monitor_id']??null,FILTER_VALIDATE_INT);
         if(!$id){http_response_code(400);$this->json(['success'=>false,'error'=>'Select a monitor']);}
+        $this->requireMonitorAccess((int)$id);
         $monitor=$this->db->fetch(
             'SELECT m.*,u.user_no,u.name AS username FROM tbl_monitor_ips m
              LEFT JOIN users u ON u.id=m.owner_user_id WHERE m.id=:id',
             ['id'=>$id]
         );
         if(!$monitor){http_response_code(404);$this->json(['success'=>false,'error'=>'Monitor not found']);}
-        $users=$this->db->fetchAll(
-            'SELECT u.id,u.user_no,u.name,
-                (SELECT COUNT(*) FROM tbl_monitor_ips t WHERE t.owner_user_id=u.id) AS device_count
-             FROM users u ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id'
-        );
-        $targets=!empty($monitor['owner_user_id'])?$this->db->fetchAll(
+        $users=$this->isAdmin()
+            ? $this->db->fetchAll(
+                'SELECT u.id,u.user_no,u.name,
+                    (SELECT COUNT(*) FROM tbl_monitor_ips t WHERE t.owner_user_id=u.id) AS device_count
+                 FROM users u ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id')
+            : $this->db->fetchAll(
+                'SELECT u.id,u.user_no,u.name,
+                    (SELECT COUNT(*) FROM tbl_monitor_ips t WHERE t.owner_user_id=u.id) AS device_count
+                 FROM users u JOIN admin_user_assignments a ON a.managed_user_id=u.id
+                 WHERE a.admin_user_id=:admin AND u.role=:role
+                 ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id',
+                ['admin'=>(int)$this->user['id'],'role'=>ROLE_USER]);
+        $targets=$this->isAdmin()&&!empty($monitor['owner_user_id'])?$this->db->fetchAll(
             'SELECT id,ip_address,last_seen_ip,platform,type FROM tbl_monitor_ips
              WHERE owner_user_id=:owner AND id<>:id ORDER BY id',
             ['owner'=>$monitor['owner_user_id'],'id'=>$id]
@@ -69,6 +81,7 @@ class View extends Base {
     /** Bounded monitor-specific screenshot history for the interactive viewer. */
     public function api_screenshot_timeline() {
         $id=filter_var($_GET['monitor_id']??null,FILTER_VALIDATE_INT);
+        if($id)$this->requireMonitorAccess((int)$id);
         $from=(string)($_GET['from']??'');
         $to=(string)($_GET['to']??'');
         $start=DateTimeImmutable::createFromFormat('!Y-m-d H:i:s',$from,new DateTimeZone('UTC'));
@@ -340,11 +353,14 @@ class View extends Base {
     public function api_live_status() {
         // Get monitors from database only (fast)
         // OPTIMIZED: Only select fields needed for status calculation and response
+        [$scope,$scopeParams]=$this->monitorScope('m');
         $monitors = $this->db->fetchAll(
-            "SELECT m.id,m.ip_address,m.last_seen_ip,m.mac_address,m.platform,
+            "SELECT m.id,m.owner_user_id,m.ip_address,m.last_seen_ip,m.mac_address,m.platform,
                     owner.name AS username,owner.user_no,CONCAT('Device #',m.id) AS name,m.type,m.last_monitor_tic,m.updated_at,m.created_at
              FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
-             ORDER BY (owner.id IS NULL), CAST(owner.user_no AS UNSIGNED), owner.name, COALESCE(m.type,''), COALESCE(m.platform,''), INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)), COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address), m.id"
+             WHERE {$scope}
+             ORDER BY CAST(owner.user_no AS UNSIGNED),owner.name,m.type,m.platform,m.id",
+            $scopeParams
         );
         
         // Add status based on database data only
