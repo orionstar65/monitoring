@@ -1161,7 +1161,8 @@ async function inspectKeyContextRange() {
 // Move the whole highlighted interval; drag either border to resize it.
 function keyRangeHitMode(state,time,ruler){
     const perPixel=(state.end-state.start)/Math.max(1,ruler.getBoundingClientRect().width);
-    const edgeTolerance=14*perPixel;
+    const selectedPixels=(state.rangeEnd-state.rangeStart)/perPixel;
+    const edgeTolerance=Math.min(14,Math.max(2,selectedPixels*.3))*perPixel;
     const fromDistance=Math.abs(time-state.rangeStart),toDistance=Math.abs(time-state.rangeEnd);
     if(fromDistance<=edgeTolerance||toDistance<=edgeTolerance)
         return fromDistance<=toDistance?'start':'end';
