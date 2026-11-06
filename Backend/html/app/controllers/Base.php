@@ -12,7 +12,8 @@ class Base {
         $role=(string)($this->user['role']??'');
         $class=get_class($this);
         $parts=explode('/',trim((string)parse_url($_SERVER['REQUEST_URI']??'',PHP_URL_PATH),'/'));
-        $method=end($parts);
+        $controllerPosition=array_search(strtolower($class),array_map('strtolower',$parts),true);
+        $method=$controllerPosition===false?'index':($parts[$controllerPosition+1]??'index');
         if($role===ROLE_SCOPED_ADMIN){
             // Delegated admins can inspect only assigned-user monitoring data
             // and edit only those users/monitors. Other controllers fail closed.
