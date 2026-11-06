@@ -8,6 +8,7 @@
 // Include configuration and database service
 require_once 'config.inc.php';
 require_once __DIR__.'/services/ClientIdentity.php';
+require_once __DIR__.'/services/TelemetryTime.php';
 requireSecureRequest();
 require_once 'html/app/services/DatabaseService.php';
 
@@ -96,10 +97,14 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
         return failScreenshotUpload('Screenshot storage directory is not writable',503);
     }
     
-    if (!DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $ctime))
-        return failScreenshotUpload('Invalid screenshot timestamp',400);
-    // Create date-based subdirectory (no time-based subdirectories)
-    $date_dir = date('Y-m-d', strtotime($ctime));
+    // Parse client timestamps with their explicit UTC offset. Directory names,
+    // metadata, and portal searches all use UTC, regardless of server timezone.
+    // Legacy offset-less values are treated as UTC for compatibility.
+    $captureTime=monitorCaptureTimeUTC((string)$ctime);
+    if($captureTime===null)
+        return failScreenshotUpload('Invalid screenshot timestamp (use ISO-8601 with timezone)',400);
+    $capture_datetime=$captureTime->format('Y-m-d H:i:s');
+    $date_dir=$captureTime->format('Y-m-d');
     $screens_date_path = $monitor_paths['screens'] . $date_dir . '/';
     $thumbnails_date_path = $monitor_paths['thumbnails'] . $date_dir . '/';
     
@@ -112,7 +117,7 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
     if (!is_dir($thumbnails_date_path))@mkdir($thumbnails_date_path,0755,true);
     
     // Generate filename with monitor_id and datetime (NO IP address)
-    $datetime = date('Y-m-d_H.i.s', strtotime($ctime));
+    $datetime=$captureTime->format('Y-m-d_H.i.s');
     $img_name = $monitor_id . '_' . $datetime . '.jpg';
     $file_location = $screens_date_path . $img_name;
     
@@ -150,7 +155,7 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
         }
         
         // Store metadata in database
-        $capture_datetime = date('Y-m-d H:i:s', strtotime($ctime));
+        // Timestamp was normalized before the destination directory was made.
         $result = $dbService->addScreenshotMetadata(
             $monitor_id, 
             $img_name, 
@@ -309,7 +314,7 @@ switch ($request_type_param) {
         $log_request_type = 'screenshot';
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['imagefile'])) {
             $com_name = $_POST['com_name'] ?? '';
-            $ctime = $_POST['ctime'] ?? date('Y-m-d H:i:s');
+            $ctime = $_POST['ctime'] ?? gmdate('Y-m-d H:i:s');
             
             try {
                 $result=uploadCacheScreenWithMetadata($com_name,$ctime,$_FILES['imagefile']);
