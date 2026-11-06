@@ -36,55 +36,45 @@ class DatabaseService {
      * Handles data from all platforms: Windows, macOS, Ubuntu
      */
     public function addBrowserHistoryLogs($browserHistories, $ip_address = null, $mac_address = null) {
-        $monitor_id = $this->getMonitorId($ip_address, $mac_address);
-        if (!$monitor_id) {
-            error_log("Could not find monitor ID for IP: $ip_address, MAC: " . ($mac_address ?? 'null'));
+        $monitor_id=$this->getMonitorId($ip_address,$mac_address);
+        if(!$monitor_id || !is_array($browserHistories))return false;
+        if(!$browserHistories)return 0;
+        if(!$this->mysqli->begin_transaction())return false;
+        try{
+            $stmt=$this->mysqli->prepare(
+                'INSERT INTO browser_history_logs
+                 (monitor_ip_id,browser,url,title,last_visit,visit_date)
+                 VALUES (?,?,?,?,?,?)'
+            );
+            if(!$stmt)throw new RuntimeException('Browser history insert unavailable');
+            $stats=[];$count=0;
+            foreach($browserHistories as $entry){
+                if(!is_array($entry))throw new RuntimeException('Invalid browser history record');
+                $browser=trim((string)($entry['browser']??''));
+                $url=trim((string)($entry['url']??''));
+                if($browser===''||$url==='')throw new RuntimeException('Browser history record missing browser or URL');
+                $title=(string)($entry['title']??'');
+                $last=$this->normalizeDateTime($entry['last_visit']??$entry['date']??null);
+                $date=$last;
+                $stmt->bind_param('isssss',$monitor_id,$browser,$url,$title,$last,$date);
+                if(!$stmt->execute())throw new RuntimeException('Browser history insert rejected');
+                ++$count;
+                $month=date('Y-m',strtotime($date));
+                if(!isset($stats[$month]))$stats[$month]=['count'=>0,'bytes'=>0];
+                ++$stats[$month]['count'];
+                $stats[$month]['bytes']+=strlen($url)+strlen($title);
+            }
+            $stmt->close();
+            $this->upsertBatchStatistics($monitor_id,'browser_history',$stats);
+            if(!$this->mysqli->commit())throw new RuntimeException('Browser history commit failed');
+            return $count;
+        }catch(Throwable $error){
+            $this->mysqli->rollback();
+            error_log('Browser history batch storage failed: '.$error->getMessage());
             return false;
         }
-        
-        $stmt = $this->mysqli->prepare("
-            INSERT INTO browser_history_logs (monitor_ip_id, browser, url, title, last_visit, visit_date) 
-            VALUES (?, ?, ?, ?, ?, ?)
-        ");
-        
-        $inserted_count = 0;
-        foreach ($browserHistories as $browserHistory) {
-            try {
-                $browser = $browserHistory['browser'] ?? '';
-                $url = $browserHistory['url'] ?? '';
-                $title = $browserHistory['title'] ?? '';
-                
-                // Skip records with missing required fields
-                if (empty($browser) || empty($url)) {
-                    error_log("Skipping browser history record with missing fields: browser=" . ($browser ?: 'empty') . ", url=" . ($url ?: 'empty'));
-                    continue;
-                }
-                
-                // Handle different platform data formats
-                $hasVisitTime = isset($browserHistory['last_visit']) && $browserHistory['last_visit'] !== '';
-                $lastVisit = $hasVisitTime ? $this->normalizeDateTime($browserHistory['last_visit']) : $this->normalizeDateTime($browserHistory['date'] ?? null);
-                // visit_date represents the actual browser visit, not the time
-                // the batch was uploaded. Clients may upload older events later.
-                $visitDate = $lastVisit;
-                
-                $stmt->bind_param("isssss", $monitor_id, $browser, $url, $title, $lastVisit, $visitDate);
-                if ($stmt->execute()) {
-                    $inserted_count++;
-                    // Update storage statistics
-                    $this->updateStorageStatistics($monitor_id, 'browser_history', $visitDate, strlen($url) + strlen($title));
-                } else {
-                    error_log("Failed to insert browser history: " . $stmt->error . " - Browser: $browser, URL: " . substr($url, 0, 100));
-                }
-            } catch (Exception $e) {
-                error_log("Error processing browser history record: " . $e->getMessage());
-                continue;
-            }
-        }
-        
-        $stmt->close();
-        return $inserted_count;
     }
-    
+
     /**
      * Normalize datetime values from different platforms
      * Handles: Int64 timestamps (macOS), String datetimes (Windows), Missing fields (Ubuntu)
@@ -212,42 +202,67 @@ class DatabaseService {
      * Handles data from all platforms: Windows, macOS, Ubuntu
      */
     public function addUSBDeviceLogs($usbLogs, $ip_address = null, $mac_address = null) {
-        $monitor_id = $this->getMonitorId($ip_address, $mac_address);
-        if (!$monitor_id) {
-            error_log("Could not find monitor ID for IP: $ip_address, MAC: " . ($mac_address ?? 'null'));
+        $monitor_id=$this->getMonitorId($ip_address,$mac_address);
+        if(!$monitor_id || !is_array($usbLogs))return false;
+        if(!$usbLogs)return 0;
+        if(!$this->mysqli->begin_transaction())return false;
+        try{
+            $stmt=$this->mysqli->prepare(
+                'INSERT INTO usb_device_logs
+                 (monitor_ip_id,device_date,device_name,device_path,device_type,action)
+                 VALUES (?,?,?,?,?,?)'
+            );
+            if(!$stmt)throw new RuntimeException('USB insert unavailable');
+            $stats=[];$count=0;
+            foreach($usbLogs as $entry){
+                if(!is_array($entry))throw new RuntimeException('Invalid USB record');
+                $deviceName=trim((string)($entry['device_name']??''));
+                if($deviceName==='')throw new RuntimeException('USB record missing device name');
+                $date=$this->normalizeDateTime($entry['date']??null);
+                $path=(string)($entry['device_path']??'');
+                $type=(string)($entry['device_type']??'USB Device');
+                $action=(string)($entry['action']??'Connected');
+                $stmt->bind_param('isssss',$monitor_id,$date,$deviceName,$path,$type,$action);
+                if(!$stmt->execute())throw new RuntimeException('USB insert rejected');
+                ++$count;
+                $month=date('Y-m',strtotime($date));
+                if(!isset($stats[$month]))$stats[$month]=['count'=>0,'bytes'=>0];
+                ++$stats[$month]['count'];
+                $stats[$month]['bytes']+=strlen($deviceName)+strlen($path)+strlen($type);
+            }
+            $stmt->close();
+            $this->upsertBatchStatistics($monitor_id,'usb_logs',$stats);
+            if(!$this->mysqli->commit())throw new RuntimeException('USB commit failed');
+            return $count;
+        }catch(Throwable $error){
+            $this->mysqli->rollback();
+            error_log('USB batch storage failed: '.$error->getMessage());
             return false;
         }
-        
-        $stmt = $this->mysqli->prepare("
-            INSERT INTO usb_device_logs (monitor_ip_id, device_date, device_name, device_path, device_type, action) 
-            VALUES (?, ?, ?, ?, ?, ?)
-        ");
-        
-        $inserted_count = 0;
-        foreach ($usbLogs as $usbLog) {
-            $deviceDate = $this->normalizeDateTime($usbLog['date'] ?? null);
-            $deviceName = $usbLog['device_name'] ?? '';
-            $devicePath = $usbLog['device_path'] ?? '';
-            $deviceType = $usbLog['device_type'] ?? '';
-            $action = $usbLog['action'] ?? 'Connected';
-            
-            // Skip records with missing required fields
-            if (empty($deviceName)) {
-                continue;
-            }
-            
-            $stmt->bind_param("isssss", $monitor_id, $deviceDate, $deviceName, $devicePath, $deviceType, $action);
-            if ($stmt->execute()) {
-                $inserted_count++;
-                // Update storage statistics
-                $this->updateStorageStatistics($monitor_id, 'usb_logs', $deviceDate, strlen($deviceName) + strlen($devicePath) + strlen($deviceType));
-            }
-        }
-        
-        $stmt->close();
-        return $inserted_count;
     }
-    
+
+    // Combine monthly counters into a single upsert for each month. The caller
+    // owns the transaction, so a rejected batch leaves neither partial rows
+    // nor partial counters behind.
+    private function upsertBatchStatistics(int $monitorId,string $type,array $stats): void {
+        $summary=$this->mysqli->prepare(
+            'INSERT INTO storage_statistics
+               (monitor_ip_id,data_type,month_year,record_count,total_size)
+             VALUES (?,?,?,?,?)
+             ON DUPLICATE KEY UPDATE
+               record_count=record_count+VALUES(record_count),
+               total_size=total_size+VALUES(total_size),
+               last_updated=CURRENT_TIMESTAMP'
+        );
+        if(!$summary)throw new RuntimeException('Storage statistics unavailable');
+        foreach($stats as $month=>$totals){
+            $count=$totals['count'];$bytes=$totals['bytes'];
+            $summary->bind_param('issii',$monitorId,$type,$month,$count,$bytes);
+            if(!$summary->execute())throw new RuntimeException('Storage statistics rejected');
+        }
+        $summary->close();
+    }
+
     /**
      * Add screenshot metadata to database
      * 
