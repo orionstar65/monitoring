@@ -2238,6 +2238,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // Build screenshot upload endpoint with correct query parameter
         guard let baseUrlString = buildEndpoint(true) else {
             logError("Failed to build base endpoint for screenshot upload", context: "Screenshot")
+            if manual { reportManualScreenshot(false,"Server endpoint is unavailable") }
             DistributedNotificationCenter.default().postNotificationName(Notification.Name("aliceServerIPUndefined"), object: CHECKER_IDENTIFIER, userInfo: nil, options: .deliverImmediately)
             return
         }
@@ -2246,11 +2247,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let urlString = baseUrlString + "?type=upload"
         guard let url = URL(string: urlString) else {
             logError("Failed to create URL for screenshot upload: \(urlString)", context: "Screenshot")
+            if manual { reportManualScreenshot(false,"Invalid screenshot upload URL") }
             return
         }
         
         guard let imageData = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
             logError("Failed to read image data from: \(path)", context: "Screenshot")
+            if manual { reportManualScreenshot(false,"Captured JPEG file cannot be read") }
             return
         }
         
@@ -2309,51 +2312,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // Send request
         let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             DispatchQueue.main.async {
-                if let error = error {
-                    self?.logError("Screenshot upload network error: \(error)", context: "Screenshot")
-                    return
-                }
-                
-                if let httpResponse = response as? HTTPURLResponse {
-                    self?.logMessage("Screenshot HTTP response: \(httpResponse.statusCode)", level: .debug)
-                }
-                
-                if let data = data, let responseString = String(data: data, encoding: .utf8) {
-                    self?.logSuccess("Screenshot uploaded successfully", details: "Response: \(responseString)")
-                    self?.lastScreenshotSent = Date()
-                    
-                    // Parse server response for confirmation
-                    if let jdata = self?.convertToDictionary(text: responseString) {
-                        // Check for success status
-                        if let status = jdata["status"] as? String, status == "success" {
-                            // self?.logMessage("Screenshot upload confirmed by server", level: .info)
-                            
-                            // Log additional server response data
-                            if let dataObj = jdata["data"] as? [String: Any] {
-                                // Screenshot filename is already tracked by the server.
-                                if let fileSize = dataObj["file_size"] as? Int {
-                                    self?.logMessage("File size: \(fileSize) bytes", level: .debug)
-                                }
-                                if let width = dataObj["image_width"] as? Int, let height = dataObj["image_height"] as? Int {
-                                    self?.logMessage("Image dimensions: \(width)x\(height)", level: .debug)
-                                }
-                            }
-                        } else if let error = jdata["error"] as? String {
-                            self?.logError("Server error: \(error)", context: "Screenshot")
-                        } else {
-                            self?.logMessage("Server response received but status unclear", level: .warning)
-                        }
-                    } else {
-                        self?.logMessage("Could not parse server response JSON", level: .warning)
-                    }
+                guard let self=self else { return }
+                let code=(response as? HTTPURLResponse)?.statusCode ?? 0
+                let reply=(data.flatMap { try? JSONSerialization.jsonObject(with:$0) }) as? [String:Any]
+                let success=code==200 && (reply?["status"] as? String)=="success"
+                let filename=(reply?["data"] as? [String:Any])?["filename"] as? String
+                if success,let filename=filename,!filename.isEmpty {
+                    self.lastScreenshotSent=Date()
+                    self.logMessage("Screenshot stored by backend: \(filename)",level:.info)
+                    if manual { self.reportManualScreenshot(true,"Saved as \(filename)") }
                 } else {
-                    self?.logError("No response data received for screenshot upload", context: "Screenshot")
+                    let reason=(reply?["error"] as? String) ??
+                        error?.localizedDescription ??
+                        "HTTP \(code): backend did not confirm screenshot storage"
+                    self.logError("Screenshot upload failed: \(reason)",context:"Screenshot")
+                    if manual { self.reportManualScreenshot(false,reason) }
                 }
+                try? FileManager.default.removeItem(atPath:path)
             }
         }
         task.resume()
     }
-    
+
     func convertToDictionary(text: String) -> [String: Any]? {
         if let data = text.data(using: .utf8) {
             do {
