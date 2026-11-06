@@ -682,6 +682,31 @@ ob_start();
 .monitor-search-row .form-control{flex:1;min-width:0;border-radius:6px}
 .monitor-search-row .btn{flex:none;min-width:29px;height:29px;padding:4px 6px}
 .monitor-search-row [hidden]{display:none!important}
+/* Same CCTV card, status, timestamp and 80% black overlay in every view. */
+.screenshot-grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px}
+.screenshot-card,.cctv-screenshot-card{
+    position:relative;aspect-ratio:16/10;overflow:hidden;border-radius:7px;
+    background:#0e1319;border:1px solid rgba(110,130,150,.35);
+    box-shadow:none;transition:border-color .15s ease,transform .15s ease;cursor:pointer
+}
+.screenshot-card:hover,.cctv-screenshot-card:hover{transform:translateY(-2px);border-color:var(--monitoring-primary)}
+.screenshot-card img,.cctv-screenshot-card img{width:100%;height:100%;object-fit:contain;display:block;transition:none}
+.screenshot-card:hover img{transform:none}
+.screenshot-card .cctv-screenshot-info,.cctv-screenshot-card .cctv-screenshot-info{
+    position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.80);padding:6px 8px;
+    display:flex;align-items:center;justify-content:space-between;gap:7px;color:white;
+    font-size:.72rem;line-height:1.35;pointer-events:none
+}
+.cctv-screenshot-info .cctv-username{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    font-weight:600;font-size:.72rem;color:#fff;display:block}
+.cctv-screenshot-info .cctv-ip{font-size:.69rem;color:#dae3ec;white-space:nowrap;flex-shrink:0;display:block}
+.screenshot-card .cctv-status-indicator,.cctv-screenshot-card .cctv-status-indicator{
+    z-index:3;top:7px;left:7px;right:auto;width:9px;height:9px;border:1px solid rgba(255,255,255,.8)
+}
+.cctv-timestamp{position:absolute;right:5px;top:5px;z-index:3;font-size:.66rem;
+    color:#fff;background:rgba(0,0,0,.8);padding:2px 5px;border-radius:4px;
+    font-variant-numeric:tabular-nums;pointer-events:none}
+
 /* Log Modal Styles */
 .log-sub-modal .modal-dialog {
     max-width: 90%;
@@ -1795,6 +1820,7 @@ function loadScreenshots(page = 1) {
         success: function(response) {
             if(request!==screenshotRequestSeq)return;
             if (response.screenshots) {
+                acceptSharedScreenshotResponse(response.screenshots,page);
                 displayScreenshots(response.screenshots, response.pagination);
             } else {
                 displayScreenshots(response, null);
@@ -1814,123 +1840,64 @@ function loadScreenshots(page = 1) {
     });
 }
 
-function displayScreenshots(screenshots, pagination = null) {
-    const container = $('#screenshotsContainer');
-    
-    if (screenshots.length === 0) {
-        container.html(`
-            <div class="empty-state">
-                <i class="fas fa-image"></i>
-                <h5>No Screenshots Available</h5>
-                <p>No screenshots have been captured for the selected monitors.</p>
-            </div>
-        `);
-        $('#screenshotCount').text("0");
+// Shared CCTV tile markup used by both the normal grid and fullscreen mode.
+function monitorScreenshotCard(item,cardClass='screenshot-card'){
+    const monitor=item.monitor||{};
+    const id=String(item.global_id||'');
+    const thumbnail=BASE_IMAGE_URL+(item.thumbnail||item.screenshot||'');
+    const full=BASE_IMAGE_URL+(item.screenshot||'');
+    const live=allMonitors.find(m=>Number(m.id)===Number(monitor.id||monitor.monitor_ip_id));
+    const status=['online','inactive','offline'].includes(live?.live_status)?live.live_status:'offline';
+    const userNo=monitor.user_no||live?.user_no||'—';
+    const name=monitor.username||live?.username||'Unassigned';
+    const ip=monitor.last_seen_ip||monitor.ip_address||live?.last_seen_ip||live?.ip_address||'—';
+    const stamp=new Date(Number(item.modified_time||0)*1000);
+    const timestamp=Number(item.modified_time)>0 && Number.isFinite(stamp.getTime())
+        ?stamp.toLocaleString(undefined,{month:'2-digit',day:'2-digit',year:'numeric',
+          hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}):'Time unavailable';
+    return `<div class="${escapeViewerText(cardClass)}" data-shot-id="${escapeViewerText(id)}"
+                title="Open screenshot history · ${escapeViewerText(timestamp)}">
+        <div class="cctv-status-indicator cctv-status-${status}" title="Status: ${status}" aria-label="${status}"></div>
+        <time class="cctv-timestamp" title="Captured ${escapeViewerText(timestamp)}">${escapeViewerText(timestamp)}</time>
+        <img src="${escapeViewerText(thumbnail)}" data-full-image="${escapeViewerText(full)}" alt="Screenshot for ${escapeViewerText(name)}" loading="lazy">
+        <div class="cctv-screenshot-info">
+            <strong class="cctv-username">${escapeViewerText(userNo)}: ${escapeViewerText(name)}</strong>
+            <span class="cctv-ip">${escapeViewerText(ip)}</span>
+        </div>
+    </div>`;
+}
+function acceptSharedScreenshotResponse(screenshots,page){
+    if(page!==1)return;
+    // With one selected device the history API returns many captures.
+    // The fullscreen live tile uses just its newest screenshot.
+    liveScreenshotSnapshot=selectedMonitors.length===1?screenshots.slice(0,1):screenshots.slice();
+    liveScreenshotSelection=selectedMonitors.join(',');
+    liveScreenshotUpdatedAt=Date.now();
+    if($('#fullscreenModal').hasClass('show'))displayFullscreenScreenshots(liveScreenshotSnapshot);
+}
+function displayScreenshots(screenshots,pagination=null){
+    const container=$('#screenshotsContainer');
+    const list=Array.isArray(screenshots)?screenshots:[];
+    $('#screenshotCount').text(pagination?.total_screenshots??list.length);
+    visibleShotMap=new Map();
+    if(!list.length){
+        container.html('<div class="empty-state"><i class="fas fa-image"></i><h5>No Screenshots Available</h5><p>No screenshots for this selection.</p></div>');
         return;
     }
-    
-    // Update screenshot count
-    if (pagination) {
-        $('#screenshotCount').text(pagination.total_screenshots);
-    } else {
-        $('#screenshotCount').text(screenshots.length);
-    }
-    
-    // Check if this is a single monitor view
-    const isSingleMonitor = selectedMonitors.length === 1;
-    
-    // Update header buttons based on view type
-    updateHeaderButtons(isSingleMonitor);
-    
-    let html = '<div class="screenshot-grid">';
-    visibleShotMap = new Map();
-    screenshots.forEach(function(item) {
-        const monitor = item.monitor || {};
-        const thumbnailUrl = "<?php echo BASE_URL; ?>" + (item.thumbnail||item.screenshot||'');
-        const fullUrl = "<?php echo BASE_URL; ?>" + (item.screenshot||'');
-        const shotId = String(item.global_id||'');
-        visibleShotMap.set(shotId,{url:fullUrl,user:monitor.username||'Unknown User',
-                                   ip:monitor.ip_address||'—',time:Number(item.modified_time)||0});
-        
-        let timestamp;
-        if (item.modified_time) {
-            // Convert UTC timestamp to user's local timezone
-            timestamp = new Date(item.modified_time * 1000).toLocaleString('en-US', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false
-            });
-        } else {
-            timestamp = new Date().toLocaleString();
-        }
-        
-        // Calculate time ago
-        const screenshotTime = new Date(item.modified_time * 1000);
-        const timeDiff = Date.now() - screenshotTime.getTime();
-        const timeDiffSeconds = Math.floor(timeDiff / 1000);
-        let timeAgo = '';
-
-        if (timeDiffSeconds <= 0) { // exactly 0 seconds or negative (future time)
-            timeAgo = 'Just now';
-        } else {
-            timeAgo = formatTimeAgo(timeDiffSeconds);
-        }
-        
-        // Get user's timezone for display
-        const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        
-        if (isSingleMonitor) {
-            // Single monitor view - show enhanced time ago and timestamp
-            html += `
-                <div class="screenshot-card" data-shot-id="${escapeViewerText(shotId)}">
-                    <img src="${escapeViewerText(thumbnailUrl)}" data-full-image="${escapeViewerText(fullUrl)}" alt="Screenshot" loading="lazy">
-                    <div class="screenshot-info">
-                        <div class="screenshot-timestamp">
-                            <i class="fas fa-${getMonitorTypeIcon(monitor.type)} me-1"></i>${monitor.type || 'Desktop'}
-                        </div>
-                        <div class="screenshot-timestamp">
-                            <i class="fas fa-calendar me-1"></i>${timestamp}
-                        </div>
-                    </div>
-                </div>
-            `;
-        } else {
-            // Multiple monitor view - show full info
-            const usernameHtml = (monitor.username && monitor.username !== 'Unknown') 
-                ? `<span class="badge bg-primary"><i class="fas fa-user me-1"></i> ${escapeViewerText(monitor.username)}</span>` 
-                : '';
-            
-            html += `
-                <div class="screenshot-card" data-shot-id="${escapeViewerText(shotId)}">
-                    <img src="${escapeViewerText(thumbnailUrl)}" data-full-image="${escapeViewerText(fullUrl)}" alt="Screenshot" loading="lazy">
-                    <div class="screenshot-info">
-                        <div class="screenshot-badges">
-                            ${usernameHtml}
-                            <span class="badge bg-info"><i class="fas fa-${getMonitorTypeIcon(monitor.type)} me-1"></i>${escapeViewerText(monitor.ip_address||'—')}</span>
-                        </div>
-                        <div class="screenshot-details">
-                            <div><i class="fas fa-clock me-1"></i>${timestamp}</div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-    });
-    html += '</div>';
-    
-    // Add pagination if needed
-    if (pagination && pagination.total_pages > 1) {
-        html += generatePagination(pagination);
-    }
-    
-    container.html(html);
+    const cards=list.map(item=>{
+        const m=item.monitor||{},id=String(item.global_id||'');
+        visibleShotMap.set(id,{
+            url:BASE_IMAGE_URL+(item.screenshot||''),
+            thumbnail:BASE_IMAGE_URL+(item.thumbnail||item.screenshot||''),
+            user:m.username||'Unassigned',ip:m.ip_address||'—',
+            time:Number(item.modified_time)||0
+        });
+        return monitorScreenshotCard(item,'screenshot-card');
+    }).join('');
+    const paginationHtml=pagination&&pagination.total_pages>1?generatePagination(pagination):'';
+    container.html('<div class="screenshot-grid">'+cards+'</div>'+paginationHtml);
     attachScreenshotImageFallback(container);
 }
-
 function updateHeaderButtons(isSingleMonitor) {
     const filter=$('#headerDateFilterContainer');
     if(!isSingleMonitor){
@@ -2075,6 +2042,7 @@ function loadScreenshotsForMonitor(monitorId, page = 1) {
         success: function(response) {
             if(request!==screenshotRequestSeq)return;
             if (response.screenshots) {
+                acceptSharedScreenshotResponse(response.screenshots,page);
                 displayScreenshots(response.screenshots, response.pagination);
             } else {
                 displayScreenshots(response, null);
