@@ -2295,44 +2295,65 @@ static void updateUnifiedVisibility(HWND dlg) {
     RedrawWindow(dlg,nullptr,nullptr,RDW_INVALIDATE|RDW_ALLCHILDREN);
 }
 // Apply one consistent compact grid regardless of login and monitor state.
+// Compact spacing system shared by every settings tab:
+// 16px outer margin, 10px label-to-control gap, 28-34px form rows.
+// Fixed coordinates avoid the expanding gaps of the previous long form.
 static void layoutSettingsTabs(HWND dlg) {
     struct Pos{int id,x,y,w,h;};
     const Pos fields[]={
-        {4500,24,13,36,36},{4501,69,16,260,22},{4502,69,38,130,18},
-        {SETTINGS_TABS,12,70,511,325},
-        {4503,34,120,300,22},{4504,34,156,106,20},
-        {SETTINGS_IP,151,151,335,26},{4505,34,194,106,20},
-        {SETTINGS_PORT,151,189,335,26},{SETTINGS_CONNECTION,34,228,455,26},
-        {4510,34,270,106,20},{SETTINGS_SIGNIN_USER,151,265,335,26},
-        {4511,34,308,106,20},{SETTINGS_SIGNIN_PASS,151,303,335,26},
-        {SETTINGS_ACCOUNT_INFO,151,265,335,26},
-        {SETTINGS_TEST,151,341,130,27},{SETTINGS_LOGOUT,151,304,130,27},
-        {SETTINGS_NOTICE,34,343,456,38},
-        {SETTINGS_MONITOR_HEADING,34,117,310,22},
-        {4400,34,155,106,20},{SETTINGS_MONITOR,151,150,244,250},{SETTINGS_EDIT,402,150,84,26},
-        {4402,34,194,106,20},{SETTINGS_OS,151,189,92,24},
-        {SETTINGS_OS_MAC,249,189,67,24},{SETTINGS_OS_UBUNTU,326,189,96,24},
-        {SETTINGS_INFO_OS,151,192,335,22},
-        {4403,34,235,106,20},{SETTINGS_MACHINE,151,230,106,24},
-        {SETTINGS_MACHINE_DESKTOP,263,230,118,24},
-        {SETTINGS_INFO_MACHINE,151,233,335,22},
-        {4404,34,274,106,20},{SETTINGS_MONITOR_IP,151,273,335,22},
-        {4405,34,311,106,20},{SETTINGS_REMARK,151,306,335,26},
-        {SETTINGS_INFO_REMARK,151,309,335,22},
-        {SETTINGS_LOCK_SETTINGS,333,343,153,27},
-        {4506,34,120,310,22},{SETTINGS_NOTIFY,151,157,320,25},
-        {4507,34,218,310,22},{SETTINGS_SEND_ALL,151,255,155,28},
-        {SETTINGS_REFRESH_CONFIG,313,255,173,28},
-        {SETTINGS_UPDATE_HEADING,34,120,330,22},
-        {4509,34,163,108,22},{SETTINGS_UPDATE_URL,151,157,335,26},
-        {SETTINGS_UPDATE_CHECK,151,209,167,28},
-        {SETTINGS_UPDATE_INSTALL,326,209,130,28},
-        {SETTINGS_UPDATE_STATUS,34,261,453,92},
-        {SETTINGS_SAVE,296,407,105,30},{SETTINGS_CLOSE,413,407,103,30}
+        // Narrower application header and a shorter tab frame.
+        {4500,20,8,30,30},{4501,58,9,250,20},{4502,58,29,120,16},
+        {SETTINGS_TABS,10,52,500,278},
+
+        // Account & Server: connection, credentials, or the active User No.
+        {4503,28,91,300,20},
+        {4504,28,122,85,20},{SETTINGS_IP,122,118,358,25},
+        {4505,28,154,85,20},{SETTINGS_PORT,122,150,358,25},
+        {SETTINGS_CONNECTION,28,184,452,23},
+        {4510,28,217,85,20},{SETTINGS_SIGNIN_USER,122,213,358,25},
+        {4511,28,250,85,20},{SETTINGS_SIGNIN_PASS,122,246,358,25},
+        {SETTINGS_TEST,122,281,124,27},
+        {SETTINGS_ACCOUNT_INFO,122,213,358,25},
+        {SETTINGS_LOGOUT,122,247,124,27},
+        {SETTINGS_NOTICE,28,283,452,37},
+
+        // Monitor: aligned, single-row labels and controls.
+        {SETTINGS_MONITOR_HEADING,28,91,310,20},
+        {4400,28,123,85,20},{SETTINGS_MONITOR,122,118,264,220},
+        {SETTINGS_EDIT,394,118,86,25},
+        {4402,28,156,85,20},{SETTINGS_OS,122,152,89,23},
+        {SETTINGS_OS_MAC,218,152,62,23},{SETTINGS_OS_UBUNTU,288,152,102,23},
+        {SETTINGS_INFO_OS,122,156,358,20},
+        {4403,28,189,85,20},{SETTINGS_MACHINE,122,185,103,23},
+        {SETTINGS_MACHINE_DESKTOP,237,185,118,23},
+        {SETTINGS_INFO_MACHINE,122,189,358,20},
+        {4404,28,223,85,20},{SETTINGS_MONITOR_IP,122,222,358,21},
+        {4405,28,255,85,20},{SETTINGS_REMARK,122,251,358,25},
+        {SETTINGS_INFO_REMARK,122,255,358,20},
+        {SETTINGS_LOCK_SETTINGS,327,290,153,27},
+
+        // Preferences: clear grouping, no oversized vertical whitespace.
+        {4506,28,91,310,20},{SETTINGS_NOTIFY,122,122,320,25},
+        {4507,28,165,310,20},{SETTINGS_SEND_ALL,122,195,151,27},
+        {SETTINGS_REFRESH_CONFIG,282,195,198,27},
+
+        // Updates: one field row, a button row, and the result below.
+        {SETTINGS_UPDATE_HEADING,28,91,310,20},
+        {4509,28,130,85,20},{SETTINGS_UPDATE_URL,122,125,358,25},
+        {SETTINGS_UPDATE_CHECK,122,165,169,27},
+        {SETTINGS_UPDATE_INSTALL,300,165,126,27},
+        {SETTINGS_UPDATE_STATUS,28,208,452,85},
+
+        // Stable footer for every tab (Save only when relevant).
+        {SETTINGS_SAVE,286,340,104,28},{SETTINGS_CLOSE,400,340,104,28}
     };
-    for(const auto& p:fields)if(HWND field=GetDlgItem(dlg,p.id))
-        SetWindowPos(field,nullptr,p.x,p.y,p.w,p.h,SWP_NOZORDER|SWP_NOACTIVATE);
-    SetWindowPos(dlg,nullptr,0,0,535,455,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
+    for(const auto& p:fields){
+        if(HWND field=GetDlgItem(dlg,p.id))
+            SetWindowPos(field,nullptr,p.x,p.y,p.w,p.h,
+                SWP_NOZORDER|SWP_NOACTIVATE);
+    }
+    SetWindowPos(dlg,nullptr,0,0,520,387,
+                 SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
 }
 // Update operations use the bundled, reviewed PowerShell helper, never scripts
 // downloaded from the update server. Check and stage execute off the UI thread.
