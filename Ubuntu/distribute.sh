@@ -191,6 +191,7 @@ This software is provided as-is for monitoring purposes.
 
 For issues and support, check the logs in `/opt/monitorclient/logs/`.
 EOF
+sed -i 's/${PACKAGE_VERSION}/'"$PACKAGE_VERSION"'/g' "$DIST_DIR/README.md"
 
 # Create a simple build script
 cat > "$DIST_DIR/build.sh" << 'EOF'
