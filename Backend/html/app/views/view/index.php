@@ -2521,6 +2521,8 @@ document.addEventListener('pointerdown',event=>{
     const ruler=event.target.closest?.('#historyTimelineRuler');
     const state=historyState;
     if(!ruler||!state||event.button!==0)return;
+    // Thumbnail clicks are discrete navigation, not range drags.
+    if(event.target.closest?.('[data-history-shot]'))return;
     const time=historyPointerTime(event,ruler);
     state.drag={pointerId:event.pointerId,mode:historyHitMode(state,time,ruler),
         anchor:time,from:state.rangeStart,to:state.rangeEnd};
