@@ -31,3 +31,50 @@ function monitorCaptureTimeUTC(string $wireTime): ?DateTimeImmutable {
     }
     return null;
 }
+
+
+/**
+ * Endpoints accept explicit UTC instants start_utc (inclusive) and
+ * end_utc (exclusive). Date-only start_date/end_date remain supported for
+ * old clients and are interpreted as UTC calendar dates, not server-local.
+ * Browsers must convert their local calendar dates to ISO instants first.
+ * Returns [startUTC|null, endUTC|null]; throws for invalid ranges.
+ */
+function monitorUtcBounds(array $query): array {
+    $utc=new DateTimeZone('UTC');
+    $bounds=[];
+    foreach(['start_utc','end_utc'] as $key){
+        $value=trim((string)($query[$key]??''));
+        if($value===''){$bounds[$key]=null;continue;}
+        if(!preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/D',$value))
+            throw new InvalidArgumentException('Invalid '.$key.' (expected UTC ISO-8601)');
+        $parsed=DateTimeImmutable::createFromFormat(
+            str_contains($value,'.')?'!Y-m-d\TH:i:s.v\Z':'!Y-m-d\TH:i:s\Z',$value,$utc);
+        $errors=DateTimeImmutable::getLastErrors();
+        if(!$parsed || ($errors!==false&&($errors['warning_count']||$errors['error_count'])))
+            throw new InvalidArgumentException('Invalid '.$key);
+        $bounds[$key]=$parsed;
+    }
+    if($bounds['start_utc']===null && !empty($query['start_date'])){
+        $bounds['start_utc']=monitorUtcLegacyDay((string)$query['start_date'],$utc);
+    }
+    if($bounds['end_utc']===null && !empty($query['end_date'])){
+        $bounds['end_utc']=monitorUtcLegacyDay((string)$query['end_date'],$utc)->modify('+1 day');
+    }
+    if($bounds['start_utc']!==null && $bounds['end_utc']!==null
+       && $bounds['end_utc']<=$bounds['start_utc'])
+        throw new InvalidArgumentException('End of range must follow start');
+    return [
+        $bounds['start_utc']?->format('Y-m-d H:i:s'),
+        $bounds['end_utc']?->format('Y-m-d H:i:s')
+    ];
+}
+
+function monitorUtcLegacyDay(string $day,DateTimeZone $utc): DateTimeImmutable {
+    if(!preg_match('/^\d{4}-\d{2}-\d{2}$/D',$day))
+        throw new InvalidArgumentException('Invalid calendar day');
+    $parsed=DateTimeImmutable::createFromFormat('!Y-m-d',$day,$utc);
+    if(!$parsed || $parsed->format('Y-m-d')!==$day)
+        throw new InvalidArgumentException('Invalid calendar day');
+    return $parsed;
+}
