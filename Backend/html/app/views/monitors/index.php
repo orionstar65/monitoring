@@ -4,7 +4,7 @@ $escape=static fn($v)=>htmlspecialchars((string)($v??''),ENT_QUOTES,'UTF-8');
 ob_start(); ?>
 <div class="d-flex justify-content-between align-items-center mb-4">
  <div><h3 class="mb-1">Monitors</h3><p class="text-muted small mb-0">Devices, ownership and current activity</p></div>
- <?php if(($_SESSION['role']??'')==='admin'): ?>
+ <?php if(($_SESSION['role']??'')===ROLE_SUPER_ADMIN): ?>
  <a class="btn btn-primary" href="<?= BASE_URL ?>monitors/create"><i class="fas fa-plus me-2"></i>Add Monitor</a>
  <?php endif; ?>
 </div>
@@ -30,13 +30,11 @@ ob_start(); ?>
  <td><?= $escape($m['remark']??'') ?></td>
  <td><?= (!empty($m['settings_locked'])||!empty($m['assignment_locked']))?'<span class="badge bg-secondary"><i class="fas fa-lock"></i> Locked</span>':'<span class="badge bg-success"><i class="fas fa-lock-open"></i> Unlocked</span>' ?></td>
  <td class="text-nowrap">
- <?php if(($_SESSION['role']??'')==='admin'): ?>
- <a href="<?= BASE_URL ?>view/logs/<?= (int)$m['id'] ?>" class="btn btn-sm btn-light" title="View logs" aria-label="View logs"><i class="fas fa-chart-line"></i></a>
- <?php else: ?>
- <a href="<?= BASE_URL ?>merge" class="btn btn-sm btn-light" title="Merge assigned monitor logs" aria-label="Merge assigned monitor logs"><i class="fas fa-code-branch"></i></a>
- <?php endif; ?>
- <?php if(($_SESSION['role']??'')==='admin'): ?>
+ <?php if(in_array(($_SESSION['role']??''),[ROLE_SUPER_ADMIN,ROLE_SCOPED_ADMIN],true)): ?>
+ <a href="<?= BASE_URL ?>view?tab=browser&monitor_id=<?= (int)$m['id'] ?>" class="btn btn-sm btn-light" title="View logs" aria-label="View logs"><i class="fas fa-chart-line"></i></a>
  <a href="<?= BASE_URL ?>monitors/edit/<?= (int)$m['id'] ?>" class="btn btn-sm btn-light" title="Edit" aria-label="Edit monitor"><i class="fas fa-pen"></i></a>
+ <?php endif; ?>
+ <?php if(($_SESSION['role']??'')===ROLE_SUPER_ADMIN): ?>
  <form method="post" action="<?= BASE_URL ?>monitors/delete/<?= (int)$m['id'] ?>" class="d-inline" onsubmit="return confirm('Delete this monitor and its logs?')">
  <button type="submit" class="btn btn-sm btn-light text-danger" aria-label="Delete monitor" title="Delete"><i class="fas fa-trash"></i></button></form>
  <?php endif; ?></td>
