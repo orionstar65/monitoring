@@ -9,16 +9,34 @@ class Base {
         if(!empty($this->user['must_change_password']) && get_class($this)!=='Auth'){
             $this->redirect('auth/change_password');
         }
-        if(($this->user['role']??'')!=='admin' && !in_array(get_class($this),['Auth','Monitors','Dashboard','Merge'],true)){
-            // Summary pages are available to regular users, but log/media/export
-            // endpoints remain admin-only. Never rely on hiding UI controls.
-            $class=get_class($this);
-            $action=explode('/',trim((string)parse_url($_SERVER['REQUEST_URI']??'',PHP_URL_PATH),'/'));
-            $method=end($action);
-            $viewerSummary=($this->user['role']??'')==='user'
+        $role=(string)($this->user['role']??'');
+        $class=get_class($this);
+        $parts=explode('/',trim((string)parse_url($_SERVER['REQUEST_URI']??'',PHP_URL_PATH),'/'));
+        $method=end($parts);
+        if($role===ROLE_SCOPED_ADMIN){
+            // Delegated admins can inspect only assigned-user monitoring data
+            // and edit only those users/monitors. Other controllers fail closed.
+            $allowed=[
+                'Auth'=>['*'],
+                'View'=>['view','index','api_live_status','api_screenshots',
+                    'api_screenshot_by_id','api_screenshot_navigation','api_screenshot_timeline',
+                    'view_file','api_monitor_settings','logs'],
+                'Logbrowse'=>['index','logbrowse','api_devices','api_browser_logs',
+                    'api_key_logs','api_key_timeline','api_key_context','api_usb_logs','api_stats'],
+                'Monitors'=>['index','edit'],
+                'Users'=>['index','edit']
+            ];
+            if(!isset($allowed[$class])&&!in_array($class,['Base'],true)
+                || (isset($allowed[$class])&&!in_array('*',$allowed[$class],true)
+                    && !in_array($method,$allowed[$class],true))){
+                http_response_code(403);exit('Access denied');
+            }
+        } elseif($role!==ROLE_SUPER_ADMIN && !in_array($class,['Auth','Monitors','Dashboard','Merge'],true)){
+            // Aggregate-only summary pages for ordinary users.
+            $summary=$role===ROLE_USER
                 && (($class==='Logbrowse' && in_array($method,['logbrowse','index','api_stats'],true))
                     || ($class==='View' && in_array($method,['view','index'],true)));
-            if(!$viewerSummary){http_response_code(403);exit('Access denied');}
+            if(!$summary){http_response_code(403);exit('Access denied');}
         }
     }
     
@@ -62,7 +80,61 @@ class Base {
     }
     
     protected function isAdmin() {
-        return isset($this->user['role']) && $this->user['role'] === ROLE_ADMIN;
+        // Legacy controller checks are intentionally super-admin-only.
+        return ($this->user['role']??'')===ROLE_SUPER_ADMIN;
+    }
+    protected function isScopedAdmin(): bool {
+        return ($this->user['role']??'')===ROLE_SCOPED_ADMIN;
+    }
+    protected function isManager(): bool {
+        return $this->isAdmin()||$this->isScopedAdmin();
+    }
+    protected function requireManager(): void {
+        if(!$this->isManager()){http_response_code(403);exit('Access denied');}
+    }
+    protected function requireSuperAdmin(): void {
+        if(!$this->isAdmin()){http_response_code(403);exit('Super Admin required');}
+    }
+    protected function canAccessUser(int $id): bool {
+        if($this->isAdmin())return true;
+        if(!$this->isScopedAdmin()||$id<1)return false;
+        // Query on every authorization decision so revoked assignments apply
+        // without requiring delegated admins to log out.
+        return (bool)$this->db->fetch(
+            'SELECT 1 FROM admin_user_assignments a JOIN users u ON u.id=a.managed_user_id
+             WHERE a.admin_user_id=:admin AND a.managed_user_id=:target
+               AND u.role=:role LIMIT 1',
+            ['admin'=>(int)$this->user['id'],'target'=>$id,'role'=>ROLE_USER]);
+    }
+    protected function requireUserAccess(int $id): void {
+        if(!$this->canAccessUser($id)){http_response_code(403);exit('User not assigned to this administrator');}
+    }
+    protected function canAccessMonitor(int $id): bool {
+        if($this->isAdmin())return true;
+        if(!$this->isScopedAdmin()||$id<1)return false;
+        return (bool)$this->db->fetch(
+            'SELECT 1 FROM tbl_monitor_ips m JOIN admin_user_assignments a
+             ON a.managed_user_id=m.owner_user_id JOIN users u ON u.id=a.managed_user_id
+             WHERE m.id=:monitor AND a.admin_user_id=:admin
+             AND u.role=:role LIMIT 1',
+            ['monitor'=>$id,'admin'=>(int)$this->user['id'],'role'=>ROLE_USER]);
+    }
+    protected function requireMonitorAccess(int $id): void {
+        if(!$this->canAccessMonitor($id)){http_response_code(403);exit('Monitor not assigned to this administrator');}
+    }
+    /** Predicate and parameters for SELECTs that involve a tbl_monitor_ips alias. */
+    protected function monitorScope(string $alias='m'): array {
+        if($this->isAdmin())return ['1=1',[]];
+        if(!$this->isScopedAdmin())return ['1=0',[]];
+        if(!preg_match('/^[a-z][a-z0-9_]*$/i',$alias))throw new InvalidArgumentException('Invalid SQL alias');
+        return [
+            "{$alias}.owner_user_id IN (
+                SELECT a.managed_user_id FROM admin_user_assignments a
+                JOIN users scope_user ON scope_user.id=a.managed_user_id
+                WHERE a.admin_user_id=:scope_admin_id AND scope_user.role=:scope_role
+            )",
+            ['scope_admin_id'=>(int)$this->user['id'],'scope_role'=>ROLE_USER]
+        ];
     }
     
     protected function requireAdmin() {
