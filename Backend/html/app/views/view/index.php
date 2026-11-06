@@ -1266,19 +1266,19 @@ ob_start();
             </div>
         </section>
         <div id="unifiedCleanupProgress" class="small px-2" role="status" aria-live="polite" hidden></div>
-        <div class="monitoring-statistics" aria-label="Monitoring statistics">
-            <div><span id="totalLogs">0</span><small>Total logs</small></div>
-            <div><span id="browserLogs">0</span><small>Browser</small></div>
-            <div><span id="keyLogs">0</span><small>Keyboard</small></div>
-            <div><span id="usbLogs">0</span><small>USB</small></div>
-        </div>
+        <section class="monitoring-statistics" aria-label="Activity statistics">
+            <div class="monitoring-stat-card"><small>Total logs</small><strong id="totalLogs">0</strong></div>
+            <div class="monitoring-stat-card"><small>Browser</small><strong id="browserLogs">0</strong></div>
+            <div class="monitoring-stat-card"><small>Keyboard</small><strong id="keyLogs">0</strong></div>
+            <div class="monitoring-stat-card"><small>USB</small><strong id="usbLogs">0</strong></div>
+        </section>
         <nav class="monitoring-tabs" id="monitoringTabs" role="tablist" aria-label="Monitor information">
-            <button class="monitoring-tab active" role="tab" aria-selected="true" data-monitor-tab="screenshots">Screenshots</button>
-            <button class="monitoring-tab" role="tab" aria-selected="false" data-monitor-tab="key">Keyboard</button>
-            <button class="monitoring-tab" role="tab" aria-selected="false" data-monitor-tab="browser">Browser</button>
-            <button class="monitoring-tab" role="tab" aria-selected="false" data-monitor-tab="usb">USB</button>
+            <button type="button" class="monitoring-tab active" role="tab" aria-selected="true" data-monitor-tab="screenshots"><i class="fas fa-image" aria-hidden="true"></i>Screenshots</button>
+            <button type="button" class="monitoring-tab" role="tab" aria-selected="false" data-monitor-tab="key"><i class="fas fa-keyboard" aria-hidden="true"></i>Keyboard</button>
+            <button type="button" class="monitoring-tab" role="tab" aria-selected="false" data-monitor-tab="browser"><i class="fas fa-globe" aria-hidden="true"></i>Browser</button>
+            <button type="button" class="monitoring-tab" role="tab" aria-selected="false" data-monitor-tab="usb"><i class="fas fa-usb" aria-hidden="true"></i>USB</button>
             <?php if(in_array(($_SESSION['role']??''),[ROLE_SUPER_ADMIN,ROLE_SCOPED_ADMIN],true)): ?>
-            <button class="monitoring-tab" role="tab" aria-selected="false" data-monitor-tab="settings">Settings</button>
+            <button type="button" class="monitoring-tab" role="tab" aria-selected="false" data-monitor-tab="settings"><i class="fas fa-cog" aria-hidden="true"></i>Settings</button>
             <?php endif; ?>
         </nav>
         <section id="unifiedScreenshotPanel" role="tabpanel">
