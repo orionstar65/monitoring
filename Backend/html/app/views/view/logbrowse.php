@@ -981,7 +981,7 @@ function createKeyTimeline(logs) {
     const end = Math.ceil((valid[valid.length-1].ms+120000)/60000)*60000;
     const rangeEnd=valid[valid.length-1].ms;
     const rangeStart=Math.max(start,rangeEnd-5*60000);
-    keyRulerState = {events:valid,start,end,scale:'medium',rangeStart,rangeEnd,activeHandle:null};
+    keyRulerState = {events:valid,start,end,scale:'medium',pxPerMinute:KEY_RULER_SCALES.medium,rangeStart,rangeEnd,activeHandle:null};
     // A single continuous ruler contains all loaded events, even across
     // multiple devices. Scrubbing chooses the nearest device as its context.
     requestAnimationFrame(()=>{
@@ -995,11 +995,13 @@ function createKeyTimeline(logs) {
       <div class="key-timeline-heading">
        <div>Key activity history <small id="keyTimelineInfo">Loading activity… · Drag the start/end handles to select a time range</small></div>
        <div class="key-ruler-controls">
+        <button id="keyZoomOut" class="btn btn-sm btn-outline-secondary" type="button" aria-label="Zoom keyboard history out">−</button>
+        <button id="keyZoomIn" class="btn btn-sm btn-outline-secondary" type="button" aria-label="Zoom keyboard history in">+</button>
         <label for="keyTimelineScale" class="text-muted">Scale</label>
         <select id="keyTimelineScale" class="form-select form-select-sm" aria-label="Timeline scale">
          <option value="near">15 min / view</option>
          <option value="medium" selected>1 hour / view</option>
-         <option value="wide">6 hours / view</option>
+         <option value="wide">6 hours / view</option><option value="custom" disabled>Custom</option>
         </select>
         <span class="key-ruler-selected" id="keyTimelineSelected"></span>
        </div>
@@ -1061,7 +1063,8 @@ function renderKeyRuler(centerPlayhead = false) {
     if(!state||!ruler||!viewport)return;
     const span=state.end-state.start;
     const durationMinutes=span/60000;
-    const width=Math.min(24000,Math.max(viewport.clientWidth||800,Math.round(durationMinutes*KEY_RULER_SCALES[state.scale])));
+    const width=Math.min(240000,Math.max(viewport.clientWidth||800,Math.round(durationMinutes*state.pxPerMinute)));
+    state.width=width;
     const pxPerMinute=width/durationMinutes;
     const ticks=[1,2,5,10,15,30,60,120,360,720,1440];
     const step=ticks.find(value=>value*pxPerMinute>=90)||1440;
@@ -1137,10 +1140,7 @@ function shiftKeyTimeRange(direction){
     }
 }
 function keyRangePointerTime(event,ruler){
-    const state=keyRulerState;
-    const rect=ruler.getBoundingClientRect();
-    const ratio=Math.max(0,Math.min(1,(event.clientX-rect.left)/Math.max(1,rect.width)));
-    return state.start+ratio*(state.end-state.start);
+    return MonitorCctvRange.point(event,ruler,keyRulerState);
 }
 function transcriptKeyRows(keys) {
     return monitorTranscriptKeyRows(keys,escapeHtml);
@@ -1174,17 +1174,7 @@ async function inspectKeyContextRange() {
 }
 // Move the whole highlighted interval; drag either border to resize it.
 function keyRangeHitMode(state,time,ruler){
-    const perPixel=(state.end-state.start)/Math.max(1,ruler.getBoundingClientRect().width);
-    const selectedPixels=(state.rangeEnd-state.rangeStart)/perPixel;
-    const edgeTolerance=Math.min(14,Math.max(2,selectedPixels*.3))*perPixel;
-    const fromDistance=Math.abs(time-state.rangeStart),toDistance=Math.abs(time-state.rangeEnd);
-    const duration=state.rangeEnd-state.rangeStart;
-    // Reserve the center third for panning even when selection is very narrow.
-    if(time>state.rangeStart&&time<state.rangeEnd&&fromDistance>duration*.3&&toDistance>duration*.3)return 'pan';
-    if(fromDistance<=edgeTolerance||toDistance<=edgeTolerance)
-        return fromDistance<=toDistance?'start':'end';
-    if(time>state.rangeStart&&time<state.rangeEnd)return 'pan';
-    return fromDistance<=toDistance?'start':'end';
+    return MonitorCctvRange.hit(state,time,ruler.getBoundingClientRect().width);
 }
 document.addEventListener('pointerdown',event=>{
     const ruler=event.target.closest?.('#keyTimelineRuler');
@@ -1211,16 +1201,9 @@ document.addEventListener('pointermove',event=>{
         return;
     }
     if(event.pointerId!==state.drag.pointerId||!ruler.hasPointerCapture(event.pointerId))return;
-    const drag=state.drag,delta=time-drag.anchor,minimum=1000;
-    if(drag.mode==='pan'){
-        const duration=drag.to-drag.from;
-        const next=Math.max(state.start,Math.min(state.end-duration,drag.from+delta));
-        updateKeyTimeRange(next,next+duration,false);
-    }else if(drag.mode==='start'){
-        updateKeyTimeRange(Math.min(drag.to-minimum,Math.max(state.start,drag.from+delta)),drag.to,false);
-    }else if(drag.mode==='end'){
-        updateKeyTimeRange(drag.from,Math.max(drag.from+minimum,Math.min(state.end,drag.to+delta)),false);
-    }
+    const drag=state.drag;
+    const [from,to]=MonitorCctvRange.drag(state,drag.mode,drag.from,drag.to,drag.anchor,time);
+    updateKeyTimeRange(from,to,false);
 });
 function finishKeyRangeDrag(event,commit){
     const ruler=document.getElementById('keyTimelineRuler'),state=keyRulerState;
@@ -1254,7 +1237,9 @@ document.addEventListener('change',event=>{
     const state=keyRulerState;
     if(!state)return;
     if(event.target?.id==='keyTimelineScale'){
+        if(!KEY_RULER_SCALES[event.target.value])return;
         state.scale=event.target.value;
+        state.pxPerMinute=KEY_RULER_SCALES[state.scale];
         renderKeyRuler(true);
     }else if(event.target?.id==='keyRangeStart'||event.target?.id==='keyRangeEnd'){
         const parsed=keyEventMillis(event.target.value.replace('T',' '));
@@ -1263,6 +1248,32 @@ document.addEventListener('change',event=>{
         else updateKeyTimeRange(state.rangeStart,parsed);
     }
 });
+
+function zoomKeyRuler(factor,clientX=null){
+    const state=keyRulerState,viewport=document.getElementById('keyTimelineViewport');
+    if(!state||!viewport)return;
+    const box=viewport.getBoundingClientRect();
+    const anchorX=clientX===null?viewport.clientWidth/2:MonitorCctvRange.clamp(clientX-box.left,0,viewport.clientWidth);
+    const anchorTime=state.start+(viewport.scrollLeft+anchorX)/Math.max(1,state.width)*(state.end-state.start);
+    state.pxPerMinute=MonitorCctvRange.clamp(state.pxPerMinute*factor,0.3,160);
+    document.getElementById('keyTimelineScale').value='custom';
+    renderKeyRuler(false);
+    viewport.scrollLeft=MonitorCctvRange.clamp(
+        (anchorTime-state.start)/(state.end-state.start)*state.width-anchorX,0,
+        Math.max(0,state.width-viewport.clientWidth));
+}
+document.addEventListener('click',event=>{
+    if(event.target.closest?.('#keyZoomIn'))zoomKeyRuler(1.6);
+    if(event.target.closest?.('#keyZoomOut'))zoomKeyRuler(1/1.6);
+});
+document.addEventListener('wheel',event=>{
+    const viewport=event.target.closest?.('#keyTimelineViewport');
+    if(!viewport||!keyRulerState)return;
+    event.preventDefault();
+    if(event.shiftKey)viewport.scrollLeft+=event.deltaY||event.deltaX;
+    else zoomKeyRuler(event.deltaY<0?1.22:1/1.22,event.clientX);
+},{passive:false});
+
 function createTable(logs) {
     const headers = getTableHeaders();
     let tableRows = '';
