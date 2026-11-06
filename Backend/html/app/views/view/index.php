@@ -2475,8 +2475,8 @@ $(document).ready(function(){
 });
 
 const historyBase = <?php echo json_encode(BASE_URL); ?>;
-const HISTORY_SCALES = {near:55,medium:14,wide:2.5};
-let historyState=null,historySeq=0,historyKeySeq=0;
+const HISTORY_SCALES = {near:55,medium:14,wide:2.5,day:0.5};
+let historyState=null,historySeq=0,historyKeySeq=0,historyVisibleSeq=0,historyVisibleTimer=null;
 
 function historyMillis(value){
     if(typeof value==='number')return value>100000000000?value:value*1000;
@@ -2502,8 +2502,8 @@ function startHistoryViewer(id,timestamp,fullUrl='',thumbnailUrl=''){
     historyState={
         monitor:Number(match[1]),start:ms-12*3600000,end:ms+12*3600000,
         rangeStart:ms-150000,rangeEnd:ms+150000,
-        scale:$('#historyScale').val()||'medium',width:0,
-        keys:[],shots:[],drag:null,activeId:id,activeTime:ms,
+        scale:$('#historyScale').val()||'medium',pxPerMinute:HISTORY_SCALES[$('#historyScale').val()]||14,width:0,
+        keys:[],shots:[],drag:null,activeId:id,activeTime:ms,cursorTime:ms,
         focus:{global_id:id,ms,full:fullUrl,thumb:thumbnailUrl||fullUrl}
     };
     $('#historyTranscriptInfo').text('');
@@ -2521,7 +2521,7 @@ function historySelectExternalScreenshot(shot){
         startHistoryViewer(id,shot.capture_datetime,full,thumb);return;
     }
     current.focus={global_id:id,ms,full,thumb};
-    current.activeId=id;current.activeTime=ms;
+    current.activeId=id;current.activeTime=ms;current.cursorTime=ms;
     if(ms<current.start||ms>current.end){
         const duration=current.rangeEnd-current.rangeStart;
         current.start=ms-12*3600000;current.end=ms+12*3600000;
@@ -2542,7 +2542,7 @@ function historySetRange(from,to,load=true){
     state.rangeStart=start;state.rangeEnd=end;
     historyUpdateVisual();
     if(load){
-        historyChooseNearestShot();
+        historySeek((state.rangeStart+state.rangeEnd)/2,false);
         historyLoadTranscript();
     }
 }
@@ -2561,6 +2561,7 @@ function historyUpdateVisual(){
     const from=document.getElementById('historyFrom'),to=document.getElementById('historyTo');
     if(from&&document.activeElement!==from)from.value=historyClock(state.rangeStart,true).replace(' ','T');
     if(to&&document.activeElement!==to)to.value=historyClock(state.rangeEnd,true).replace(' ','T');
+    $('#historyPlayheadTime').text(historyClock(state.cursorTime));
     $('#historyPrevRange').prop('disabled',state.rangeStart<=state.start);
     $('#historyNextRange').prop('disabled',state.rangeEnd>=state.end);
 }
@@ -2569,7 +2570,7 @@ function historyRenderRuler(center=false){
     const ruler=document.getElementById('historyTimelineRuler');
     if(!state||!viewport||!ruler)return;
     const span=state.end-state.start,minutes=span/60000;
-    const width=Math.min(24000,Math.max(viewport.clientWidth||800,Math.round(minutes*HISTORY_SCALES[state.scale])));
+    const width=Math.min(24000,Math.max(viewport.clientWidth||800,Math.round(minutes*state.pxPerMinute)));
     const pxPerMinute=width/minutes;
     const steps=[1,2,5,10,15,30,60,120,360,720,1440];
     const step=steps.find(value=>value*pxPerMinute>=90)||1440;
@@ -2605,8 +2606,8 @@ function historyRenderRuler(center=false){
                 +escapeViewerText(historyClock(shot.ms))+'</time></button>');
         }
     }
-    const playhead=Number.isFinite(state.activeTime)?
-        '<div class="key-cctv-playhead" style="left:'+x(state.activeTime)+'px" aria-hidden="true"></div>':'';
+    const playhead=Number.isFinite(state.cursorTime)?
+        '<button type="button" class="key-cctv-playhead" style="left:'+x(state.cursorTime)+'px" title="Drag to scrub" aria-label="Screenshot playhead: '+escapeViewerText(historyClock(state.cursorTime,true))+'"></button>':'';
     ruler.style.width=width+'px';
     ruler.innerHTML='<div class="key-cctv-baseline"></div>'+ticks.join('')+activity+shotMarkers
         +thumbnails.join('')+'<div class="key-cctv-selection" id="historyRangeSelection"></div>'+playhead;
@@ -2640,13 +2641,36 @@ function historyShowShot(shot){
     window.currentScreenshotId=shot.global_id;
     const image=document.getElementById('modalImage');
     if(image&&image.getAttribute('src')!==shot.full)image.src=shot.full;
+    $('#historyFrameTime').text('Captured '+historyClock(shot.ms,true));
     const ruler=document.getElementById('historyTimelineRuler');
     if(ruler){
         ruler.querySelectorAll('[data-history-shot]').forEach(node=>
             node.classList.toggle('is-active',node.dataset.historyShot===shot.global_id));
         const playhead=ruler.querySelector('.key-cctv-playhead');
-        if(playhead&&state.width)playhead.style.left=(shot.ms-state.start)/(state.end-state.start)*state.width+'px';
+        if(playhead&&state.width)playhead.style.left=(state.cursorTime-state.start)/(state.end-state.start)*state.width+'px';
     }
+}
+function historySeek(time,load=true){
+    const state=historyState;if(!state||!Number.isFinite(time))return;
+    state.cursorTime=MonitorCctvRange.clamp(Math.round(time/1000)*1000,state.start,state.end);
+    const duration=state.rangeEnd-state.rangeStart;
+    if(state.cursorTime<state.rangeStart||state.cursorTime>state.rangeEnd){
+        const from=MonitorCctvRange.clamp(state.cursorTime-duration/2,state.start,state.end-duration);
+        state.rangeStart=from;state.rangeEnd=from+duration;
+    }
+    const shots=historyAllShots(state);
+    if(shots.length){
+        const nearest=shots.reduce((best,shot)=>Math.abs(shot.ms-state.cursorTime)<Math.abs(best.ms-state.cursorTime)?shot:best,shots[0]);
+        historyShowShot(nearest);
+    }
+    historyUpdateVisual();
+    const ruler=document.getElementById('historyTimelineRuler');
+    const head=ruler?.querySelector('.key-cctv-playhead');
+    if(head&&state.width){
+        head.style.left=(state.cursorTime-state.start)/(state.end-state.start)*state.width+'px';
+        head.setAttribute('aria-label','Screenshot playhead: '+historyClock(state.cursorTime,true));
+    }
+    if(load)historyLoadTranscript();
 }
 async function historyLoadDomain(){
     const state=historyState;if(!state)return;
@@ -2687,8 +2711,9 @@ async function historyLoadDomain(){
     }
     $('#historyTimelineStatus').text(notes.join(' · ')+' · Drag the middle to pan; drag either edge to resize.');
     historyRenderRuler(true);
-    historyChooseNearestShot();
+    historySeek(state.cursorTime,false);
     historyLoadTranscript();
+    historyScheduleVisibleShots();
 }
 async function historyLoadTranscript(){
     const state=historyState;if(!state)return;
