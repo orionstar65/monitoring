@@ -363,6 +363,7 @@ int MonitorClient::getScreen()
         return 0;
     }
 
+    screenshotUploadError.clear();
     setTrayActivity(QStringLiteral("Uploading screenshot…"));
     sendScreensAsync(filePath + QStringLiteral(".jpg"), [this, filePath](int sendResult) {
         screenshotInProgress = false;
@@ -376,8 +377,9 @@ int MonitorClient::getScreen()
                                   QSystemTrayIcon::Information, 2500);
         else if (trayIcon && sendResult != 0)
             notifyTray(QStringLiteral("Screenshot"),
-                                  QStringLiteral("Upload failed."),
-                                  QSystemTrayIcon::Warning, 4000);
+                       screenshotUploadError.isEmpty() ? QStringLiteral("Upload failed.")
+                           : QStringLiteral("Upload failed: %1").arg(screenshotUploadError.left(220)),
+                       QSystemTrayIcon::Warning, 5000);
     });
 
     return 0;
@@ -447,6 +449,7 @@ void MonitorClient::sendScreensAsync(const QString &filePath, std::function<void
     int serverPort = getServerPort();
 
     if (serverIP.isEmpty()) {
+        screenshotUploadError=QStringLiteral("Server address is missing");
         onDone(-3);
         return;
     }
@@ -480,7 +483,9 @@ void MonitorClient::sendScreensAsync(const QString &filePath, std::function<void
     imagePart.setRawHeader("Content-Transfer-Encoding", "binary");
     auto *file = new QFile(filePath);
     if (!file->open(QIODevice::ReadOnly)) {
+        screenshotUploadError=QStringLiteral("Cannot read captured screenshot");
         delete multiPart;
+        delete file;
         onDone(-3);
         return;
     }
@@ -488,24 +493,34 @@ void MonitorClient::sendScreensAsync(const QString &filePath, std::function<void
     file->setParent(multiPart);
     multiPart->append(imagePart);
 
-    if(authToken.isEmpty()||monitorId<1){delete multiPart;onDone(-3);return;}
+    if(authToken.isEmpty()||monitorId<1){
+        screenshotUploadError=QStringLiteral("Sign in and select a monitor");
+        delete multiPart;
+        onDone(-3);return;
+    }
     req.setRawHeader("Authorization",("Bearer "+authToken).toUtf8());
     QNetworkReply *reply = networkManager->post(req, multiPart);
     multiPart->setParent(reply);
 
     connect(reply, &QNetworkReply::finished, this, [this, reply, onDone]() {
-        int out = -3;
-        if (reply->error() == QNetworkReply::NoError) {
-            int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-            if (statusCode == 200) {
-                lastScreenshotSentTime = QDateTime::currentDateTime();
-                out = 0;
-            } else {
-                qDebug() << "Screenshot upload HTTP status:" << statusCode;
-                out = -1;
-            }
-        } else {
-            qDebug() << "Screenshot upload failed:" << reply->errorString();
+        const int statusCode=reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QByteArray raw=reply->readAll();
+        const QJsonDocument json=QJsonDocument::fromJson(raw);
+        const QJsonObject body=json.isObject()?json.object():QJsonObject();
+        const bool accepted=statusCode==200 && body.value("status").toString()=="success";
+        int out=accepted?0:-1;
+        if(accepted){
+            screenshotUploadError.clear();
+            lastScreenshotSentTime=QDateTime::currentDateTime();
+        }else{
+            QString reason=body.value("error").toString();
+            if(reason.isEmpty())reason=body.value("message").toString();
+            if(reason.isEmpty()&&reply->error()!=QNetworkReply::NoError)
+                reason=reply->errorString();
+            if(statusCode==401)reason=QStringLiteral("Device session expired or monitor not selected");
+            if(reason.isEmpty())reason=QStringLiteral("Unexpected upload response");
+            screenshotUploadError=QStringLiteral("HTTP %1: %2").arg(statusCode).arg(reason.left(180));
+            qWarning().noquote() << "[Screenshot]" << screenshotUploadError;
         }
         reply->deleteLater();
         onDone(out);
@@ -1375,10 +1390,14 @@ int MonitorClient::checkActiveScreen()
 void MonitorClient::notifyTray(const QString &title,const QString &message,
                                QSystemTrayIcon::MessageIcon icon,int timeout)
 {
-    QSettings settings(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
-                       +"/monitorclient/settings.ini",QSettings::IniFormat);
-    if(trayIcon && settings.value("Notifications/enabled",true).toBool())
-        trayIcon->showMessage(title,message,icon,timeout);
+    const QString canonical=QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
+                            +"/monitorclient/settings.ini";
+    // Older installations saved notifications in the working-directory INI.
+    // Never default to enabled merely because the canonical file is absent.
+    QSettings settings(QFile::exists(canonical)?canonical:QStringLiteral("settings.ini"),
+                       QSettings::IniFormat);
+    if(!settings.value("Notifications/enabled",true).toBool())return;
+    if(trayIcon)trayIcon->showMessage(title,message,icon,timeout);
 }
 // System tray implementation
 void MonitorClient::setupSystemTray()
@@ -1562,10 +1581,9 @@ void MonitorClient::showConnectionError(const QString& error)
     updateTrayMenu();
     
     // Show notification only for first error
-    QSettings local(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)+"/monitorclient/settings.ini",QSettings::IniFormat);
-    if (trayIcon && local.value("Notifications/enabled",true).toBool() && !connectionErrorNotified) {
+    if (!connectionErrorNotified) {
         notifyTray("Connection Error", error, QSystemTrayIcon::Warning, 5000);
-        connectionErrorNotified = true;
+        connectionErrorNotified=true;
     }
     
     qDebug() << "Connection error:" << error;
