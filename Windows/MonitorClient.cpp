@@ -2501,13 +2501,13 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         activeSettingsWindow=dlg;
         settingsPendingUserNo.clear();
         settingsEditing=false;
-        setWindowUtf8Text(dlg,"MonitorClient v1.5 — Settings");
+        setWindowUtf8Text(dlg,"MonitorClient v"+APP_VERSION+" — Settings");
         HWND logo=addControl(dlg,"STATIC","",SS_ICON,13,10,38,38,4500);
         SendMessageW(logo,STM_SETIMAGE,IMAGE_ICON,(LPARAM)LoadIconW(GetModuleHandleW(nullptr),MAKEINTRESOURCEW(1)));
         if(SendMessageW(logo,STM_GETIMAGE,IMAGE_ICON,0)==0)
             SendMessageW(logo,STM_SETIMAGE,IMAGE_ICON,(LPARAM)LoadIconW(nullptr,IDI_APPLICATION));
         addControl(dlg,"STATIC","MonitorClient",0,62,12,260,21,4501);
-        addControl(dlg,"STATIC","v1.5",0,62,33,90,19,4502);
+        addControl(dlg,"STATIC",("v"+APP_VERSION).c_str(),0,62,33,90,19,4502);
         addControl(dlg,"STATIC","Server Settings",0,13,57,180,22,4503);
         addControl(dlg,"STATIC","Server IP",0,13,85,91,20,4504);
         addControl(dlg,"EDIT",serverIP.c_str(),WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,82,310,25,SETTINGS_IP);
