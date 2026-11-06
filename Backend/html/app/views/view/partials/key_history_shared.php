@@ -52,30 +52,50 @@
 .key-ruler-selected{font-size:.78rem;font-variant-numeric:tabular-nums;font-weight:600}
 .key-context-panel{margin-top:12px;border:1px solid var(--bs-border-color);border-radius:10px;padding:14px;min-height:110px}
 .key-context-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:.83rem}
-.key-transcript{display:grid;grid-template-columns:90px minmax(100px,180px) minmax(0,1fr);gap:2px 12px}
+.key-transcript{display:grid;grid-template-columns:100px minmax(0,1fr);gap:3px 12px;align-items:start}
 .key-transcript-time{font-variant-numeric:tabular-nums;color:var(--bs-secondary-color);font-size:.75rem;padding-top:4px}
-.key-transcript-app{font-size:.76rem;font-weight:600;padding-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--bs-body-color)}
+.key-transcript-app{font-size:.78rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--bs-body-color)}
+.key-transcript-app-row{grid-column:1/-1;margin:8px 0 4px;padding:6px 9px;border-radius:6px;background:var(--bs-secondary-bg,#edf0f5);border:1px solid var(--bs-border-color)}
+.key-transcript-app-row:first-child{margin-top:1px}
 .key-transcript-content{min-height:25px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.75;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.84rem}
 .key-transcript-content .key-deleted{color:var(--bs-secondary-color);text-decoration:line-through;text-decoration-thickness:2px;background:rgba(227,75,75,.09)}
 .key-control-symbol{color:var(--bs-secondary-color);font-size:.73rem;opacity:.75}
 .key-special-badge{display:inline-flex;margin:0 2px;padding:1px 5px;vertical-align:baseline;border-radius:5px;background:var(--bs-secondary-bg,#ecf0f5);color:var(--bs-body-color);border:1px solid var(--bs-border-color);font-family:inherit;font-size:.7rem;line-height:1.4}
 .key-remaining{display:flex;flex-wrap:wrap;gap:6px;padding-top:8px}
 .key-remaining .badge{font-size:.73rem;font-weight:500}
-@media(max-width:650px){.key-timeline-wrapper{padding:8px}.key-context-panel{padding:10px}.key-transcript{grid-template-columns:68px minmax(72px,105px) minmax(0,1fr);gap:2px 7px}.key-transcript-content{font-size:.78rem}}
+@media(max-width:650px){.key-timeline-wrapper{padding:8px}.key-context-panel{padding:10px}.key-transcript{grid-template-columns:78px minmax(0,1fr);gap:2px 7px}.key-transcript-content{font-size:.78rem}}
 </style>
 <script>
 function monitorTranscriptKeyRows(keys,escapeHtml) {
     const applicationName = entry => String(entry?.application || '').trim() || 'Unknown app';
+    if(!Array.isArray(keys)||!keys.length)
+        return '<div class="text-muted small">No keyboard events in this range.</div>';
     const lines=[{time:keys[0]?.key_date||'',app:applicationName(keys[0]),tokens:[]}];
     let current=lines[0];
+    const seenIds=new Set();
     const addBadge=(raw,time,eventId)=>{
-        current.tokens.push({kind:'badge',raw,time,eventId});
+        const previous=current.tokens[current.tokens.length-1];
+        const previousTime=previous?.lastTime||previous?.time||'';
+        const eventMs=Date.parse(String(time).replace(' ','T'));
+        const lastMs=Date.parse(String(previousTime).replace(' ','T'));
+        // Only condense adjacent repeated *special* keys over a short interval.
+        // Keep original events in the database, and show the repeat count.
+        if(previous?.kind==='badge'&&previous.raw===raw&&
+           Number.isFinite(eventMs)&&Number.isFinite(lastMs)&&
+           eventMs>=lastMs&&eventMs-lastMs<=2000){
+            previous.repeat=(previous.repeat||1)+1;
+            previous.lastTime=time;
+            return;
+        }
+        current.tokens.push({kind:'badge',raw,time,eventId,repeat:1,lastTime:time});
     };
     for(const entry of keys) {
         const raw=String(entry.key_pressed??'');
         const key=raw.trim().replace(/^\[(.*)\]$/,'$1').replace(/^<(.*)>$/,'$1');
         const time=String(entry.key_date||'');
         const eventId=Number(entry.event_id)||0;
+        if(eventId&&seenIds.has(eventId))continue;
+        if(eventId)seenIds.add(eventId);
         const app=applicationName(entry);
         // Start a new transcript row when the active application changes.
         // Do not apply Backspace to characters typed in a different app.
@@ -118,21 +138,28 @@ function monitorTranscriptKeyRows(keys,escapeHtml) {
             addBadge(raw||'Unknown',time,eventId);
         }
     }
+    let lastApplication=null;
     const transcript=lines.map(line=>{
+        const appHeader=line.app!==lastApplication
+            ? '<div class="key-transcript-app-row"><div class="key-transcript-app" title="'+escapeHtml(line.app)+'">'+escapeHtml(line.app)+'</div></div>'
+            : '';
+        lastApplication=line.app;
         const content=line.tokens.map(token=>{
             if(token.kind==='char')return `<span class="${token.deleted?'key-deleted':''}" title="${escapeHtml(token.time)}">${escapeHtml(token.value)}</span>`;
             if(token.kind==='newline')return '<span class="key-control-symbol" title="Enter">↵</span>';
             if(token.kind==='effect')return `<span class="key-control-symbol" title="Backspace at ${escapeHtml(token.time)}">${token.value}</span>`;
-            return `<span class="key-special-badge" title="${escapeHtml(token.time+(token.eventId?' · recorded event #'+token.eventId:''))}">${escapeHtml(token.raw)}</span>`;
+            const label=token.repeat>1?token.raw+' ×'+token.repeat:token.raw;
+            const description=token.time+(token.repeat>1?'–'+token.lastTime+' · '+token.repeat+' consecutive events':'')+
+                (token.eventId?' · first event #'+token.eventId:'');
+            return `<span class="key-special-badge" title="${escapeHtml(description)}">${escapeHtml(label)}</span>`;
         }).join('');
-        return `<div class="key-transcript-time" title="${escapeHtml(line.time||'')}">${escapeHtml((line.time||'').split(' ').pop())}</div>
-            <div class="key-transcript-app" title="${escapeHtml(line.app)}">${escapeHtml(line.app)}</div>
+        return appHeader+`<div class="key-transcript-time" title="${escapeHtml(line.time||'')}">${escapeHtml((line.time||'').split(' ').pop())}</div>
             <div class="key-transcript-content">${content||'<span class="text-muted"> </span>'}</div>`;
     }).join('');
     // Special keys are already rendered in their chronological transcript rows.
     // Never print the same events a second time in a separate badge collection.
-    // Repeated source rows still remain visible, since autorepeat/duplicate uploads
-    // cannot be distinguished safely without inspecting original database IDs.
+    // Identical event IDs are rendered once; consecutive special-key repeats
+    // are shown once with a count (e.g. UP ×8), preserving source rows in DB.
     return '<div class="key-transcript" role="table" aria-label="Keyboard events with timestamps">'+transcript+'</div>';
 }
 
