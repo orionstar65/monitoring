@@ -1268,7 +1268,7 @@ ob_start();
                                     <label for="historyScale" class="visually-hidden">Timeline scale</label>
                                     <select id="historyScale" class="form-select form-select-sm" aria-label="History timeline scale">
                                         <option value="near">15 min</option><option value="medium" selected>1 hour</option>
-                                        <option value="wide">6 hours</option><option value="day">24 hours</option>
+                                        <option value="wide">6 hours</option><option value="day">24 hours</option><option value="custom" disabled>Custom</option>
                                     </select>
                                     <time id="historyPlayheadTime" class="history-playhead-label" aria-label="Playhead timestamp"></time>
                                     <button id="historyDrawerToggle" class="btn btn-sm btn-outline-secondary" type="button" aria-controls="historyTranscriptPanel" aria-expanded="true">Hide keys</button>
@@ -2736,37 +2736,23 @@ async function historyLoadTranscript(){
         if(state===historyState&&seq===historyKeySeq)panel.text('Cannot load keylogs: '+error.message);
     }
 }
+
 function historyPointerTime(event,ruler){
-    const state=historyState;
-    const rect=ruler.getBoundingClientRect();
-    const ratio=Math.max(0,Math.min(1,(event.clientX-rect.left)/Math.max(1,rect.width)));
-    return state.start+ratio*(state.end-state.start);
+    return MonitorCctvRange.point(event,ruler,historyState);
 }
-function historyHitMode(state,time,ruler){
-    const perPixel=(state.end-state.start)/Math.max(1,ruler.getBoundingClientRect().width);
-    const selectedPixels=(state.rangeEnd-state.rangeStart)/perPixel;
-    const edgeTolerance=Math.min(14,Math.max(2,selectedPixels*.3))*perPixel;
-    const fromDistance=Math.abs(time-state.rangeStart),toDistance=Math.abs(time-state.rangeEnd);
-    const duration=state.rangeEnd-state.rangeStart;
-    // Reserve the center third for panning even when selection is very narrow.
-    if(time>state.rangeStart&&time<state.rangeEnd&&fromDistance>duration*.3&&toDistance>duration*.3)return 'pan';
-    if(fromDistance<=edgeTolerance||toDistance<=edgeTolerance)
-        return fromDistance<=toDistance?'start':'end';
-    if(time>state.rangeStart&&time<state.rangeEnd)return 'pan';
-    return fromDistance<=toDistance?'start':'end';
+function historyHitMode(state,time,ruler,playhead=false){
+    return MonitorCctvRange.hit(state,time,ruler.getBoundingClientRect().width,{
+        seek:true,cursor:state.cursorTime,playhead
+    });
 }
 document.addEventListener('pointerdown',event=>{
     const ruler=event.target.closest?.('#historyTimelineRuler');
     const state=historyState;
-    if(!ruler||!state||event.button!==0)return;
-    // Thumbnail clicks are discrete navigation, not range drags.
-    if(event.target.closest?.('[data-history-shot]'))return;
+    if(!ruler||!state||event.button!==0||event.target.closest?.('[data-history-shot]'))return;
     const time=historyPointerTime(event,ruler);
-    const mode=historyHitMode(state,time,ruler);
-    if(time<state.rangeStart)historySetRange(Math.round(time/1000)*1000,state.rangeEnd,false);
-    else if(time>state.rangeEnd)historySetRange(state.rangeStart,Math.round(time/1000)*1000,false);
-    state.drag={pointerId:event.pointerId,mode,
-        anchor:time,from:state.rangeStart,to:state.rangeEnd};
+    const mode=historyHitMode(state,time,ruler,!!event.target.closest('.key-cctv-playhead'));
+    if(mode==='seek')historySeek(time,false);
+    state.drag={pointerId:event.pointerId,mode,anchor:time,from:state.rangeStart,to:state.rangeEnd};
     ruler.setPointerCapture(event.pointerId);
     ruler.classList.add('is-dragging');
     event.preventDefault();
@@ -2776,29 +2762,28 @@ document.addEventListener('pointermove',event=>{
     if(!ruler||!state)return;
     const time=historyPointerTime(event,ruler);
     if(!state.drag){
-        const mode=historyHitMode(state,time,ruler);
-        ruler.style.cursor=mode==='pan'?'grab':'ew-resize';
+        const mode=historyHitMode(state,time,ruler,!!event.target.closest?.('.key-cctv-playhead'));
+        ruler.style.cursor=mode==='pan'?'grab':mode==='seek'?'crosshair':'ew-resize';
         return;
     }
     if(state.drag.pointerId!==event.pointerId||!ruler.hasPointerCapture(event.pointerId))return;
-    const drag=state.drag,delta=time-drag.anchor,minimum=1000;
-    if(drag.mode==='pan'){
-        const duration=drag.to-drag.from;
-        const start=Math.max(state.start,Math.min(state.end-duration,drag.from+delta));
-        historySetRange(start,start+duration,false);
-    }else if(drag.mode==='start'){
-        historySetRange(Math.min(drag.to-minimum,Math.max(state.start,drag.from+delta)),drag.to,false);
-    }else if(drag.mode==='end'){
-        historySetRange(drag.from,Math.max(drag.from+minimum,Math.min(state.end,drag.to+delta)),false);
+    const drag=state.drag;
+    if(drag.mode==='seek')historySeek(time,false);
+    else{
+        const [from,to]=MonitorCctvRange.drag(state,drag.mode,drag.from,drag.to,drag.anchor,time);
+        historySetRange(from,to,false);
     }
 });
 function historyFinishDrag(event,commit){
     const state=historyState,ruler=document.getElementById('historyTimelineRuler');
     if(!state?.drag||!ruler||state.drag.pointerId!==event.pointerId)return;
-    state.drag=null;
-    ruler.classList.remove('is-dragging');
+    const mode=state.drag.mode;
+    state.drag=null;ruler.classList.remove('is-dragging');
     if(ruler.hasPointerCapture(event.pointerId))ruler.releasePointerCapture(event.pointerId);
-    if(commit){historyChooseNearestShot();historyLoadTranscript();}
+    if(commit){
+        historySeek(mode==='seek'?state.cursorTime:(state.rangeStart+state.rangeEnd)/2,true);
+        historyScheduleVisibleShots();
+    }
 }
 document.addEventListener('pointerup',event=>historyFinishDrag(event,true));
 document.addEventListener('pointercancel',event=>historyFinishDrag(event,false));
@@ -2806,10 +2791,7 @@ $(document).on('click','#historyTimelineRuler [data-history-shot]',function(){
     const state=historyState;if(!state)return;
     const shot=historyAllShots(state).find(item=>item.global_id===this.dataset.historyShot);
     if(!shot)return;
-    historyShowShot(shot);
-    const duration=state.rangeEnd-state.rangeStart;
-    const from=Math.max(state.start,Math.min(state.end-duration,shot.ms-duration/2));
-    historySetRange(from,from+duration,true);
+    historySeek(shot.ms,true);
     historyCenterView();
 });
 $(document).on('change','#historyFrom,#historyTo',function(){
@@ -2828,11 +2810,50 @@ $(document).on('change','#historyFrom,#historyTo',function(){
         historyLoadDomain();
     }else historySetRange(from,to,true);
 });
-$(document).on('change','#historyScale',function(){
-    if(!historyState)return;
-    historyState.scale=HISTORY_SCALES[this.value]?this.value:'medium';
+
+function historyZoom(factor,clientX=null){
+    const state=historyState,viewport=document.getElementById('historyTimelineViewport');
+    if(!state||!viewport)return;
+    const rectangle=viewport.getBoundingClientRect();
+    const anchorX=clientX===null?viewport.clientWidth/2:MonitorCctvRange.clamp(clientX-rectangle.left,0,viewport.clientWidth);
+    const anchorTime=state.start+(viewport.scrollLeft+anchorX)/Math.max(1,state.width)*(state.end-state.start);
+    state.pxPerMinute=MonitorCctvRange.clamp(state.pxPerMinute*factor,0.3,160);
+    $('#historyScale').val('custom');
+    historyRenderRuler(false);
+    viewport.scrollLeft=MonitorCctvRange.clamp(
+        (anchorTime-state.start)/(state.end-state.start)*state.width-anchorX,
+        0,Math.max(0,state.width-viewport.clientWidth));
+    historyScheduleVisibleShots();
+}
+function historyFitDay(){
+    const state=historyState,viewport=document.getElementById('historyTimelineViewport');
+    if(!state||!viewport)return;
+    state.scale='day';
+    state.pxPerMinute=Math.max(0.3,viewport.clientWidth/((state.end-state.start)/60000));
+    $('#historyScale').val('day');
     historyRenderRuler(true);
+    historyScheduleVisibleShots();
+}
+$(document).on('change','#historyScale',function(){
+    if(!historyState||!HISTORY_SCALES[this.value])return;
+    historyState.scale=this.value;
+    historyState.pxPerMinute=HISTORY_SCALES[this.value];
+    historyRenderRuler(true);
+    historyScheduleVisibleShots();
 });
+$(document).on('click','#historyZoomIn',()=>historyZoom(1.6));
+$(document).on('click','#historyZoomOut',()=>historyZoom(1/1.6));
+$(document).on('click','#historyFit',historyFitDay);
+document.addEventListener('wheel',event=>{
+    const viewport=event.target.closest?.('#historyTimelineViewport');
+    if(!viewport||!historyState||!$('#screenshotModal').hasClass('show'))return;
+    event.preventDefault();
+    if(event.shiftKey){
+        viewport.scrollLeft+=event.deltaY||event.deltaX;
+        historyScheduleVisibleShots();
+    }else historyZoom(event.deltaY<0?1.22:1/1.22,event.clientX);
+},{passive:false});
+$(document).on('scroll','#historyTimelineViewport',historyScheduleVisibleShots);
 $(document).on('click','#historyPrevRange,#historyNextRange',function(){
     const state=historyState;if(!state)return;
     const direction=this.id==='historyNextRange'?1:-1;
@@ -2846,16 +2867,25 @@ $(document).on('click','#historyDrawerToggle',function(){
     $(this).text(collapsed?'Show transcript':'Hide transcript').attr('aria-expanded',String(!collapsed));
     historyRenderRuler(false);
 });
+
 document.addEventListener('keydown',event=>{
     if(event.target?.id!=='historyTimelineRuler'||!historyState)return;
+    const state=historyState;
+    if(['+','=','Add'].includes(event.key)){event.preventDefault();historyZoom(1.5);return;}
+    if(['-','Subtract'].includes(event.key)){event.preventDefault();historyZoom(1/1.5);return;}
+    if(event.key==='Home'){event.preventDefault();historySeek(state.start,true);historyCenterView();return;}
+    if(event.key==='End'){event.preventDefault();historySeek(state.end,true);historyCenterView();return;}
     if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
     event.preventDefault();
-    const state=historyState,dir=event.key==='ArrowRight'?1:-1;
-    if(event.shiftKey)historySetRange(state.rangeStart,Math.max(state.rangeStart+1000,Math.min(state.end,state.rangeEnd+dir*60000)),true);
-    else{
+    const dir=event.key==='ArrowRight'?1:-1;
+    if(event.ctrlKey||event.metaKey)historySetRange(state.rangeStart,Math.max(state.rangeStart+1000,Math.min(state.end,state.rangeEnd+dir*60000)),true);
+    else if(event.shiftKey){
         const duration=state.rangeEnd-state.rangeStart;
-        const start=Math.max(state.start,Math.min(state.end-duration,state.rangeStart+dir*60000));
-        historySetRange(start,start+duration,true);
+        const from=MonitorCctvRange.clamp(state.rangeStart+dir*duration,state.start,state.end-duration);
+        historySetRange(from,from+duration,true);historyCenterView();
+    }else{
+        historySeek(state.cursorTime+dir*(event.altKey?1000:60000),true);
+        historyCenterView();
     }
 });
 $(document).on('shown.bs.modal','#screenshotModal',()=>historyRenderRuler(true));
