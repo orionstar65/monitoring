@@ -239,6 +239,8 @@ private:
     qint64 m_lastEmitUsbLogTime;
 
     std::atomic<bool> m_browserHistoryBusy;
+    bool m_keyUploadBusy = false;
+    bool m_usbUploadBusy = false;
 };
 
 #endif // MONITORCLIENT_H
