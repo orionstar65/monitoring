@@ -10,11 +10,18 @@ class Logbrowse extends Base {
         $this->statusService = StatusService::getInstance();
     }
     
+    /** Scoped admins may query logs only for an explicitly assigned monitor. */
+    private function requireScopedLogDevice(?int $deviceId): void {
+        if(!$this->isScopedAdmin())return;
+        if(!$deviceId){http_response_code(400);$this->json(['success'=>false,'error'=>'Select a monitor']);}
+        $this->requireMonitorAccess($deviceId);
+    }
+
     /**
      * Main log browsing page
      */
     public function index() {
-        if($this->isAdmin())$this->redirect('view?tab=browser');
+        if($this->isManager())$this->redirect('view?tab=browser');
         if(($this->user['role']??'')==='user'){
             $this->view('view/aggregate');return;
         }
@@ -31,10 +38,13 @@ class Logbrowse extends Base {
      */
     public function api_devices() {
         // OPTIMIZED: Remove SQL CASE statement - status calculation done in PHP for better performance
+        [$scope,$scopeParams]=$this->monitorScope('m');
         $devices = $this->db->fetchAll(
             "SELECT m.id,m.ip_address,m.mac_address,owner.name AS username,owner.user_no AS user_no,CONCAT('Device #',m.id) AS name,m.type,m.platform,m.last_seen_ip,m.last_monitor_tic,m.updated_at
              FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id
-             ORDER BY (owner.id IS NULL), CAST(owner.user_no AS UNSIGNED), owner.name, COALESCE(m.type,''), COALESCE(m.platform,''), INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)), COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address), m.id"
+             WHERE {$scope}
+             ORDER BY (owner.id IS NULL), CAST(owner.user_no AS UNSIGNED), owner.name, COALESCE(m.type,''), COALESCE(m.platform,''), INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)), COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address), m.id",
+            $scopeParams
         );
         
         // Calculate status in PHP using StatusService for consistency
@@ -53,6 +63,7 @@ class Logbrowse extends Base {
         $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
         $per_page = isset($_GET['per_page']) ? max(1, min(100, intval($_GET['per_page']))) : 20;
         $device_id = isset($_GET['device_id']) ? intval($_GET['device_id']) : null;
+        $this->requireScopedLogDevice($device_id);
         $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : null;
         $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : null;
         
@@ -126,6 +137,7 @@ class Logbrowse extends Base {
         $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
         $per_page = isset($_GET['per_page']) ? max(1, min(100, intval($_GET['per_page']))) : 20;
         $device_id = isset($_GET['device_id']) ? intval($_GET['device_id']) : null;
+        $this->requireScopedLogDevice($device_id);
         $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : null;
         $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : null;
         
@@ -197,6 +209,7 @@ class Logbrowse extends Base {
         $from=(string)($_GET['start_date']??date('Y-m-d'));
         $to=(string)($_GET['end_date']??date('Y-m-d'));
         $deviceId=filter_var($_GET['device_id']??null,FILTER_VALIDATE_INT)?:null;
+        $this->requireScopedLogDevice($deviceId);
         foreach([$from,$to] as $date) {
             $parsed=DateTimeImmutable::createFromFormat('!Y-m-d',$date);
             if(!$parsed||$parsed->format('Y-m-d')!==$date) {
@@ -235,6 +248,7 @@ class Logbrowse extends Base {
     /** Fetch the ordered key sequence around a selected event. */
     public function api_key_context() {
         $monitorId=filter_var($_GET['device_id']??null,FILTER_VALIDATE_INT);
+        $this->requireScopedLogDevice($monitorId?:null);
         $from=(string)($_GET['from']??'');
         $to=(string)($_GET['to']??'');
         $format='!Y-m-d H:i:s';
@@ -272,6 +286,7 @@ class Logbrowse extends Base {
         $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
         $per_page = isset($_GET['per_page']) ? max(1, min(100, intval($_GET['per_page']))) : 20;
         $device_id = isset($_GET['device_id']) ? intval($_GET['device_id']) : null;
+        $this->requireScopedLogDevice($device_id);
         $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : null;
         $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : null;
         
@@ -343,6 +358,7 @@ class Logbrowse extends Base {
      */
     public function api_stats() {
         $device_id = isset($_GET['device_id']) ? intval($_GET['device_id']) : null;
+        $this->requireScopedLogDevice($device_id);
         $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : null;
         $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : null;
         
