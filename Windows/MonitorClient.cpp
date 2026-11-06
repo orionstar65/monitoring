@@ -4,6 +4,7 @@
 #include <cstring>
 #include <cstddef>
 #include <string>
+#include <memory>
 #include <atomic>
 // MinGW compatibility patch
 #ifndef _OBJIDL_H_
@@ -2017,6 +2018,8 @@ enum {
     SETTINGS_MACHINE_DESKTOP=4225, SETTINGS_LOCK_SETTINGS=4226,
     SETTINGS_EDIT=4227,SETTINGS_SIGNIN_USER=4232,SETTINGS_SIGNIN_PASS=4233,
     SETTINGS_SEND_ALL=4234,SETTINGS_REFRESH_CONFIG=4235,SETTINGS_ACCOUNT_INFO=4236,
+    SETTINGS_UPDATE_HEADING=4240,SETTINGS_UPDATE_URL=4241,
+    SETTINGS_UPDATE_CHECK=4242,SETTINGS_UPDATE_INSTALL=4243,SETTINGS_UPDATE_STATUS=4244,
     SETTINGS_INFO_NAME=4228,SETTINGS_INFO_OS=4229,
     SETTINGS_INFO_MACHINE=4230,SETTINGS_INFO_REMARK=4231
 };
@@ -2368,9 +2371,20 @@ static void updateUnifiedVisibility(HWND dlg) {
         SetWindowPos(GetDlgItem(dlg,item.id),nullptr,item.x,item.y-offset,0,0,
                      SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
     const int notifyY=(enrolled||pending)?539-offset:(hasNotice?351:285);
-    const int buttonsY=(enrolled||pending)?574-offset:(hasNotice?389:321);
+    const int updateY=notifyY+38;
+    const int buttonsY=updateY+134;
     SetWindowPos(GetDlgItem(dlg,SETTINGS_NOTIFY),nullptr,108,notifyY,0,0,
                  SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
+    const Position updateLayout[]={
+        {SETTINGS_UPDATE_HEADING,13,updateY},
+        {SETTINGS_UPDATE_URL,108,updateY+27},
+        {SETTINGS_UPDATE_CHECK,108,updateY+62},
+        {SETTINGS_UPDATE_INSTALL,277,updateY+62},
+        {SETTINGS_UPDATE_STATUS,108,updateY+94}
+    };
+    for(const auto& item:updateLayout)
+        SetWindowPos(GetDlgItem(dlg,item.id),nullptr,item.x,item.y,0,0,
+                     SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),nullptr,214,buttonsY,0,0,
                  SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
     SetWindowPos(GetDlgItem(dlg,SETTINGS_SAVE),nullptr,108,buttonsY,0,0,
@@ -2435,6 +2449,14 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,539,310,25,SETTINGS_REMARK);
         addControl(dlg,"STATIC","—",0,108,542,310,21,SETTINGS_INFO_REMARK);
         addControl(dlg,"BUTTON","Show status notifications",BS_AUTOCHECKBOX|WS_TABSTOP,108,572,250,24,SETTINGS_NOTIFY);
+        addControl(dlg,"STATIC","Updates",0,13,609,180,22,SETTINGS_UPDATE_HEADING);
+        addControl(dlg,"EDIT",readClientSetting("Update","url","").c_str(),
+                   WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,636,310,25,SETTINGS_UPDATE_URL);
+        addControl(dlg,"BUTTON","Check new version",WS_TABSTOP,108,671,160,27,SETTINGS_UPDATE_CHECK);
+        addControl(dlg,"BUTTON","Update",WS_TABSTOP,277,671,120,27,SETTINGS_UPDATE_INSTALL);
+        EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_INSTALL),FALSE);
+        addControl(dlg,"STATIC",("Installed: "+APP_VERSION).c_str(),SS_LEFT,108,703,310,26,SETTINGS_UPDATE_STATUS);
+
         addControl(dlg,"BUTTON","Send All Logs",WS_TABSTOP,13,625,150,28,SETTINGS_SEND_ALL);
         addControl(dlg,"BUTTON","Refresh Configuration",WS_TABSTOP,174,625,210,28,SETTINGS_REFRESH_CONFIG);
         CheckDlgButton(dlg,SETTINGS_NOTIFY,notificationsEnabled?BST_CHECKED:BST_UNCHECKED);
