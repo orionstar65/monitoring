@@ -80,53 +80,36 @@ class DatabaseService {
      * Handles: Int64 timestamps (macOS), String datetimes (Windows), Missing fields (Ubuntu)
      */
     private function normalizeDateTime($value) {
-        if ($value === null || $value === '') {
-            return date('Y-m-d H:i:s');
+        // All telemetry DATETIME fields represent UTC. Numeric browser
+        // timestamps are absolute epochs; ISO timestamps carry their offset.
+        if($value===null||$value==='')return gmdate('Y-m-d H:i:s');
+        if(is_numeric($value)){
+            $timestamp=(float)$value;
+            if($timestamp>10000000000000000)
+                $timestamp=$timestamp/1000000-11644473600; // Chromium
+            elseif($timestamp>100000000000000)
+                $timestamp/=1000000; // Firefox microseconds
+            elseif($timestamp>1000000000000)
+                $timestamp/=1000; // milliseconds
+            elseif($timestamp<1000000000)
+                $timestamp/=1000000; // legacy microseconds
+            return gmdate('Y-m-d H:i:s',(int)$timestamp);
         }
-        
-        // If it's a numeric timestamp (macOS sends Int64)
-        if (is_numeric($value)) {
-            $timestamp = (int)$value;
-            
-            // Handle Windows epoch microseconds (very large numbers like 13404779250090721)
-            // Windows epoch starts at 1601-01-01, Unix epoch starts at 1970-01-01
-            // Difference: 11644473600 seconds = 11644473600000000 microseconds
-            if ($timestamp > 10000000000000000) {
-                // Windows epoch microseconds - convert to Unix epoch seconds
-                $unixTimestamp = ($timestamp / 1000000) - 11644473600;
-                return date('Y-m-d H:i:s', (int)$unixTimestamp);
-            } elseif ($timestamp > 100000000000000) {
-                // Firefox uses Unix microseconds (roughly 1.7e15 in 2026).
-                // Treating these as milliseconds puts the visit in year 58000.
-                return date('Y-m-d H:i:s', (int)($timestamp / 1000000));
-            } elseif ($timestamp > 1000000000000) {
-                // Unix milliseconds (JavaScript epoch).
-                return date('Y-m-d H:i:s', (int)($timestamp / 1000));
-            } elseif ($timestamp > 1000000000) {
-                // Seconds since epoch (Unix timestamp)
-                return date('Y-m-d H:i:s', $timestamp);
-            } else {
-                // Microseconds since epoch (some browsers)
-                return date('Y-m-d H:i:s', $timestamp / 1000000);
+        if(is_string($value)){
+            require_once dirname(__DIR__,3).'/services/TelemetryTime.php';
+            $absolute=monitorCaptureTimeUTC($value);
+            if($absolute!==null)return $absolute->format('Y-m-d H:i:s');
+            try{
+                // Offset-less legacy string forms are UTC, not PHP server local.
+                return (new DateTimeImmutable($value,new DateTimeZone('UTC')))
+                    ->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+            }catch(Throwable $error){
+                error_log('Invalid client telemetry timestamp');
             }
         }
-        
-        // If it's already a string, try to parse it
-        if (is_string($value)) {
-            // Try to parse common datetime formats
-            $parsed = strtotime($value);
-            if ($parsed !== false) {
-                return date('Y-m-d H:i:s', $parsed);
-            }
-            
-            // If parsing fails, return as-is (might be valid MySQL datetime)
-            return $value;
-        }
-        
-        // Fallback to current time
-        return date('Y-m-d H:i:s');
+        return gmdate('Y-m-d H:i:s');
     }
-    
+
     /**
      * Add key logs to database
      * Handles data from all platforms: Windows, macOS, Ubuntu
