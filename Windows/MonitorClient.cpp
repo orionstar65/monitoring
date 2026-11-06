@@ -2400,6 +2400,101 @@ static void updateUnifiedVisibility(HWND dlg) {
                  SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
     RedrawWindow(dlg,nullptr,nullptr,RDW_INVALIDATE|RDW_ERASE|RDW_ALLCHILDREN);
 }
+// Update operations use the bundled, reviewed PowerShell helper, never scripts
+// downloaded from the update server. Check and stage execute off the UI thread.
+static std::mutex updateResultMutex;
+static Json::Value updateResult;
+static std::string selectedUpdateVersion;
+static bool validUpdateServer(const std::string& raw){
+    if(raw.size()>512 ||
+       (raw.rfind("http://",0)!=0 && raw.rfind("https://",0)!=0))return false;
+    for(unsigned char c:raw){
+        if(!std::isalnum(c) && c!=':' && c!='/' && c!='.' && c!='-' &&
+           c!='_' && c!='[' && c!=']')return false;
+    }
+    return true;
+}
+static Json::Value readUpdateStatusFile(const std::wstring& path) {
+    Json::Value result;
+    const HANDLE fd=CreateFileW(path.c_str(),GENERIC_READ,FILE_SHARE_READ,nullptr,
+                               OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+    if(fd==INVALID_HANDLE_VALUE){result["error"]="Update helper did not produce a result";return result;}
+    std::string content;
+    BYTE bytes[4096];DWORD count=0;
+    while(ReadFile(fd,bytes,sizeof(bytes),&count,nullptr)&&count>0){
+        if(content.size()+count>128*1024)break;
+        content.append(reinterpret_cast<const char*>(bytes),count);
+    }
+    CloseHandle(fd);
+    Json::CharReaderBuilder parser;
+    std::string errors;
+    std::istringstream input(content);
+    if(!Json::parseFromStream(parser,input,&result,&errors))
+        result["error"]="Cannot parse updater response: "+errors;
+    return result;
+}
+static bool launchUpdateHelper(HWND dialog,const std::string& operation,
+                               const std::string& updateServer,
+                               const std::string& packagePath=std::string(),
+                               const std::string& sha=std::string()){
+    wchar_t module[MAX_PATH]={0};
+    const DWORD count=GetModuleFileNameW(nullptr,module,MAX_PATH);
+    if(!count||count>=MAX_PATH)return false;
+    std::wstring folder(module);
+    const auto slash=folder.find_last_of(L"\\/");
+    if(slash==std::wstring::npos)return false;
+    folder.resize(slash);
+    const std::wstring script=folder+L"\\update-helper.ps1";
+    if(GetFileAttributesW(script.c_str())==INVALID_FILE_ATTRIBUTES)return false;
+    std::wstring args=L"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \""+
+                      script+L"\" -Mode "+utf8ToWide(operation)+
+                      L" -CurrentVersion \""+utf8ToWide(APP_VERSION)+L"\"";
+    std::wstring resultPath;
+    if(operation=="Apply"){
+        if(packagePath.empty()||sha.size()!=64)return false;
+        args+=L" -PackagePath \""+utf8ToWide(packagePath)+L"\" -ExpectedSha \""+
+              utf8ToWide(sha)+L"\" -InstallDir \""+folder+
+              L"\" -ParentPid "+std::to_wstring(GetCurrentProcessId());
+    }else{
+        if(!validUpdateServer(updateServer))return false;
+        wchar_t temp[MAX_PATH]={0},file[MAX_PATH]={0};
+        if(!GetTempPathW(MAX_PATH,temp)||!GetTempFileNameW(temp,L"MUP",0,file))return false;
+        resultPath=file;
+        args+=L" -BaseUrl \""+utf8ToWide(updateServer)+
+              L"\" -ResultPath \""+resultPath+L"\"";
+    }
+    SHELLEXECUTEINFOW info{};
+    info.cbSize=sizeof(info);
+    info.fMask=SEE_MASK_NOCLOSEPROCESS;
+    info.lpVerb=operation=="Apply"?L"runas":L"open";
+    info.lpFile=L"powershell.exe";
+    info.lpParameters=args.c_str();
+    info.nShow=SW_HIDE;
+    if(!ShellExecuteExW(&info)){
+        if(!resultPath.empty())DeleteFileW(resultPath.c_str());
+        return false;
+    }
+    if(operation=="Apply"){
+        if(info.hProcess)CloseHandle(info.hProcess);
+        return true;
+    }
+    const int code=operation=="Check"?1:2;
+    std::thread([dialog,handle=info.hProcess,path=resultPath,code](){
+        Json::Value outcome;
+        if(WaitForSingleObject(handle,300000)==WAIT_OBJECT_0){
+            outcome=readUpdateStatusFile(path);
+        }else outcome["error"]="Update request timed out";
+        CloseHandle(handle);
+        DeleteFileW(path.c_str());
+        {
+            std::lock_guard<std::mutex> guard(updateResultMutex);
+            updateResult=outcome;
+        }
+        if(IsWindow(dialog))PostMessageW(dialog,WM_APP+0x275,code,0);
+    }).detach();
+    return true;
+}
+
 static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp) {
     switch(msg) {
     case WM_INITDIALOG:{
@@ -2472,6 +2567,43 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
     case WM_DESTROY:
         if(activeSettingsWindow==dlg)activeSettingsWindow=nullptr;
         return TRUE;
+    case WM_APP+0x275:{
+        Json::Value result;
+        {std::lock_guard<std::mutex> guard(updateResultMutex);result=updateResult;}
+        EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_CHECK),TRUE);
+        const bool ok=result.get("success",false).asBool();
+        if(!ok){
+            setDlgUtf8Text(dlg,SETTINGS_UPDATE_STATUS,
+                result.get("message",result.get("error","Update helper failed")).asString());
+            EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_INSTALL),FALSE);
+            return TRUE;
+        }
+        if(wp==1){
+            selectedUpdateVersion=result.get("available",false).asBool()?
+                result.get("version","").asString():"";
+            setDlgUtf8Text(dlg,SETTINGS_UPDATE_STATUS,
+                result.get("message","No update available").asString());
+            EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_INSTALL),!selectedUpdateVersion.empty());
+        }else if(wp==2){
+            if(result.get("version","").asString()!=selectedUpdateVersion){
+                setDlgUtf8Text(dlg,SETTINGS_UPDATE_STATUS,"Update version changed; check again");
+                return TRUE;
+            }
+            const auto path=result.get("packagePath","").asString();
+            const auto hash=result.get("sha256","").asString();
+            setDlgUtf8Text(dlg,SETTINGS_UPDATE_STATUS,"Download verified; launching updater...");
+            if(!launchUpdateHelper(dlg,"Apply","",path,hash)){
+                setDlgUtf8Text(dlg,SETTINGS_UPDATE_STATUS,"Unable to launch Windows update installer");
+                EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_INSTALL),TRUE);
+                return TRUE;
+            }
+            EndDialog(dlg,IDOK);
+            // Use the normal tray exit so keyboard hooks and network threads
+            // are cleaned up before the helper replaces MonitorClient.exe.
+            if(hMainWindow)PostMessageW(hMainWindow,WM_COMMAND,ID_TRAY_EXIT,0);
+        }
+        return TRUE;
+    }
     case WM_APP+0x143:
         EnableWindow(GetDlgItem(dlg,SETTINGS_TEST),TRUE);
         setDlgUtf8Text(dlg,SETTINGS_CONNECTION,wp?"● Server reachable":"● Server unavailable");
@@ -2656,6 +2788,42 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
                     "Lock Settings",MB_OK|MB_ICONERROR);return TRUE;
             }
             refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);
+            return TRUE;
+        }
+        if(id==SETTINGS_UPDATE_URL && HIWORD(wp)==EN_CHANGE){
+            selectedUpdateVersion.clear();
+            EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_INSTALL),FALSE);
+            return TRUE;
+        }
+        if(id==SETTINGS_UPDATE_CHECK){
+            const std::string url=editText(dlg,SETTINGS_UPDATE_URL);
+            if(!validUpdateServer(url)){
+                setDlgUtf8Text(dlg,SETTINGS_UPDATE_STATUS,
+                    "Enter a valid http(s) update server URL (no spaces or query).");
+                return TRUE;
+            }
+            saveClientSetting("Update","url",url);
+            selectedUpdateVersion.clear();
+            EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_INSTALL),FALSE);
+            EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_CHECK),FALSE);
+            setDlgUtf8Text(dlg,SETTINGS_UPDATE_STATUS,"Checking update manifest...");
+            if(!launchUpdateHelper(dlg,"Check",url)){
+                EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_CHECK),TRUE);
+                setDlgUtf8Text(dlg,SETTINGS_UPDATE_STATUS,"Update helper not found beside MonitorClient.exe");
+            }
+            return TRUE;
+        }
+        if(id==SETTINGS_UPDATE_INSTALL){
+            const std::string url=editText(dlg,SETTINGS_UPDATE_URL);
+            if(!validUpdateServer(url)||selectedUpdateVersion.empty())return TRUE;
+            EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_INSTALL),FALSE);
+            EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_CHECK),FALSE);
+            setDlgUtf8Text(dlg,SETTINGS_UPDATE_STATUS,"Downloading and verifying package...");
+            if(!launchUpdateHelper(dlg,"Stage",url)){
+                EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_CHECK),TRUE);
+                EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_INSTALL),TRUE);
+                setDlgUtf8Text(dlg,SETTINGS_UPDATE_STATUS,"Could not launch updater");
+            }
             return TRUE;
         }
         if(id==SETTINGS_NOTIFY && HIWORD(wp)==BN_CLICKED){
