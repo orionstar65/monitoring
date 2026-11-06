@@ -41,6 +41,9 @@ $checks=[
     str_contains($ubuntu,'screen->grabWindow(0)') &&
     str_contains($ubuntu,'Capture failed. Check screen-sharing permission') &&
     str_contains($ubuntu,'Screenshot (GNOME D-Bus):'),
+ 'Ubuntu screenshot needs the stored filename to confirm delivery'=>
+    str_contains($ubuntu,'const QString storedFile=body.value("data").toObject().value("filename").toString();') &&
+    str_contains($ubuntu,'body.value("status").toString()=="success" && !storedFile.isEmpty()'),
  'macOS manual sends trigger screenshot and all event uploads now'=>
     str_contains($mac,'captureAndPostScreenshot(manual:true)') &&
     str_contains($mac,'sendTicEvent()'.PHP_EOL.'        sendKeyLogs()'.PHP_EOL.'        sendUSBLogs()'.PHP_EOL.'        sendBrowserHistories()'),
