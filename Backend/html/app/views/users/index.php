@@ -12,7 +12,9 @@ ob_start();
 <?php unset($_SESSION['success_message']);endif; ?>
 <div class="d-flex justify-content-between align-items-center mb-4">
  <div><h3 class="mb-1">User Management</h3><p class="text-muted small mb-0">Accounts and their assigned monitors</p></div>
- <a href="<?= BASE_URL ?>users/create" class="btn btn-primary"><i class="fas fa-plus me-2"></i>Add User</a>
+ <?php if(($_SESSION['role']??'')===ROLE_SUPER_ADMIN): ?>
+ <a href="<?= BASE_URL ?>users/create" class="btn btn-sm btn-primary"><i class="fas fa-plus me-1"></i>Add User</a>
+ <?php endif; ?>
 </div>
 <div class="card shadow-sm"><div class="card-body">
  <div class="table-responsive">
@@ -24,12 +26,12 @@ ob_start();
   <td class="font-monospace fw-semibold"><?= $escape($user['user_no']) ?></td>
   <td class="fw-semibold"><?= $escape($user['name']??'') ?></td>
   <td><?= (int)($user["device_count"] ?? 0) ?> Devices</td>
-  <td><span class="badge <?= $user['role']==='admin'?'bg-primary':'bg-secondary' ?>"><?= $escape(ucfirst($user['role'])) ?></span></td>
+  <td><span class="badge <?= $user['role']===ROLE_SUPER_ADMIN?'bg-danger':($user['role']===ROLE_SCOPED_ADMIN?'bg-primary':'bg-secondary') ?>"><?= $escape($user['role']===ROLE_SUPER_ADMIN?'Super Admin':ucfirst($user['role'])) ?></span></td>
   <td data-order="<?= $escape($user['created_at']) ?>"><?= $escape($user['created_at']) ?></td>
   <td data-order="<?= $escape($user['last_activity']??'') ?>"><?= $user['last_activity'] ? $escape($user['last_activity']) : '<span class="text-muted">Never</span>' ?></td>
   <td class="text-nowrap">
     <a href="<?= BASE_URL ?>users/edit/<?= (int)$user['id'] ?>" class="btn btn-sm btn-light" aria-label="Edit user" title="Edit"><i class="fas fa-pen"></i></a>
-    <?php if((int)$user['id']!==(int)$_SESSION['user_id']): ?>
+    <?php if(($_SESSION['role']??'')===ROLE_SUPER_ADMIN && (int)$user['id']!==(int)$_SESSION['user_id']): ?>
     <button type="button" class="btn btn-sm btn-light text-warning reset-user"
       data-id="<?= (int)$user['id'] ?>" data-name="<?= $escape($user['name']) ?>"
       aria-label="Reset to default password" title="Reset password"><i class="fas fa-key"></i></button>
