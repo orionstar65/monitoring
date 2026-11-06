@@ -1,4 +1,10 @@
 #include "ConfigDialog.h"
+#include "version.h"
+#include <QCryptographicHash>
+#include <QSaveFile>
+#include <QRegularExpression>
+#include <QSysInfo>
+#include <memory>
 #include <QApplication>
 #include <QCollator>
 #include <algorithm>
@@ -151,6 +157,31 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     content->addWidget(monitorGroup);
     notificationsCheck=new QCheckBox("Show status notifications",page);
     content->addWidget(notificationsCheck);
+    auto *updatesGroup=new QGroupBox("Updates",page);
+    auto *updateForm=new QFormLayout(updatesGroup);
+    updateServerInput=new QLineEdit(updatesGroup);
+    updateServerInput->setPlaceholderText("http://192.168.2.241:8765");
+    updateServerInput->setToolTip("URL serving manifest.json and versioned packages via python -m http.server");
+    updateForm->addRow("Update server",updateServerInput);
+    auto *updateActions=new QHBoxLayout();
+    checkUpdateButton=new QPushButton("Check new version",updatesGroup);
+    installUpdateButton=new QPushButton("Update",updatesGroup);
+    installUpdateButton->setEnabled(false);
+    updateActions->addWidget(checkUpdateButton);
+    updateActions->addWidget(installUpdateButton);
+    updateActions->addStretch();
+    updateForm->addRow("",updateActions);
+    updateStatus=new QLabel("Installed: "+QString(MONITORAPP_VERSION),updatesGroup);
+    updateStatus->setWordWrap(true);
+    updateForm->addRow("",updateStatus);
+    content->addWidget(updatesGroup);
+    updateNetwork=new QNetworkAccessManager(this);
+    connect(checkUpdateButton,&QPushButton::clicked,this,&ConfigDialog::onCheckUpdate);
+    connect(installUpdateButton,&QPushButton::clicked,this,&ConfigDialog::onInstallUpdate);
+    connect(updateServerInput,&QLineEdit::textChanged,this,[this](){
+        availableUpdateUrl.clear();
+        installUpdateButton->setEnabled(false);
+    });
     auto *toolsRow=new QHBoxLayout();
     sendAllButton=new QPushButton("Send All Logs",page);
     refreshConfigButton=new QPushButton("Refresh Configuration",page);
@@ -202,6 +233,7 @@ void ConfigDialog::loadSettings(){
     serverIPEdit->setText(cfg.value("Server/ip","192.168.1.45").toString());
     serverPortEdit->setValue(cfg.value("Server/port",8924).toInt());
     notificationsCheck->setChecked(cfg.value("Notifications/enabled",true).toBool());
+    updateServerInput->setText(cfg.value("Updates/url","").toString());
 }
 void ConfigDialog::saveSettings(){
     QDir().mkpath(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)+"/monitorclient");
@@ -212,6 +244,7 @@ void ConfigDialog::saveSettings(){
         cfg.setValue("Notifications/enabled",notificationsCheck->isChecked());
         cfg.setValue("Monitor/id",monitorId);
         cfg.setValue("User/no",activeUserNo);
+        cfg.setValue("Updates/url",updateServerInput->text().trimmed());
     }
 }
 QJsonObject ConfigDialog::authRequest(const QJsonObject &payload,bool authenticated){
@@ -730,4 +763,148 @@ void ConfigDialog::onSaveClicked(){
     }
     saveSettings();refreshMonitors();updateUI();
     emit sessionStateChanged();
+}
+
+
+namespace {
+QUrl monitorUpdateBase(const QString &text) {
+    QUrl url(text.trimmed());
+    if(!url.isValid() || (url.scheme()!="http" && url.scheme()!="https") ||
+       url.host().isEmpty() || !url.userInfo().isEmpty() ||
+       url.hasQuery() || url.hasFragment())return {};
+    QString p=url.path();
+    if(!p.endsWith('/'))p+='/';
+    url.setPath(p);
+    return url;
+}
+bool monitorNewerVersion(const QString &remote,const QString &installed) {
+    const QRegularExpression re(R"(^[0-9]+(\.[0-9]+){1,2}$)");
+    if(!re.match(remote).hasMatch() || !re.match(installed).hasMatch())return false;
+    auto a=remote.split('.');auto b=installed.split('.');
+    for(int i=0;i<3;i++){
+        const int x=i<a.size()?a[i].toInt():0;
+        const int y=i<b.size()?b[i].toInt():0;
+        if(x!=y)return x>y;
+    }
+    return false;
+}
+}
+void ConfigDialog::onCheckUpdate(){
+    availableUpdateUrl.clear();
+    installUpdateButton->setEnabled(false);
+    const QUrl base=monitorUpdateBase(updateServerInput->text());
+    if(!base.isValid()){
+        updateStatus->setText("Enter an http(s) update server URL.");
+        return;
+    }
+    QDir().mkpath(QFileInfo(settingsPath()).absolutePath());
+    QSettings cfg(settingsPath(),QSettings::IniFormat);
+    cfg.setValue("Updates/url",base.toString(QUrl::RemoveTrailingSlash));
+    cfg.sync();
+    checkUpdateButton->setEnabled(false);
+    updateStatus->setText("Checking for an Ubuntu update...");
+    QNetworkRequest req(base.resolved(QUrl("manifest.json")));
+    req.setAttribute(QNetworkRequest::FollowRedirectsAttribute,false);
+    auto *reply=updateNetwork->get(req);
+    connect(reply,&QNetworkReply::finished,this,[this,reply,base](){
+        checkUpdateButton->setEnabled(true);
+        const int code=reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QByteArray data=reply->readAll();
+        if(reply->error()!=QNetworkReply::NoError || code!=200 || data.size()>256*1024){
+            updateStatus->setText("Update check failed: "+reply->errorString());
+            reply->deleteLater();return;
+        }
+        const QJsonObject root=QJsonDocument::fromJson(data).object();
+        const QJsonObject item=root.value("platforms").toObject().value("ubuntu-amd64").toObject();
+        const QString version=item.value("version").toString();
+        const QString filename=item.value("file").toString();
+        const QString sha=item.value("sha256").toString();
+        const qint64 size=static_cast<qint64>(item.value("size").toDouble());
+        const QString expected=QString("MonitorClient-%1-ubuntu-amd64.deb").arg(version);
+        const bool architecture=QSysInfo::currentCpuArchitecture()=="x86_64";
+        if(!architecture){
+            updateStatus->setText("This updater supports Ubuntu x64 only.");reply->deleteLater();return;
+        }
+        if(!monitorNewerVersion(version,MONITORAPP_VERSION)){
+            updateStatus->setText("Up to date (installed "+QString(MONITORAPP_VERSION)+")");
+            reply->deleteLater();return;
+        }
+        if(root.value("schema").toInt()!=1 || filename!=expected ||
+           !QRegularExpression("^[a-fA-F0-9]{64}$").match(sha).hasMatch() ||
+           size<=0 || size>512LL*1024*1024){
+            updateStatus->setText("Invalid update manifest for Ubuntu.");
+            reply->deleteLater();return;
+        }
+        availableUpdateVersion=version;
+        availableUpdateFile=filename;
+        availableUpdateSha=sha.toLower();
+        availableUpdateSize=size;
+        availableUpdateUrl=base.resolved(QUrl(filename)).toString();
+        updateStatus->setText("Available: "+version+" (installed "+QString(MONITORAPP_VERSION)+")");
+        installUpdateButton->setEnabled(true);
+        reply->deleteLater();
+    });
+}
+void ConfigDialog::onInstallUpdate(){
+    if(availableUpdateUrl.isEmpty())return;
+    const QUrl remote(availableUpdateUrl);
+    const QUrl base=monitorUpdateBase(updateServerInput->text());
+    if(!base.isValid()||remote.host()!=base.host()||
+       remote.port()!=base.port()||remote.scheme()!=base.scheme()){
+        updateStatus->setText("Update server changed; check again.");return;
+    }
+    const QString cache=QStandardPaths::writableLocation(QStandardPaths::CacheLocation)+"/updates";
+    QDir().mkpath(cache);
+    const QString output=cache+"/"+availableUpdateFile;
+    auto file=std::make_shared<QSaveFile>(output);
+    if(!file->open(QIODevice::WriteOnly)){
+        updateStatus->setText("Cannot create update download file.");return;
+    }
+    auto hash=std::make_shared<QCryptographicHash>(QCryptographicHash::Sha256);
+    auto count=std::make_shared<qint64>(0);
+    auto writeError=std::make_shared<bool>(false);
+    installUpdateButton->setEnabled(false);
+    checkUpdateButton->setEnabled(false);
+    updateStatus->setText("Downloading "+availableUpdateVersion+"...");
+    QNetworkRequest req(remote);
+    req.setAttribute(QNetworkRequest::FollowRedirectsAttribute,false);
+    auto *reply=updateNetwork->get(req);
+    const qint64 expectedSize=availableUpdateSize;
+    const QString expectedHash=availableUpdateSha;
+    auto drain=[reply,file,hash,count,writeError,expectedSize](){
+        const QByteArray bytes=reply->readAll();
+        *count+=bytes.size();
+        if(*count>expectedSize || file->write(bytes)!=bytes.size()){
+            *writeError=true;
+            reply->abort();
+        }else hash->addData(bytes);
+    };
+    connect(reply,&QIODevice::readyRead,this,drain);
+    connect(reply,&QNetworkReply::finished,this,
+        [this,reply,file,hash,count,writeError,expectedHash,expectedSize,output,drain](){
+        drain();
+        checkUpdateButton->setEnabled(true);
+        const int code=reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if(*writeError || reply->error()!=QNetworkReply::NoError || code!=200 ||
+           *count!=expectedSize || QString::fromLatin1(hash->result().toHex())!=expectedHash){
+            file->cancelWriting();
+            updateStatus->setText("Update download failed or SHA-256 mismatch.");
+            reply->deleteLater();return;
+        }
+        if(!file->commit()){
+            updateStatus->setText("Could not save downloaded update.");reply->deleteLater();return;
+        }
+        reply->deleteLater();
+        // pkexec supplies the system authorization prompt. Do not claim success
+        // before dpkg has actually installed the package.
+        if(!QProcess::startDetached("pkexec",{"/usr/bin/dpkg","-i",output})){
+            updateStatus->setText("Cannot start package installer (pkexec required).");
+            installUpdateButton->setEnabled(true);return;
+        }
+        updateStatus->setText("Installer launched. Authorize installation, then restart MonitorClient.");
+        QMessageBox::information(this,"Update started",
+            "The Ubuntu package installer has been launched. Approve the system prompt. "
+            "If it fails, reinstall the saved .deb from your cache.");
+        QTimer::singleShot(200,this,[](){QApplication::quit();});
+    });
 }
