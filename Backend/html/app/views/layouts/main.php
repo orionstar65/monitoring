@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $title ?? APP_NAME; ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.datatables.net/3.1.5/css/dataTables.bootstrap5.min.css" rel="stylesheet">
@@ -645,7 +646,6 @@
         <?php echo $content ?? ''; ?>
     <?php endif; ?>
 
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.datatables.net/3.1.5/js/dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/3.1.5/js/dataTables.bootstrap5.min.js"></script>
     <script src="https://cdn.datatables.net/colreorder/3.1.2/js/dataTables.colReorder.min.js"></script>
