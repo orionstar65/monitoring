@@ -204,6 +204,18 @@ class Databasemanagement extends Base {
             throw new RuntimeException('Database command failed; check MySQL client installation and server logs');
         }
     }
+    // A dedicated, stable key keeps backups restorable after database password
+    // rotation. Existing installations may fall back to their DB password.
+    private function backupSigningKey(): string {
+        $configured=getenv('MONITOR_BACKUP_SIGNING_KEY');
+        if(is_string($configured) && $configured!==''){
+            if(strlen($configured)<32)
+                throw new RuntimeException('Backup signing key must be at least 32 bytes');
+            return $configured;
+        }
+        if(DB_PASS==='')throw new RuntimeException('Set MONITOR_BACKUP_SIGNING_KEY to enable signed backups');
+        return DB_PASS;
+    }
     private function generateBackup(): string {
         set_time_limit(0);
         $credentials=$this->defaultsFile();
@@ -215,10 +227,20 @@ class Databasemanagement extends Base {
                 '--single-transaction','--quick','--routines','--triggers',
                 '--default-character-set=utf8mb4','--add-drop-table',DB_NAME
             ],null,$sql);
+            $signing=hash_init('sha256',HASH_HMAC,$this->backupSigningKey());
+            hash_update($signing,DB_NAME."\n");
+            $signatureStream=fopen($sql,'rb');
+            if(!$signatureStream)throw new RuntimeException('Backup signing failed');
+            try{
+                if(hash_update_stream($signing,$signatureStream)===false)
+                    throw new RuntimeException('Backup signing failed');
+            }finally{fclose($signatureStream);}
+            $signature=hash_final($signing);
             $input=fopen($sql,'rb');
             $gzip=gzopen($archive,'wb6');
             if(!$input||!$gzip)throw new RuntimeException('Backup compression failed');
-            gzwrite($gzip,'-- MonitorClient DB Backup v1 database='.DB_NAME."\n");
+            if(gzwrite($gzip,'-- MonitorClient DB Backup v2 database='.DB_NAME.' hmac='.$signature."\n")===false)
+                throw new RuntimeException('Backup header write failed');
             while(!feof($input)){
                 $block=fread($input,1048576);
                 if($block===false)throw new RuntimeException('Backup read failure');
@@ -286,14 +308,6 @@ class Databasemanagement extends Base {
             http_response_code(400);
             exit('Upload a valid .sql.gz backup (check PHP upload size limits).');
         }
-        $expectedChecksum=(string)($_SESSION['monitor_backup_sha256']??'');
-        $uploadedChecksum=hash_file('sha256',(string)$upload['tmp_name']);
-        if(!preg_match('/^[a-f0-9]{64}$/D',$expectedChecksum) ||
-           !is_string($uploadedChecksum) ||
-           !hash_equals($expectedChecksum,$uploadedChecksum)){
-            http_response_code(400);
-            exit('Backup does not match the archive downloaded in this session. Download a new backup and retry.');
-        }
         set_time_limit(0);
         $sql=$this->tempPath('monitor-restore-');
         $credentials=null;
@@ -315,8 +329,35 @@ class Databasemanagement extends Base {
             }
             gzclose($compressed);
             fclose($output);
-            if(!str_starts_with($first,'-- MonitorClient DB Backup v1 database='.DB_NAME."\n"))
-                throw new RuntimeException('Not a backup for this monitoring database');
+            $header=explode("\n",$first,2)[0]."\n";
+            $v2Prefix='-- MonitorClient DB Backup v2 database='.DB_NAME.' hmac=';
+            $v1Header='-- MonitorClient DB Backup v1 database='.DB_NAME."\n";
+            if(str_starts_with($header,$v2Prefix) &&
+               preg_match('/^'.preg_quote($v2Prefix,'/').'([a-f0-9]{64})\n$/D',$header,$match)){
+                // Authenticate older as well as new signed archives. Never
+                // run SQL from a renamed or modified gzip file.
+                $signature=hash_init('sha256',HASH_HMAC,$this->backupSigningKey());
+                hash_update($signature,DB_NAME."\n");
+                $sqlInput=fopen($sql,'rb');
+                if(!$sqlInput)throw new RuntimeException('Could not validate backup');
+                try{
+                    if(fgets($sqlInput)!==$header ||
+                       hash_update_stream($signature,$sqlInput)===false)
+                        throw new RuntimeException('Backup verification failed');
+                }finally{fclose($sqlInput);}
+                if(!hash_equals($match[1],hash_final($signature)))
+                    throw new RuntimeException('Backup authentication failed');
+            }elseif($header===$v1Header){
+                // Transitional compatibility: legacy unsigned archives may
+                // only be restored if byte-identical to this session's backup.
+                $checksum=(string)($_SESSION['monitor_backup_sha256']??'');
+                $actual=hash_file('sha256',(string)$upload['tmp_name']);
+                if(!preg_match('/^[a-f0-9]{64}$/D',$checksum) ||
+                   !is_string($actual) || !hash_equals($checksum,$actual))
+                    throw new RuntimeException('Unsigned backup does not match the current session download');
+            }else{
+                throw new RuntimeException('Not an authenticated backup for this monitoring database');
+            }
             $credentials=$this->defaultsFile();
             // Warning: SQL restore is not transactional for schema DDL. A
             // partially failed restore requires recovery from the prior backup.
