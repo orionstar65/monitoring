@@ -935,7 +935,7 @@ class DatabaseService {
         
         // Create table
         $create_sql = "
-            CREATE TABLE `$table_name` (
+            CREATE TABLE IF NOT EXISTS `$table_name` (
               `id` bigint(20) NOT NULL AUTO_INCREMENT,
               `endpoint` varchar(255) NOT NULL,
               `method` varchar(10) NOT NULL,
@@ -975,60 +975,47 @@ class DatabaseService {
      * @return bool Success status
      */
     public function logApiRequest($endpoint, $method, $ip_address, $status_code, $response_time_ms, $request_type = null, $mac_address = null) {
-        // Disabled: daily API log table was for debugging only
-        return true;
-
-        /*
-        // Ensure daily table exists
-        $table_name = $this->ensureDailyLogTable();
-        if (!$table_name) {
+        // Log metadata only: never store request bodies, credentials, keys,
+        // screenshots or bearer tokens in API request history.
+        try {
+            $table_name=$this->ensureDailyLogTable();
+            if(!$table_name)return false;
+            // ip_address is VARCHAR(45); appending a MAC address previously
+            // overflowed this column and made otherwise valid log inserts fail.
+            $ip=substr((string)$ip_address,0,45);
+            $endpoint=substr((string)$endpoint,0,255);
+            $method=substr((string)$method,0,10);
+            $request_type=$request_type===null?null:substr((string)$request_type,0,50);
+            $code=(int)$status_code;
+            $elapsed=max(0,min((float)$response_time_ms,99999999.99));
+            // Older daily partitions may predate the request_type column.
+            $column=$this->mysqli->query("SHOW COLUMNS FROM `$table_name` LIKE 'request_type'");
+            $hasType=$column && $column->num_rows>0;
+            if($column)$column->free();
+            if($hasType){
+                $stmt=$this->mysqli->prepare(
+                    "INSERT INTO `$table_name` (endpoint,method,request_type,ip_address,status_code,response_time_ms)
+                     VALUES (?,?,?,?,?,?)"
+                );
+                if(!$stmt)return false;
+                $stmt->bind_param('ssssid',$endpoint,$method,$request_type,$ip,$code,$elapsed);
+            }else{
+                $stmt=$this->mysqli->prepare(
+                    "INSERT INTO `$table_name` (endpoint,method,ip_address,status_code,response_time_ms)
+                     VALUES (?,?,?,?,?)"
+                );
+                if(!$stmt)return false;
+                $stmt->bind_param('sssid',$endpoint,$method,$ip,$code,$elapsed);
+            }
+            $ok=$stmt->execute();
+            if(!$ok)error_log('API request metadata insert failed: '.$stmt->error);
+            $stmt->close();
+            return $ok;
+        }catch(Throwable $error){
+            // Observability failures must never alter client upload responses.
+            error_log('API request metadata logging failed: '.$error->getMessage());
             return false;
         }
-        
-        // Format ip_address field as "MAC/IP" if MAC is available, otherwise just "IP"
-        $client_identifier = $ip_address;
-        if ($mac_address && $mac_address !== '') {
-            $client_identifier = $mac_address . '/' . $ip_address;
-        }
-        
-        // Check if request_type column exists (for backward compatibility with existing tables)
-        $column_exists = false;
-        $check_column = $this->mysqli->query("SHOW COLUMNS FROM `$table_name` LIKE 'request_type'");
-        if ($check_column && $check_column->num_rows > 0) {
-            $column_exists = true;
-            $check_column->free();
-        }
-        
-        // Prepare insert statement
-        if ($column_exists) {
-            $stmt = $this->mysqli->prepare("
-                INSERT INTO `$table_name` (endpoint, method, request_type, ip_address, status_code, response_time_ms) 
-                VALUES (?, ?, ?, ?, ?, ?)
-            ");
-            $stmt->bind_param("ssssid", $endpoint, $method, $request_type, $client_identifier, $status_code, $response_time_ms);
-        } else {
-            // Fallback for tables created before request_type was added
-            $stmt = $this->mysqli->prepare("
-                INSERT INTO `$table_name` (endpoint, method, ip_address, status_code, response_time_ms) 
-                VALUES (?, ?, ?, ?, ?)
-            ");
-            $stmt->bind_param("sssid", $endpoint, $method, $client_identifier, $status_code, $response_time_ms);
-        }
-        
-        if (!$stmt) {
-            error_log("Failed to prepare API log statement: " . $this->mysqli->error);
-            return false;
-        }
-        
-        $result = $stmt->execute();
-        
-        if (!$result) {
-            error_log("Failed to log API request: " . $stmt->error);
-        }
-        
-        $stmt->close();
-        return $result;
-        */
     }
 
     /**
