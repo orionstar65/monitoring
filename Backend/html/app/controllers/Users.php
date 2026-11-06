@@ -124,17 +124,36 @@ class Users extends Base {
                             return;
                         }
                     }
+                    $connection=$this->db->getConnection();
                     try {
-                        $result = $this->db->update('users', $data, 'id = :id', ['id' => $id]);
+                        $connection->beginTransaction();
+                        $result=$this->db->update('users',$data,'id = :id',['id'=>$id]);
+                        if($role!==$user['role']){
+                            // Prevent prior assignments from silently reactivating
+                            // after a promotion/demotion or assigned-user role change.
+                            $this->db->query(
+                                'DELETE FROM admin_user_assignments
+                                 WHERE admin_user_id=:admin OR managed_user_id=:managed',
+                                ['admin'=>$id,'managed'=>$id]
+                            );
+                        }
+                        if($password!=='' || $role!==$user['role']){
+                            $this->db->query(
+                                'UPDATE client_sessions SET revoked_at=NOW()
+                                 WHERE user_id=:id AND revoked_at IS NULL',['id'=>$id]
+                            );
+                        }
+                        $connection->commit();
                     } catch (PDOException $e) {
-                        if($e->getCode()==='23000') {
+                        if($connection->inTransaction())$connection->rollBack();
+                        if($e->getCode()==='23000'){
                             $error='User No already exists';
                             $this->view('users/edit',['user'=>array_merge($user,['user_no'=>$userNo]),'error'=>$error,'monitors'=>$monitors,'accounts'=>$accounts]);
                             return;
                         }
                         throw $e;
                     }
-                    
+
                     // Check if data actually changed by comparing with original user data
                     $dataChanged = false;
                     foreach ($data as $key => $value) {
@@ -145,22 +164,6 @@ class Users extends Base {
                     }
                     
                     if ($result > 0 || !$dataChanged) {
-                        if($role!==$user['role']){
-                            // Do not resurrect stale delegations when a user is
-                            // demoted then later re-promoted to Admin, or when an
-                            // assigned regular user changes role and changes back.
-                            $this->db->query(
-                                'DELETE FROM admin_user_assignments
-                                 WHERE admin_user_id=:admin OR managed_user_id=:managed',
-                                ['admin'=>$id,'managed'=>$id]
-                            );
-                        }
-                        if(!empty($password) || $role!==$user['role']){
-                            $this->db->query(
-                                'UPDATE client_sessions SET revoked_at=NOW() WHERE user_id=:id AND revoked_at IS NULL',
-                                ['id'=>$id]
-                            );
-                        }
                         // Success: either rows were updated OR no changes were needed
                         $_SESSION['success_message'] = 'User updated successfully';
                         $this->redirect('users');
