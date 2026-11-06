@@ -1185,16 +1185,21 @@ void MonitorClient::sendDataChunkAsync(const QString &serverIP, int serverPort,
     if(authToken.isEmpty()||monitorId<1){onDone(-3);return;}
     req.setRawHeader("Authorization",("Bearer "+authToken).toUtf8());
     QNetworkReply *reply = networkManager->post(req, QJsonDocument(jsonObj).toJson());
-    connect(reply, &QNetworkReply::finished, this, [reply, onDone]() {
-        int ret = -3;
-        if (reply->error() == QNetworkReply::NoError) {
-            int statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-            ret = (statusCode == 200) ? 1 : -1;
-        } else {
-            qDebug() << "sendDataChunkAsync:" << reply->errorString();
+    connect(reply, &QNetworkReply::finished, this, [reply, onDone, eventType]() {
+        const int statusCode=reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QByteArray response=reply->readAll();
+        const QJsonDocument json=QJsonDocument::fromJson(response);
+        const QJsonObject body=json.isObject()?json.object():QJsonObject();
+        const bool accepted=statusCode==200 &&
+            body.value("status").toString()=="success";
+        if(!accepted){
+            // Log only the structured error, never the submitted event content.
+            qWarning() << "[MonitorUpload]" << eventType << "HTTP" << statusCode
+                       << "Network:" << reply->errorString()
+                       << "Backend:" << body.value("error").toString();
         }
         reply->deleteLater();
-        onDone(ret);
+        onDone(accepted?1:-1);
     });
 }
 
