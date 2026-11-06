@@ -151,6 +151,19 @@ class Merge extends Base {
         if(!$this->allowedMonitor($source_id)||!$this->allowedMonitor($target_id)){
             http_response_code(403);$this->json(['success'=>false,'error'=>'Both monitors must belong to your account']);
         }
+        // Prevent cross-user merges, including those initiated by administrators.
+        // The source and target must be two monitors owned by the same account.
+        $pair=$this->db->fetch(
+            'SELECT COUNT(*) AS total,COUNT(DISTINCT owner_user_id) AS owners,
+                    SUM(owner_user_id IS NULL) AS unassigned
+             FROM tbl_monitor_ips WHERE id IN (:source,:target)',
+            ['source'=>$source_id,'target'=>$target_id]
+        );
+        if((int)($pair['total']??0)!==2||(int)($pair['owners']??0)!==1
+            ||(int)($pair['unassigned']??0)!==0||$source_id===$target_id){
+            http_response_code(403);
+            $this->json(['success'=>false,'error'=>'Merge requires two different monitors assigned to the same user']);
+        }
         // Perform merge
         $result = $this->dbService->mergeMonitorLogs($source_id, $target_id);
         
