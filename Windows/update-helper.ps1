@@ -130,52 +130,7 @@ try {
         if ($base -notmatch '^MonitorClient-[0-9]+\.[0-9]+\.[0-9]+-windows-x64\.zip$') {
             throw 'Invalid update ZIP filename.'
         }
-        if ($ExpectedSha -notmatch '^[a-fA-F0-9]{64} ("monitor-install-" + [guid]::NewGuid().ToString('N'))
-        $stage = Join-Path $temp 'staged'
-        $backup = Join-Path $temp 'backup'
-        New-Item -ItemType Directory -Force -Path $stage,$backup | Out-Null
-        $archive = [System.IO.Compression.ZipFile]::OpenRead($PackagePath)
-        try {
-            $names = @($archive.Entries | ForEach-Object { $_.FullName })
-            foreach ($name in $names) {
-                if ($name -notmatch '^(MonitorClient\.exe|update-helper\.ps1|[A-Za-z0-9_.-]+\.dll)$') {
-                    throw "Unexpected file in update ZIP: $name"
-                }
-            }
-            if ($names -cnotcontains 'MonitorClient.exe') { throw 'New MonitorClient.exe is missing.' }
-        } finally { $archive.Dispose() }
-        Expand-Archive -LiteralPath $PackagePath -DestinationPath $stage -Force
-        for ($i=0; $i -lt 120; $i++) {
-            if (-not (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue)) { break }
-            Start-Sleep -Milliseconds 500
-        }
-        if (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) {
-            throw 'Previous MonitorClient did not exit; old version kept.'
-        }
-        $staged = @(Get-ChildItem -LiteralPath $stage -File)
-        try {
-            foreach ($file in $staged) {
-                $target = Join-Path $InstallDir $file.Name
-                if (Test-Path -LiteralPath $target) {
-                    Copy-Item -LiteralPath $target -Destination (Join-Path $backup $file.Name) -Force
-                }
-                Copy-Item -LiteralPath $file.FullName -Destination $target -Force
-            }
-        } catch {
-            foreach ($old in @(Get-ChildItem -LiteralPath $backup -File)) {
-                Copy-Item -LiteralPath $old.FullName -Destination (Join-Path $InstallDir $old.Name) -Force
-            }
-            throw
-        }
-        Start-Process -FilePath (Join-Path $InstallDir 'MonitorClient.exe') -WorkingDirectory $InstallDir
-        Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
-        exit 0
-    }
-} catch {
-    Emit-Result $false $_.Exception.Message
-    exit 1
-}
- -or
+        if ($ExpectedSha -notmatch '^[a-fA-F0-9]{64}$' -or
             (Get-FileHash -LiteralPath $PackagePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne
                 $ExpectedSha.ToLowerInvariant()) {
             throw 'Update ZIP has changed since download.'
