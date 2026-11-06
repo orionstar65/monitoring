@@ -1,5 +1,6 @@
 <?php
 require_once BASEPATH . 'app/controllers/Base.php';
+require_once dirname(BASEPATH).'/services/TelemetryTime.php';
 
 /**
  * Cleanup controller
@@ -192,11 +193,18 @@ class Cleanup extends Base {
             return ['error' => 'Start date must not be after end date'];
         }
 
-        $where_conditions = ['capture_datetime >= :start_date', 'capture_datetime <= :end_date'];
-        $params = [
-            'start_date' => $start_date . ' 00:00:00',
-            'end_date' => $end_date . ' 23:59:59'
-        ];
+        try {
+            [$utcStart,$utcEnd]=monitorUtcBounds($input);
+        } catch (InvalidArgumentException $error) {
+            return ['error'=>$error->getMessage()];
+        }
+        if($utcStart===null||$utcEnd===null)
+            return ['error'=>'Both UTC date boundaries are required'];
+
+        // Exactly the same half-open UTC interval is used for preview and
+        // deletion, including 23/25-hour days at DST transitions.
+        $where_conditions = ['capture_datetime >= :start_date', 'capture_datetime < :end_date'];
+        $params = ['start_date'=>$utcStart,'end_date'=>$utcEnd];
 
         if ($device_id) {
             $where_conditions[] = 'monitor_ip_id = :device_id';
