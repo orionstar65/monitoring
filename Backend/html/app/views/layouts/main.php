@@ -180,9 +180,26 @@
         .main-content {
             margin-left: var(--sidebar-width);
             min-height: 100vh;
-            padding-bottom: 120px; /* Add space for footer */
             transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             background: var(--background-color);
+        }
+
+        /* Sticky footer without a fixed overlay. Only the outer page shell
+           becomes a flex column; nested monitoring panels also use
+           .main-content and must keep their own layout behavior. */
+        #mainContent {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            min-height: 100dvh;
+        }
+        #mainContent > .content-area {
+            flex: 1 0 auto;
+            width: 100%;
+        }
+        #mainContent > .footer {
+            flex-shrink: 0;
+            margin-top: auto;
         }
 
         .main-content.expanded {
@@ -343,7 +360,7 @@
             background: var(--surface-color);
             border-top: 1px solid var(--divider-color);
             padding: 24px;
-            margin-top: 48px;
+            margin-top: 0;
             text-align: center;
             color: var(--text-secondary);
         }
