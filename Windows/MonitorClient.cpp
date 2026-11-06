@@ -1167,12 +1167,8 @@ std::string httpPost(const std::string& url, const std::string& data) {
     
     std::string hostName(urlComp.lpszHostName, urlComp.dwHostNameLength);
     std::string urlPath(urlComp.lpszUrlPath, urlComp.dwUrlPathLength);
-    // WinINet reports query parameters in dwExtraInfo, not dwUrlPath.
-    // Without this, /webapi.php?type=upload becomes /webapi.php and the
-    // server rejects every screenshot as an invalid request type.
     if(urlComp.dwExtraInfoLength)
         urlPath.append(urlComp.lpszExtraInfo,urlComp.dwExtraInfoLength);
-    if(urlComp.dwExtraInfoLength)urlPath.append(urlComp.lpszExtraInfo,urlComp.dwExtraInfoLength);
     
     // Connecting to host
     
