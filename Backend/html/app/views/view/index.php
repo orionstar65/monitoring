@@ -529,6 +529,23 @@ ob_start();
     border-radius: 8px;
 }
 
+.history-viewer{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,340px);grid-template-rows:minmax(0,1fr) auto;height:calc(100vh - 75px);min-height:0}
+.history-stage{background:#111;display:flex;justify-content:center;align-items:center;min-width:0;min-height:0;overflow:auto;padding:12px}
+.history-stage img{max-width:100%;max-height:100%;object-fit:contain}
+.history-transcript{border-left:1px solid var(--bs-border-color);padding:16px;overflow:auto;min-height:0}
+.history-transcript.is-collapsed{display:none}
+.history-viewer:has(.history-transcript.is-collapsed){grid-template-columns:minmax(0,1fr)}
+.history-bottom{grid-column:1/-1;border-top:1px solid var(--bs-border-color);padding:12px 16px;min-width:0;background:var(--bs-body-bg)}
+.history-range-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+.history-range-controls label{font-size:.8rem;flex:1;min-width:180px}
+.history-strip{display:flex;gap:6px;overflow-x:auto;min-height:64px;padding:4px 0;scrollbar-width:thin}
+.history-thumb{position:relative;flex:none;border:2px solid transparent;background:var(--bs-tertiary-bg);border-radius:5px;padding:3px;cursor:pointer;font-size:.72rem;min-width:110px}
+.history-thumb.selected{border-color:var(--bs-primary)}
+.history-thumb img{height:64px;width:112px;object-fit:contain;display:block;background:#171717}
+.history-thumb time{display:block;text-align:center}
+.history-keyline{display:grid;grid-template-columns:72px minmax(0,1fr);gap:6px;border-bottom:1px solid var(--bs-border-color);padding:6px 0}
+.history-keyline span:last-child{white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,monospace}
+@media(max-width:800px){.history-viewer{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(180px,1fr) minmax(120px,30vh) auto}.history-transcript{border-left:0;border-top:1px solid var(--bs-border-color)}}
 /* Log Modal Styles */
 .log-sub-modal .modal-dialog {
     max-width: 90%;
@@ -1120,13 +1137,40 @@ ob_start();
                 </div>
             </div>
             <div class="modal-body p-0">
-                <div class="modal-layout">
-                    <!-- Full Screenshot Area -->
-                    <div class="screenshot-section">
-                        <div class="screenshot-container">
-                            <img id="modalImage" src="" alt="Full Screenshot" class="img-fluid">
+                <div class="history-viewer">
+                    <section class="history-stage" aria-label="Selected screenshot">
+                        <img id="modalImage" src="" alt="Selected screenshot" class="img-fluid">
+                    </section>
+                    <aside class="history-transcript" aria-label="Keyboard transcript">
+                        <div class="d-flex justify-content-between align-items-center gap-2">
+                            <strong>Keyboard transcript</strong>
+                            <button id="historyDrawerToggle" class="btn btn-sm btn-outline-secondary" type="button" aria-expanded="true">Hide</button>
                         </div>
-                    </div>
+                        <div class="d-flex gap-1 mt-2 align-items-center justify-content-between">
+                            <button id="historyPrevRange" class="btn btn-sm btn-outline-secondary" type="button">‹ Previous</button>
+                            <span id="historyTranscriptRange" class="small text-muted"></span>
+                            <button id="historyNextRange" class="btn btn-sm btn-outline-secondary" type="button">Next ›</button>
+                        </div>
+                        <div id="historyTranscriptBody" class="mt-3 small" aria-live="polite">Select a time range.</div>
+                    </aside>
+                    <section class="history-bottom" aria-label="Screenshot history timeline">
+                        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                            <strong>History timeline</strong>
+                            <label class="small">Scale
+                                <select id="historyScale" class="form-select form-select-sm d-inline-block w-auto">
+                                    <option value="5">5 minutes</option><option value="15" selected>15 minutes</option>
+                                    <option value="60">1 hour</option><option value="360">6 hours</option><option value="1440">24 hours</option>
+                                </select>
+                            </label>
+                        </div>
+                        <div class="history-range-controls">
+                            <label>From <input id="historyFrom" class="form-control form-control-sm" type="datetime-local" step="1"></label>
+                            <label>To <input id="historyTo" class="form-control form-control-sm" type="datetime-local" step="1"></label>
+                            <button id="historyApplyRange" class="btn btn-sm btn-primary" type="button">Apply range</button>
+                        </div>
+                        <div class="history-strip mt-2" id="historyStrip" aria-label="Click a screenshot thumbnail to navigate"></div>
+                        <div class="small text-muted mt-1" id="historyTimelineStatus"></div>
+                    </section>
                 </div>
             </div>
         </div>
@@ -1209,7 +1253,7 @@ waitForJQuery(function() {
         const id=$(this).attr('data-shot-id');
         const shot=($(this).hasClass('cctv-screenshot-card')?fullscreenShotMap:visibleShotMap).get(id);
         if(!shot)return;
-        viewScreenshot(shot.url,shot.user,shot.ip,id);
+        viewScreenshot(shot.url,shot.user,shot.ip,id,shot.time);
     });
     // Detect and display user's timezone
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -1333,7 +1377,7 @@ waitForJQuery(function() {
             const fullUrl = "<?php echo BASE_URL; ?>" + (item.screenshot||'');
             const id = String(item.global_id||'');
             fullscreenShotMap.set(id,{url:fullUrl,user:monitor.username||'Unknown User',
-                                      ip:monitor.ip_address||'—'});
+                                      ip:monitor.ip_address||'—',time:Number(item.modified_time)||0});
             const live = allMonitors.find(m=>m.id===Number(monitor.id||monitor.monitor_id));
             const state = live?.live_status || 'offline';
             const statusClass = 'cctv-status-' + (['online','inactive','offline'].includes(state)?state:'offline');
@@ -1433,6 +1477,8 @@ waitForJQuery(function() {
     $('#screenshotModal').on('hidden.bs.modal', function() {
         $(document).off('keydown.screenshotNavigation');
         window.currentScreenshotId = null;
+        historySeq++;
+        historyKeySeq++;
         // Reset z-index when modal is closed
         $('#screenshotModal').css('z-index', '');
     });
@@ -1812,7 +1858,7 @@ function displayScreenshots(screenshots, pagination = null) {
         const fullUrl = "<?php echo BASE_URL; ?>" + (item.screenshot||'');
         const shotId = String(item.global_id||'');
         visibleShotMap.set(shotId,{url:fullUrl,user:monitor.username||'Unknown User',
-                                   ip:monitor.ip_address||'—'});
+                                   ip:monitor.ip_address||'—',time:Number(item.modified_time)||0});
         
         let timestamp;
         if (item.modified_time) {
@@ -2053,12 +2099,13 @@ function loadScreenshotsForMonitor(monitorId, page = 1) {
     });
 }
 
-function viewScreenshot(imageUrl, monitorName, ipAddress, screenshotId = null) {
+function viewScreenshot(imageUrl, monitorName, ipAddress, screenshotId = null, timestamp = 0) {
     $("#modalImage").attr("src", imageUrl);
     $("#modalTitle").text(`Screenshot - ${monitorName} (${ipAddress})`);
     
     // Store current screenshot ID for navigation
     window.currentScreenshotId = screenshotId;
+    startHistoryViewer(screenshotId, timestamp);
     
     // Check if CCTV modal is open and set higher z-index
     if ($('#fullscreenModal').hasClass('show')) {
@@ -2169,6 +2216,7 @@ function navigateScreenshot(direction) {
                 
                 // Update current screenshot ID
                 window.currentScreenshotId = screenshot.global_id;
+                startHistoryViewer(screenshot.global_id, Number(new Date(screenshot.capture_datetime+"Z"))/1000);
                 
                 // Update navigation buttons
                 $('#prevScreenshotBtn').prop('disabled', !response.has_prev);
@@ -2185,6 +2233,125 @@ function navigateScreenshot(direction) {
         }
     });
 }
+
+
+const historyBase = <?php echo json_encode(BASE_URL); ?>;
+let historySeq=0,historyKeySeq=0,historyMonitor=0,historyStart=0,historyEnd=0,historyActive=0;
+function historyUtc(ms){
+    const d=new Date(ms);
+    return d.toISOString().slice(0,19).replace('T',' ');
+}
+function historyInput(ms){
+    const d=new Date(ms-new Date(ms).getTimezoneOffset()*60000);
+    return d.toISOString().slice(0,19);
+}
+function historyFromInput(value){
+    const ms=new Date(value).getTime();
+    return Number.isFinite(ms)?ms:NaN;
+}
+function historyRange(start,end){
+    if(!Number.isFinite(start)||!Number.isFinite(end)||end<=start||end-start>86400000){
+        $('#historyTimelineStatus').text('Select a valid time range up to 24 hours.');return;
+    }
+    historyStart=start;historyEnd=end;
+    $('#historyFrom').val(historyInput(start));$('#historyTo').val(historyInput(end));
+    fetchHistoryShots();
+    fetchHistoryKeys();
+}
+function startHistoryViewer(id,timestamp){
+    const found=/^screenshot_(\d+)_/.exec(id||'');
+    if(!found)return;
+    historyMonitor=Number(found[1]);
+    historyActive=id;
+    const center=timestamp>0?timestamp*1000:Date.now();
+    const span=Number($('#historyScale').val()||15)*60000;
+    historyRange(center-span/2,center+span/2);
+}
+async function fetchHistoryShots(){
+    const seq=++historySeq;
+    const params=new URLSearchParams({monitor_id:String(historyMonitor),from:historyUtc(historyStart),to:historyUtc(historyEnd)});
+    $('#historyTimelineStatus').text('Loading screenshots…');
+    try{
+        const response=await fetch(historyBase+'view/api_screenshot_timeline?'+params,{credentials:'same-origin'});
+        if(!response.ok)throw Error('HTTP '+response.status);
+        const data=await response.json();
+        if(!data.success)throw Error(data.error||'History unavailable');
+        if(seq!==historySeq)return;
+        const shots=data.screenshots||[];
+        const strip=$('#historyStrip').empty();
+        // Avoid dozens of tiny thumbnails at wide scales; server already samples to at most 120.
+        const step=Math.max(1,Math.ceil(shots.length/Math.max(1,Math.floor(strip.width()/124))));
+        shots.forEach((shot,i)=>{
+            if(i%step!==0 && shot.global_id!==historyActive)return;
+            const button=$('<button type="button" class="history-thumb"/>')
+                .toggleClass('selected',shot.global_id===historyActive)
+                .attr('title',new Date(shot.modified_time*1000).toLocaleString());
+            const img=$('<img loading="lazy" alt="Screenshot thumbnail"/>')
+                .attr('src',historyBase+(shot.thumbnail||shot.screenshot||''))
+                .on('error',function(){if(!this.dataset.fallback){this.dataset.fallback='1';this.src=historyBase+(shot.screenshot||'');}});
+            button.append(img,$('<time/>').text(new Date(shot.modified_time*1000).toLocaleTimeString()));
+            button.on('click',()=>{
+                historyActive=shot.global_id;
+                window.currentScreenshotId=shot.global_id;
+                $('#modalImage').attr('src',historyBase+shot.screenshot);
+                $('#historyStrip .history-thumb').removeClass('selected');button.addClass('selected');
+                const stamp=shot.modified_time*1000;
+                // Move the inspection range to the chosen image without changing the current scale.
+                const half=(historyEnd-historyStart)/2;
+                historyStart=stamp-half;historyEnd=stamp+half;
+                $('#historyFrom').val(historyInput(historyStart));$('#historyTo').val(historyInput(historyEnd));
+                fetchHistoryKeys();
+            });
+            strip.append(button);
+        });
+        $('#historyTimelineStatus').text(shots.length+' sampled screenshot(s) in this range'+(shots.length===120?' (limit reached)':''));
+    }catch(e){if(seq===historySeq)$('#historyTimelineStatus').text('Cannot load screenshots: '+e.message);}
+}
+async function fetchHistoryKeys(){
+    const seq=++historyKeySeq;
+    $('#historyTranscriptRange').text(new Date(historyStart).toLocaleTimeString()+' – '+new Date(historyEnd).toLocaleTimeString());
+    $('#historyTranscriptBody').text('Loading keyboard activity…');
+    const params=new URLSearchParams({device_id:String(historyMonitor),from:historyUtc(historyStart),to:historyUtc(historyEnd)});
+    try{
+        const response=await fetch(historyBase+'logbrowse/api_key_context?'+params,{credentials:'same-origin'});
+        if(!response.ok)throw Error('HTTP '+response.status);
+        const data=await response.json();
+        if(!data.success)throw Error(data.error||'Keylog unavailable');
+        if(seq!==historyKeySeq)return;
+        const body=$('#historyTranscriptBody').empty();
+        if(!data.logs?.length){body.text('No keyboard activity in the selected time range.');return;}
+        let lastApp='';
+        for(const log of data.logs){
+            const app=String(log.application||'Unknown app');
+            if(app!==lastApp){body.append($('<div class="mt-2 fw-semibold"/>').text(app));lastApp=app;}
+            const row=$('<div class="history-keyline"/>');
+            row.append($('<span class="text-muted"/>').text(String(log.key_date||'').slice(-8)));
+            row.append($('<span/>').text(String(log.key_pressed||'')));
+            body.append(row);
+        }
+        if(data.limited)body.append($('<div class="text-warning mt-2"/>').text('Showing first 2,000 events. Narrow the range for more.'));
+    }catch(e){if(seq===historyKeySeq)$('#historyTranscriptBody').text('Cannot load keyboard activity: '+e.message);}
+}
+$(document).on('click','#historyApplyRange',()=>historyRange(historyFromInput($('#historyFrom').val()),historyFromInput($('#historyTo').val())));
+$(document).on('change','#historyScale',()=>{
+    if(!historyMonitor)return;
+    const center=(historyStart+historyEnd)/2,half=Number($('#historyScale').val())*30000;
+    historyRange(center-half,center+half);
+});
+$(document).on('click','#historyPrevRange,#historyNextRange',function(){
+    const duration=historyEnd-historyStart,dir=this.id==='historyNextRange'?1:-1;
+    historyRange(historyStart+dir*duration,historyEnd+dir*duration);
+});
+$(document).on('click','#historyDrawerToggle',function(){
+    const drawer=$('.history-transcript').toggleClass('is-collapsed');
+    const closed=drawer.hasClass('is-collapsed');
+    $(this).text(closed?'Show':'Hide').attr('aria-expanded',String(!closed));
+    if(closed){
+        $(this).appendTo('.history-bottom .d-flex:first');
+    }else{
+        $(this).appendTo('.history-transcript > .d-flex:first');
+    }
+});
 
 </script>
 
