@@ -3,7 +3,28 @@
 ?>
 <style>
 /* Single CCTV-style key history ruler */
-.key-timeline-wrapper{padding:12px;min-width:0}
+.key-timeline-wrapper{padding:6px 8px 10px;min-width:0}
+.key-history-toolbar{display:flex;align-items:center;gap:5px;min-width:0;overflow-x:auto;white-space:nowrap;scrollbar-width:thin;padding:0 0 5px;margin-bottom:3px}
+.key-history-summary{display:flex;align-items:center;gap:6px;flex:1;min-width:100px;overflow:hidden;font-size:.73rem}
+.key-history-summary small{font-size:.68rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.key-history-date-field,.key-history-scale-field{display:flex;align-items:center;gap:4px;flex:none;font-size:.69rem;margin:0}
+.key-history-date-field input{width:160px;max-width:none;min-height:27px;padding:2px 5px;font-size:.7rem;line-height:1.1}
+.key-history-scale-field select{width:74px;min-height:27px;padding:3px 17px 3px 5px;font-size:.7rem;line-height:1.1}
+.key-history-toolbar .btn{padding:3px 6px;min-width:26px;line-height:1.2}
+.key-history-toolbar [hidden]{display:none!important}
+.key-timeline-wrapper .key-timeline-scroller{border-radius:6px}
+.key-timeline-wrapper .key-cctv-ruler{height:93px}
+.key-timeline-wrapper .key-cctv-baseline{top:47px}
+.key-timeline-wrapper .key-cctv-tick{top:27px;height:20px}
+.key-timeline-wrapper .key-cctv-tick.major{top:24px;height:23px}
+.key-timeline-wrapper .key-cctv-tick-label{font-size:.6rem}
+.key-timeline-wrapper .key-cctv-selection{top:3px;bottom:3px}
+.key-timeline-wrapper .key-cctv-activity{top:51px!important;height:17px;max-height:22px}
+.key-timeline-wrapper .key-context-panel{margin-top:6px;padding:7px 9px;border-radius:6px;min-height:90px}
+.key-transcript-header{display:flex;align-items:center;justify-content:space-between;gap:7px;border-bottom:1px solid var(--bs-border-color);margin-bottom:6px;padding-bottom:6px;font-size:.79rem}
+.key-transcript-header small{font-size:.67rem;font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:650px){.key-history-summary{min-width:65px}.key-timeline-wrapper{padding:5px}}
+
 .key-timeline-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-weight:700;margin-bottom:10px}
 .key-timeline-heading small{display:block;font-weight:400;color:var(--bs-secondary-color);font-size:.78rem}
 .key-ruler-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:.78rem}
