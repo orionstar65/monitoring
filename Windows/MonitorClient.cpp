@@ -2298,62 +2298,76 @@ static void updateUnifiedVisibility(HWND dlg) {
 // Compact spacing system shared by every settings tab:
 // 16px outer margin, 10px label-to-control gap, 28-34px form rows.
 // Fixed coordinates avoid the expanding gaps of the previous long form.
+// Compact Windows layout, measured in client-area pixels. The shorter
+// Preferences/Updates pages resize with the selected tab, eliminating the
+// large blank area left by sizing every page for the Monitor form.
 static void layoutSettingsTabs(HWND dlg) {
     struct Pos{int id,x,y,w,h;};
     const Pos fields[]={
-        // Narrower application header and a shorter tab frame.
-        {4500,20,8,30,30},{4501,58,9,250,20},{4502,58,29,120,16},
-        {SETTINGS_TABS,10,52,500,278},
-
-        // Account & Server: connection, credentials, or the active User No.
-        {4503,28,91,300,20},
-        {4504,28,122,85,20},{SETTINGS_IP,122,118,358,25},
-        {4505,28,154,85,20},{SETTINGS_PORT,122,150,358,25},
-        {SETTINGS_CONNECTION,28,184,452,23},
-        {4510,28,217,85,20},{SETTINGS_SIGNIN_USER,122,213,358,25},
-        {4511,28,250,85,20},{SETTINGS_SIGNIN_PASS,122,246,358,25},
-        {SETTINGS_TEST,122,281,124,27},
-        {SETTINGS_ACCOUNT_INFO,122,213,358,25},
-        {SETTINGS_LOGOUT,122,247,124,27},
-        {SETTINGS_NOTICE,28,283,452,37},
-
-        // Monitor: aligned, single-row labels and controls.
-        {SETTINGS_MONITOR_HEADING,28,91,310,20},
-        {4400,28,123,85,20},{SETTINGS_MONITOR,122,118,264,198},
-        {SETTINGS_EDIT,394,118,86,25},
-        {4402,28,156,85,20},{SETTINGS_OS,122,152,89,23},
-        {SETTINGS_OS_MAC,218,152,62,23},{SETTINGS_OS_UBUNTU,288,152,102,23},
-        {SETTINGS_INFO_OS,122,156,358,20},
-        {4403,28,189,85,20},{SETTINGS_MACHINE,122,185,103,23},
-        {SETTINGS_MACHINE_DESKTOP,237,185,118,23},
-        {SETTINGS_INFO_MACHINE,122,189,358,20},
-        {4404,28,223,85,20},{SETTINGS_MONITOR_IP,122,222,358,21},
-        {4405,28,255,85,20},{SETTINGS_REMARK,122,251,358,25},
-        {SETTINGS_INFO_REMARK,122,255,358,20},
-        {SETTINGS_LOCK_SETTINGS,327,290,153,27},
-
-        // Preferences: clear grouping, no oversized vertical whitespace.
-        {4506,28,91,310,20},{SETTINGS_NOTIFY,122,122,320,25},
-        {4507,28,165,310,20},{SETTINGS_SEND_ALL,122,195,151,27},
-        {SETTINGS_REFRESH_CONFIG,282,195,198,27},
-
-        // Updates: one field row, a button row, and the result below.
-        {SETTINGS_UPDATE_HEADING,28,91,310,20},
-        {4509,28,130,85,20},{SETTINGS_UPDATE_URL,122,125,358,25},
-        {SETTINGS_UPDATE_CHECK,122,165,169,27},
-        {SETTINGS_UPDATE_INSTALL,300,165,126,27},
-        {SETTINGS_UPDATE_STATUS,28,208,452,85},
-
-        // Stable footer for every tab (Save only when relevant).
-        {SETTINGS_SAVE,286,340,104,28},{SETTINGS_CLOSE,400,340,104,28}
+        {4500,16,8,28,28},{4501,52,7,260,20},{4502,52,26,140,16},
+        // Tabs' frame height and footer position are set below per page.
+        {SETTINGS_TABS,8,44,464,244},
+        // Account: 27px vertical cadence, no redundant section spacers.
+        {4503,22,78,300,19},
+        {4504,22,104,75,19},{SETTINGS_IP,104,100,350,24},
+        {4505,22,132,75,19},{SETTINGS_PORT,104,128,350,24},
+        {SETTINGS_CONNECTION,22,158,432,19},
+        {4510,22,185,75,19},{SETTINGS_SIGNIN_USER,104,181,350,24},
+        {4511,22,213,75,19},{SETTINGS_SIGNIN_PASS,104,209,350,24},
+        {SETTINGS_TEST,104,240,119,26},
+        {SETTINGS_ACCOUNT_INFO,104,181,350,22},
+        {SETTINGS_LOGOUT,104,213,119,26},
+        {SETTINGS_NOTICE,22,247,432,32},
+        // Monitor: keep radio groups and read-only detail rows aligned.
+        {SETTINGS_MONITOR_HEADING,22,78,300,19},
+        {4400,22,104,75,19},{SETTINGS_MONITOR,104,100,254,174},
+        {SETTINGS_EDIT,368,100,86,24},
+        {4402,22,132,75,19},{SETTINGS_OS,104,128,90,23},
+        {SETTINGS_OS_MAC,202,128,61,23},{SETTINGS_OS_UBUNTU,272,128,100,23},
+        {SETTINGS_INFO_OS,104,132,350,20},
+        {4403,22,160,75,19},{SETTINGS_MACHINE,104,156,95,23},
+        {SETTINGS_MACHINE_DESKTOP,210,156,112,23},
+        {SETTINGS_INFO_MACHINE,104,160,350,20},
+        {4404,22,188,75,19},{SETTINGS_MONITOR_IP,104,187,350,20},
+        {4405,22,216,75,19},{SETTINGS_REMARK,104,212,350,24},
+        {SETTINGS_INFO_REMARK,104,216,350,20},
+        {SETTINGS_LOCK_SETTINGS,316,245,138,26},
+        // Preferences: settings plus maintenance actions, with no empty rows.
+        {4506,22,78,300,19},{SETTINGS_NOTIFY,104,103,330,24},
+        {4507,22,139,300,19},{SETTINGS_SEND_ALL,104,161,150,26},
+        {SETTINGS_REFRESH_CONFIG,263,161,191,26},
+        // Updates: input, operations and inline response.
+        {SETTINGS_UPDATE_HEADING,22,78,300,19},
+        {4509,22,108,75,19},{SETTINGS_UPDATE_URL,104,104,350,24},
+        {SETTINGS_UPDATE_CHECK,104,138,166,26},
+        {SETTINGS_UPDATE_INSTALL,279,138,124,26},
+        {SETTINGS_UPDATE_STATUS,22,176,432,43},
+        {SETTINGS_SAVE,258,0,99,26},{SETTINGS_CLOSE,366,0,99,26}
     };
+    const int tabHeight=settingsActiveTab<2?244:settingsActiveTab==2?175:197;
+    const int footerY=44+tabHeight+8;
+    const int clientHeight=footerY+26+9;
+    const int clientWidth=480;
     for(const auto& p:fields){
-        if(HWND field=GetDlgItem(dlg,p.id))
-            SetWindowPos(field,nullptr,p.x,p.y,p.w,p.h,
-                SWP_NOZORDER|SWP_NOACTIVATE);
+        HWND control=GetDlgItem(dlg,p.id);
+        if(!control)continue;
+        const int y=(p.id==SETTINGS_SAVE||p.id==SETTINGS_CLOSE)?footerY:p.y;
+        const int height=p.id==SETTINGS_TABS?tabHeight:p.h;
+        SetWindowPos(control,nullptr,p.x,y,p.w,height,
+                     SWP_NOZORDER|SWP_NOACTIVATE);
     }
-    SetWindowPos(dlg,nullptr,0,0,520,387,
-                 SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
+    // Size to the *client area*. Window sizes include a DPI-dependent title
+    // bar and borders, and should not clip the Save/Close footer.
+    RECT outer{0,0,clientWidth,clientHeight};
+    const DWORD style=static_cast<DWORD>(GetWindowLongPtrW(dlg,GWL_STYLE));
+    const DWORD exStyle=static_cast<DWORD>(GetWindowLongPtrW(dlg,GWL_EXSTYLE));
+    AdjustWindowRectEx(&outer,style,FALSE,exStyle);
+    const int width=outer.right-outer.left;
+    const int height=outer.bottom-outer.top;
+    RECT current{};
+    GetWindowRect(dlg,&current);
+    SetWindowPos(dlg,nullptr,current.left,current.top,width,height,
+                 SWP_NOZORDER|SWP_NOACTIVATE);
 }
 // Update operations use the bundled, reviewed PowerShell helper, never scripts
 // downloaded from the update server. Check and stage execute off the UI thread.
@@ -2538,7 +2552,10 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
     case WM_NOTIFY: {
         auto *header=reinterpret_cast<NMHDR*>(lp);
         if(header && header->idFrom==SETTINGS_TABS && header->code==TCN_SELCHANGE){
-            settingsActiveTab=(int)SendDlgItemMessageW(dlg,SETTINGS_TABS,TCM_GETCURSEL,0,0);
+            const int selected=(int)SendDlgItemMessageW(dlg,SETTINGS_TABS,TCM_GETCURSEL,0,0);
+            if(selected<0||selected>3)return TRUE;
+            settingsActiveTab=selected;
+            layoutSettingsTabs(dlg);
             updateUnifiedVisibility(dlg);
             return TRUE;
         }
