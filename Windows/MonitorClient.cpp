@@ -2289,7 +2289,7 @@ static void updateUnifiedVisibility(HWND dlg) {
     const bool pending=!settingsPendingUserNo.empty();
     const bool locked=enrolled&&(settingsAssignmentLocked||settingsMonitorLocked);
     const int monitorControls[] = {
-        SETTINGS_MONITOR_HEADING,SETTINGS_MONITOR_DIVIDER,SETTINGS_MONITOR,
+        SETTINGS_MONITOR_HEADING,SETTINGS_MONITOR,
         SETTINGS_LABEL,SETTINGS_OS,SETTINGS_MACHINE,SETTINGS_MONITOR_IP,
         SETTINGS_REMARK,SETTINGS_OS_MAC,SETTINGS_OS_UBUNTU,
         SETTINGS_MACHINE_DESKTOP,SETTINGS_LOCK_SETTINGS,4400,4401,4402,4403,4404,4405
@@ -2352,7 +2352,7 @@ static void updateUnifiedVisibility(HWND dlg) {
     const int offset=hasNotice?0:58;
     struct Position { int id,x,y; };
     const Position monitorLayout[]={
-        {SETTINGS_MONITOR_DIVIDER,13,336},{SETTINGS_MONITOR_HEADING,13,346},
+        {SETTINGS_MONITOR_HEADING,13,346},
         {4400,13,375},{SETTINGS_MONITOR,108,373},{SETTINGS_EDIT,338,373},
         {4402,13,410},{SETTINGS_OS,108,407},{SETTINGS_OS_MAC,200,407},{SETTINGS_OS_UBUNTU,268,407},
         {SETTINGS_INFO_OS,108,410},
@@ -2408,15 +2408,12 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"STATIC","",SS_LEFT,108,146,310,53,SETTINGS_ACCOUNT_INFO);
         addControl(dlg,"BUTTON","Sign In",WS_TABSTOP,108,215,132,27,SETTINGS_TEST);
         addControl(dlg,"STATIC","● Not signed in",0,13,252,405,21,SETTINGS_CONNECTION);
-        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,277,405,2,4506);
-        addControl(dlg,"STATIC","User:",0,13,202,90,20,SETTINGS_USER);
+         addControl(dlg,"STATIC","User:",0,13,202,90,20,SETTINGS_USER);
         addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,199,310,250,SETTINGS_USER_NO);
         SendMessageW(GetDlgItem(dlg,SETTINGS_USER_NO),CB_SETDROPPEDWIDTH,540,0);
         addControl(dlg,"BUTTON","Sign Out",WS_TABSTOP,298,215,120,27,SETTINGS_LOGOUT);
-        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,267,405,2,4507);
-        addControl(dlg,"STATIC","",SS_LEFT,16,276,430,54,SETTINGS_NOTICE);
-        addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,336,405,2,SETTINGS_MONITOR_DIVIDER);
-        addControl(dlg,"STATIC","Monitor Settings",0,13,346,180,23,SETTINGS_MONITOR_HEADING);
+         addControl(dlg,"STATIC","",SS_LEFT,16,276,430,54,SETTINGS_NOTICE);
+         addControl(dlg,"STATIC","Monitor Settings",0,13,346,180,23,SETTINGS_MONITOR_HEADING);
         addControl(dlg,"STATIC","Monitor",0,13,375,90,21,4400);
         addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,373,222,220,SETTINGS_MONITOR);
         addControl(dlg,"BUTTON","Edit",WS_TABSTOP,338,373,80,25,SETTINGS_EDIT);
