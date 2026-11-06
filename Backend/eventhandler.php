@@ -35,6 +35,22 @@ if ($mysqli->connect_error) {
 
 // Initialize database service
 $dbService = new DatabaseService($mysqli);
+// Record every request, including validation/auth failures that exit early.
+// Only route, request type, IP, status and elapsed time are retained.
+$loggedEvent='Unknown';
+register_shutdown_function(static function() use ($dbService,$start_time,&$loggedEvent):void {
+    try{
+        $code=http_response_code();
+        $dbService->logApiRequest('/eventhandler.php',
+            (string)($_SERVER['REQUEST_METHOD']??'GET'),
+            (string)($_SERVER['REMOTE_ADDR']??''),
+            is_int($code)&&$code>=100?$code:200,
+            (microtime(true)-$start_time)*1000,
+            $loggedEvent);
+    }catch(Throwable $error){
+        error_log('API request logging shutdown failed: '.$error->getMessage());
+    }
+});
 // Validate request shape and bound ingest payload sizes before database writes.
 if(($_SERVER['REQUEST_METHOD']??'')!=='POST'){
     http_response_code(405);echo json_encode(['error'=>'POST required']);exit;
@@ -64,6 +80,7 @@ $claimedId=filter_var($data['MonitorId']??null,FILTER_VALIDATE_INT);
 if($claimedId && (int)$claimedId!==$monitorId){http_response_code(403);echo json_encode(['error'=>'Monitor selection mismatch']);exit;}
 // Extract common data
 $appEvent = $data['Event'] ?? '';
+$loggedEvent=$appEvent;
 $version = $data['Version'] ?? '';
 $macAddress = $data['MacAddress'] ?? '';
 // Client-supplied Username is not authoritative; account ownership is server-side.
@@ -167,23 +184,6 @@ try {
     echo json_encode(['error' => 'Internal server error']);
     exit;
 }
-
-// Calculate response time
-$response_time_ms = (microtime(true) - $start_time) * 1000;
-
-// Get HTTP status code
-$status_code = http_response_code();
-if ($status_code === false) {
-    $status_code = 200; // Default to 200 if not set
-}
-
-// Log API request with event type (include MAC address in format: MAC/IP)
-// Disabled: daily API log table was for debugging only
-// $request_type = $appEvent ?? 'Unknown';
-// $dbService->logApiRequest('/eventhandler.php', 'POST', $clientIP, $status_code, $response_time_ms, $request_type, $macAddress);
-
-// Close database connection
-$mysqli->close();
 
 // Return success response
 echo json_encode($response);
