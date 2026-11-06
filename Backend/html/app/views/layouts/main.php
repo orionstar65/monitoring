@@ -506,6 +506,15 @@
         .table tbody tr:hover {
             background: rgba(25, 118, 210, 0.05);
         }
+    
+        /* Consistent compact controls across management and monitoring pages. */
+        .btn{font-size:.84rem;padding:.34rem .65rem;line-height:1.3;border-radius:6px}
+        .btn-sm{font-size:.77rem;padding:.22rem .48rem;line-height:1.25;border-radius:5px}
+        .btn-lg{font-size:.98rem;padding:.58rem .98rem}
+        .btn i{vertical-align:baseline}
+        .card-header{padding:.7rem .85rem}
+        .table>:not(caption)>*>*{padding:.58rem .65rem}
+        .form-control-sm,.form-select-sm{min-height:30px;font-size:.8rem}
     </style>
 </head>
 <body>
@@ -516,52 +525,42 @@
             <h4><?php echo APP_NAME; ?></h4>
         </div>
         <div class="sidebar-nav">
-            <?php if(($_SESSION['role']??'')===ROLE_ADMIN): ?>
+            <?php $privileged=($_SESSION['role']??'')===ROLE_SUPER_ADMIN;
+                  $delegated=($_SESSION['role']??'')===ROLE_SCOPED_ADMIN; ?>
+            <?php if($privileged): ?>
             <div class="nav-item">
-                <a class="nav-link <?php echo $active_page === 'dashboard' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>dashboard">
-                    <i class="fas fa-tachometer-alt"></i>
-                    <span>Dashboard</span>
-                </a>
-            </div>
-            <?php if ($_SESSION['role'] === ROLE_ADMIN): ?>
-            <div class="nav-item">
-                <a class="nav-link <?php echo $active_page === 'users' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>users">
-                    <i class="fas fa-users"></i>
-                    <span>User Management</span>
-                </a>
+                <a class="nav-link <?= $active_page==='dashboard'?'active':'' ?>" href="<?= BASE_URL ?>dashboard">
+                    <i class="fas fa-tachometer-alt"></i><span>Dashboard</span></a>
             </div>
             <?php endif; ?>
+            <?php if($privileged||$delegated): ?>
+            <div class="nav-item">
+                <a class="nav-link <?= $active_page==='users'?'active':'' ?>" href="<?= BASE_URL ?>users">
+                    <i class="fas fa-users"></i><span>User Management</span></a>
+            </div>
             <?php endif; ?>
             <div class="nav-item">
-                <a class="nav-link <?php echo $active_page === 'monitors' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>monitors">
-                    <i class="fas fa-desktop"></i>
-                    <span>Monitor IPs</span>
-                </a>
+                <a class="nav-link <?= $active_page==='monitors'?'active':'' ?>" href="<?= BASE_URL ?>monitors">
+                    <i class="fas fa-desktop"></i><span>Monitors</span></a>
             </div>
-            <?php if(($_SESSION['role']??'')===ROLE_ADMIN): ?>
+            <?php if($privileged||$delegated): ?>
             <div class="nav-item">
-                <a class="nav-link <?php echo $active_page === 'view' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>view">
-                    <i class="fas fa-eye"></i>
-                    <span>Monitoring</span>
-                </a>
+                <a class="nav-link <?= $active_page==='view'?'active':'' ?>" href="<?= BASE_URL ?>view">
+                    <i class="fas fa-eye"></i><span>Monitoring</span></a>
             </div>
+            <?php endif; ?>
+            <?php if($privileged): ?>
             <div class="nav-item">
-                <a class="nav-link <?php echo $active_page === 'api-logs' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>apilogs">
-                    <i class="fas fa-list-alt"></i>
-                    <span>API Logs</span>
-                </a>
+                <a class="nav-link <?= $active_page==='api-logs'?'active':'' ?>" href="<?= BASE_URL ?>apilogs">
+                    <i class="fas fa-list-alt"></i><span>API Logs</span></a>
             </div>
             <div class="nav-item">
-                <a class="nav-link <?php echo $active_page === 'reports' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>reports">
-                    <i class="fas fa-chart-line"></i>
-                    <span>Reports</span>
-                </a>
+                <a class="nav-link <?= $active_page==='reports'?'active':'' ?>" href="<?= BASE_URL ?>reports">
+                    <i class="fas fa-chart-line"></i><span>Reports</span></a>
             </div>
             <div class="nav-item">
-                <a class="nav-link <?php echo $active_page === 'export' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>export">
-                    <i class="fas fa-download"></i>
-                    <span>Export</span>
-                </a>
+                <a class="nav-link <?= $active_page==='export'?'active':'' ?>" href="<?= BASE_URL ?>export">
+                    <i class="fas fa-download"></i><span>Export</span></a>
             </div>
             <?php endif; ?>
             <?php if(($_SESSION['role']??'')==='user'): ?>
