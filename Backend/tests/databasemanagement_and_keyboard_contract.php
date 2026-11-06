@@ -21,11 +21,19 @@ $checks=[
     'Cleanup never deletes identity, settings or screenshot metadata'=>
         str_contains($db,"private const CLEANABLE = ['browser_history_logs','key_logs','usb_device_logs']")
         &&str_contains($db,'WHERE created_at < :cutoff'),
-    'Cleanup uses a bounded transactional deletion and updates stats'=>
-        str_contains($db,'private const BATCH_SIZE = 2000') &&
-        str_contains($db,'FOR UPDATE') &&
+    'Cleanup uses one cutoff-based DELETE per allowlisted table and updates stats atomically'=>
+        !str_contains($db,'private const BATCH_SIZE') &&
+        !str_contains($db,'FOR UPDATE') &&
         str_contains($db,'$pdo->beginTransaction();') &&
-        str_contains($db,'UPDATE storage_statistics'),
+        str_contains($db,'UPDATE storage_statistics s') &&
+        str_contains($db,'COUNT(*) AS removed_count') &&
+        str_contains($db,"'DELETE FROM '.\$tableSQL.' WHERE created_at < :cutoff'") &&
+        str_contains($db,'$pdo->commit();'),
+    'Cleanup UI reports completed tables and totals instead of per-batch row counts'=>
+        str_contains($view,'id="dbCleanupResults"') &&
+        str_contains($view,'for(const result of perTable)') &&
+        !str_contains($view,'while(batches++') &&
+        str_contains($view,'rows removed'),
     'Cleanup requires confirmation and a bounded month input'=>
         str_contains($db,"'DELETE OLD LOGS'") &&
         str_contains($view,'id="dbRetentionMonths"') &&
