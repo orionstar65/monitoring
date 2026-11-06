@@ -38,7 +38,7 @@ $checks=[
         str_contains($source,'SetWindowPos(dlg,nullptr,0,0,520,387,'),
     'Settings keep a consistent shared label and field alignment'=>
         str_contains($source,'{4504,28,122,85,20},{SETTINGS_IP,122,118,358,25}') &&
-        str_contains($source,'{4400,28,123,85,20},{SETTINGS_MONITOR,122,118,264,220}') &&
+        str_contains($source,'{4400,28,123,85,20},{SETTINGS_MONITOR,122,118,264,198}') &&
         str_contains($source,'{4509,28,130,85,20},{SETTINGS_UPDATE_URL,122,125,358,25}'),
     'Compact layout keeps the save and close buttons inside the dialog'=>
         str_contains($source,'{SETTINGS_SAVE,286,340,104,28}') &&
