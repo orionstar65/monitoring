@@ -81,11 +81,11 @@ transmit them securely.
 
 **Restore from backup** requires:
 
-1. A download generated from this same portal session within the past
-   two hours.
-2. A matching MonitorClient SQL backup (\`.sql.gz\`) from the same
-   configured database.
-3. The phrase \`RESTORE DATABASE\` and a checked acknowledgement.
+1. A fresh safety backup downloaded in the current portal session within the past two hours.
+2. An authenticated MonitorClient SQL backup (`.sql.gz`) signed by this deployment. Older signed backups may also be restored; new v2 archives use HMAC-SHA256 to authenticate the database name and SQL contents. Old unsigned v1 backups may only be restored if byte-identical to the freshly downloaded backup in this session.
+3. The phrase `RESTORE DATABASE` and a checked acknowledgement.
+
+For reliable long-term restores, configure `MONITOR_BACKUP_SIGNING_KEY` as a private random secret of at least 32 bytes on the web server and retain it securely across deployments and database password changes. If omitted, the backup signature uses the configured database password, so rotating that password can prevent validation of older signed backups. Never commit the signing key to Git or expose it in the update server directory.
 
 Restoring SQL is **not transactional** across schema changes. Do this
 during a scheduled maintenance window after stopping client ingests.
