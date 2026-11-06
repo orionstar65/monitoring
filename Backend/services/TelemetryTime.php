@@ -12,26 +12,37 @@
 function monitorCaptureTimeUTC(string $wireTime): ?DateTimeImmutable {
     $wireTime=trim($wireTime);
     if($wireTime==='')return null;
+
+    // Qt's ISODate for LocalTime and older clients may omit the offset and
+    // use either T or a space. Treat ambiguous legacy values as UTC; modern
+    // clients always provide Z or an explicit offset.
+    //
+    // Accept RFC 3339 (including fractional seconds), Qt ISODate, and the
+    // historic "YYYY-MM-DD HH:MM:SS" payload without guessing PHP's timezone.
+    if(!preg_match('/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}:?\d{2})?$/D',
+        $wireTime,$parts))return null;
+
+    $normalized=$parts[1].'T'.$parts[2];
+    $fraction=$parts[3]??'';
+    $offset=$parts[4]??'';
+    if($fraction!=='')$normalized.='.'.$fraction;
+    if($offset!==''){
+        // PHP's P parser accepts Z and colonized offsets.
+        if($offset!=='Z' && !str_contains($offset,':'))
+            $offset=substr($offset,0,3).':'.substr($offset,3);
+        $normalized.=$offset;
+    }
+
+    $format='!Y-m-d\TH:i:s';
+    if($fraction!=='')$format.='.u';
+    if($offset!=='')$format.='P';
     $utc=new DateTimeZone('UTC');
-
-    // Explicit offset, including the Z form accepted by PHP's P specifier.
-    if(preg_match('/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$/D',$wireTime)){
-        $normalized=str_replace(' ','T',$wireTime);
-        $parsed=DateTimeImmutable::createFromFormat('!Y-m-d\\TH:i:sP',$normalized,$utc);
-        $errors=DateTimeImmutable::getLastErrors();
-        if(!$parsed || ($errors!==false && ($errors['warning_count']>0 || $errors['error_count']>0)))return null;
-        return $parsed->setTimezone($utc);
-    }
-
-    // Legacy v1.3/v1.5 uploaders sent a bare datetime. Treat as UTC, not
-    // the server's configurable PHP default timezone.
-    if(preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/D',$wireTime)){
-        $parsed=DateTimeImmutable::createFromFormat('!Y-m-d H:i:s',$wireTime,$utc);
-        return $parsed && $parsed->format('Y-m-d H:i:s')===$wireTime ? $parsed:null;
-    }
-    return null;
+    $parsed=DateTimeImmutable::createFromFormat($format,$normalized,$utc);
+    $errors=DateTimeImmutable::getLastErrors();
+    if(!$parsed||($errors!==false && ($errors['warning_count']>0||$errors['error_count']>0)))
+        return null;
+    return $parsed->setTimezone($utc);
 }
-
 
 /**
  * Endpoints accept explicit UTC instants start_utc (inclusive) and
