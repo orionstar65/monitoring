@@ -562,6 +562,10 @@
                 <a class="nav-link <?= $active_page==='export'?'active':'' ?>" href="<?= BASE_URL ?>export">
                     <i class="fas fa-download"></i><span>Export</span></a>
             </div>
+            <div class="nav-item">
+                <a class="nav-link <?= $active_page==='db-management'?'active':'' ?>" href="<?= BASE_URL ?>databasemanagement">
+                    <i class="fas fa-database"></i><span>Database Management</span></a>
+            </div>
             <?php endif; ?>
             <?php if(($_SESSION['role']??'')==='user'): ?>
             <div class="nav-item">
