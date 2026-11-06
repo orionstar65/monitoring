@@ -635,6 +635,46 @@ ob_start();
 @media(max-width:900px){.sidebar-panel{max-height:50dvh}.monitoring-statistics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 #headerDateFilterContainer{display:none}
 #monitorList .monitor-item:focus-visible{outline:2px solid var(--bs-primary);outline-offset:-2px}
+/* Compact single-toolbar CCTV viewer, aligned transcript panel and one status indicator. */
+.sidebar-panel .live-status-badge::before,.sidebar-panel .live-status-badge::after{content:none!important;display:none!important}
+.sidebar-panel .monitor-status-indicator{display:inline-block!important;flex:none;width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.9}
+.history-viewer{grid-template-columns:minmax(0,1fr) minmax(310px,390px)}
+.history-transcript{display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden}
+.history-transcript.is-collapsed{display:none}
+.history-transcript-toolbar{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:7px 9px 4px;border-bottom:1px solid var(--bs-border-color)}
+.history-transcript-heading{display:flex;flex-direction:column;gap:1px;min-width:0;font-size:.83rem}
+.history-transcript-heading small{font-size:.69rem;font-variant-numeric:tabular-nums}
+.history-transcript-navigation{display:flex;gap:3px;flex:none}
+.history-transcript-navigation .btn{padding:3px 8px;line-height:1.25}
+.history-transcript-period{padding:4px 9px 5px;color:var(--bs-secondary-color);font-size:.69rem;border-bottom:1px solid var(--bs-border-color);font-variant-numeric:tabular-nums}
+.history-transcript-body{flex:1;min-height:0;overflow-y:auto;padding:7px 9px 11px;scrollbar-width:thin;overscroll-behavior:contain}
+.history-nearest-key{margin:2px 9px;padding:2px 0;font-size:.73rem;text-align:left}
+.history-transcript .key-transcript{display:grid;grid-template-columns:56px 75px minmax(0,1fr);gap:3px 5px;align-items:start}
+.history-transcript .key-transcript-content{overflow-wrap:anywhere;min-width:0;line-height:1.5}
+.history-bottom{padding:5px 8px 6px;min-height:0}
+.history-toolbar{display:flex;align-items:center;gap:5px;min-width:0;overflow-x:auto;scrollbar-width:thin;white-space:nowrap;padding-bottom:3px}
+.history-toolbar-summary{display:flex;align-items:center;gap:6px;flex:1;min-width:100px;overflow:hidden;font-size:.73rem}
+.history-toolbar-summary #historyTimelineStatus{overflow:hidden;text-overflow:ellipsis;font-size:.68rem}
+.history-date-field,.history-scale-label{display:flex;gap:4px;align-items:center;font-size:.69rem;flex:none;margin:0}
+.history-date-field input{width:160px;max-width:none;padding:2px 5px;font-size:.7rem;line-height:1.1;min-height:27px}
+.history-scale-label select{width:74px;padding:3px 17px 3px 5px;font-size:.7rem;line-height:1.1;min-height:27px}
+.history-toolbar .btn{padding:3px 6px;min-width:26px;line-height:1.2}
+.history-toolbar .history-playhead-label{min-width:59px;font-size:.7rem;font-weight:600}
+.history-ruler.key-cctv-ruler{height:93px}
+.history-ruler .key-cctv-baseline{top:29px}
+.history-ruler .key-cctv-tick{top:17px;height:13px}
+.history-ruler .key-cctv-tick.major{top:15px;height:15px}
+.history-ruler .key-cctv-tick-label{top:-13px;font-size:.58rem}
+.history-ruler .key-cctv-activity{top:29px!important;height:5px!important}
+.history-ruler .key-cctv-selection{top:3px;bottom:3px}
+.history-ruler .key-cctv-selection::before,.history-ruler .key-cctv-selection::after{height:22px}
+.history-ruler .key-cctv-playhead{height:85px;top:3px}
+.history-shot-marker{top:32px;height:6px}
+.history-timeline-image{top:39px;height:48px;width:87px}
+.history-timeline-image img{height:30px}
+.history-timeline-image time{font-size:.57rem}
+@media(max-width:850px){.history-viewer{grid-template-columns:1fr}.history-toolbar-summary{min-width:60px}}
+
 /* Log Modal Styles */
 .log-sub-modal .modal-dialog {
     max-width: 90%;
@@ -1264,45 +1304,43 @@ ob_start();
                     </section>
 
                     <aside class="history-transcript" id="historyTranscriptPanel" aria-label="Keyboard transcript">
-                        <div class="key-transcript-nav">
-                            <strong>Keyboard transcript</strong>
+                        <div class="history-transcript-toolbar">
+                            <div class="history-transcript-heading">
+                                <strong><i class="fas fa-keyboard me-1"></i> Keyboard</strong>
+                                <small id="historyTranscriptInfo" class="text-muted"></small>
+                            </div>
+                            <div class="history-transcript-navigation" role="group" aria-label="Navigate keyboard transcript range">
+                                <button id="historyPrevRange" type="button" class="btn btn-sm btn-outline-secondary" aria-label="Previous transcript range" title="Previous range"><i class="fas fa-chevron-left"></i></button>
+                                <button id="historyNextRange" type="button" class="btn btn-sm btn-outline-secondary" aria-label="Next transcript range" title="Next range"><i class="fas fa-chevron-right"></i></button>
+                            </div>
                         </div>
-                        <div class="key-transcript-nav">
-                            <button id="historyPrevRange" class="btn btn-sm btn-outline-secondary" type="button">‹ Previous</button>
-                            <strong id="historyTranscriptRange" class="small text-muted"></strong>
-                            <button id="historyNextRange" class="btn btn-sm btn-outline-secondary" type="button">Next ›</button>
-                        </div>
-                        <div id="historyTranscriptInfo" class="history-transcript-info"></div>
-                        <div id="historyTranscriptBody" aria-live="polite">Select a time range.</div>
+                        <div id="historyTranscriptRange" class="history-transcript-period"></div>
+                        <button type="button" id="historyJumpToKeyboard" class="btn btn-sm btn-link history-nearest-key" hidden>Go to nearest keyboard activity</button>
+                        <div id="historyTranscriptBody" class="history-transcript-body" role="region" aria-label="Recorded keyboard events" aria-live="polite">Choose a time range to inspect keyboard activity.</div>
                     </aside>
-                    <section class="history-bottom" aria-label="Screenshot and keylog history timeline">
-                        <div class="key-timeline-wrapper">
-                            <div class="key-timeline-heading">
-                                <div class="d-flex align-items-center flex-wrap gap-2">
-                                    <strong class="small">History</strong>
-                                    <span id="historyTimelineStatus" class="small text-muted" aria-live="polite">Drag red cursor to inspect screenshots.</span>
-                                </div>
-                                <div class="history-transport" role="toolbar" aria-label="History timeline controls">
-                                    <button id="historyZoomOut" type="button" class="btn btn-sm btn-outline-secondary" title="Zoom out (−)" aria-label="Zoom timeline out">−</button>
-                                    <button id="historyZoomIn" type="button" class="btn btn-sm btn-outline-secondary" title="Zoom in (+)" aria-label="Zoom timeline in">+</button>
-                                    <button id="historyFit" type="button" class="btn btn-sm btn-outline-secondary" title="Show entire day">24h</button>
-                                    <label for="historyScale" class="visually-hidden">Timeline scale</label>
-                                    <select id="historyScale" class="form-select form-select-sm" aria-label="History timeline scale">
-                                        <option value="near">15 min</option><option value="medium" selected>1 hour</option>
-                                        <option value="wide">6 hours</option><option value="day">24 hours</option><option value="custom" disabled>Custom</option>
-                                    </select>
-                                    <time id="historyPlayheadTime" class="history-playhead-label" aria-label="Playhead timestamp"></time>
-                                    <button id="historyDrawerToggle" class="btn btn-sm btn-outline-secondary" type="button" aria-controls="historyTranscriptPanel" aria-expanded="true">Hide keys</button>
-                                </div>
+                    <section class="history-bottom" aria-label="Screenshot and keyboard history timeline">
+                        <div class="history-toolbar" role="toolbar" aria-label="History time range and playback controls">
+                            <div class="history-toolbar-summary"><strong>History</strong>
+                                <span id="historyTimelineStatus" class="text-muted" aria-live="polite" title="History status">Drag the red playhead to inspect screenshots.</span>
                             </div>
-                            <div class="key-timeline-scroller" id="historyTimelineViewport">
-                                <div class="key-cctv-ruler history-ruler" id="historyTimelineRuler" tabindex="0" role="group"
-                                     aria-label="CCTV timeline. Drag the red playhead to scrub; drag the blue range or its borders to pan or resize. Wheel zooms, Shift-wheel pans."></div>
-                            </div>
-                            <div class="key-range-inputs">
-                                <label for="historyFrom">From <input id="historyFrom" class="form-control form-control-sm" type="datetime-local" step="1" aria-label="History range start"></label>
-                                <label for="historyTo">To <input id="historyTo" class="form-control form-control-sm" type="datetime-local" step="1" aria-label="History range end"></label>
-                            </div>
+                            <label class="history-date-field" for="historyFrom"><span>From</span>
+                                <input id="historyFrom" class="form-control form-control-sm" type="datetime-local" step="1" aria-label="History range start"></label>
+                            <label class="history-date-field" for="historyTo"><span>To</span>
+                                <input id="historyTo" class="form-control form-control-sm" type="datetime-local" step="1" aria-label="History range end"></label>
+                            <label class="history-scale-label" for="historyScale"><span>Scale</span>
+                                <select id="historyScale" class="form-select form-select-sm" aria-label="History timeline scale">
+                                    <option value="near">15m</option><option value="medium" selected>1h</option>
+                                    <option value="wide">6h</option><option value="day">24h</option><option value="custom" disabled>Custom</option>
+                                </select></label>
+                            <button id="historyZoomOut" type="button" class="btn btn-sm btn-outline-secondary" aria-label="Zoom timeline out" title="Zoom out"><i class="fas fa-minus"></i></button>
+                            <button id="historyZoomIn" type="button" class="btn btn-sm btn-outline-secondary" aria-label="Zoom timeline in" title="Zoom in"><i class="fas fa-plus"></i></button>
+                            <button id="historyFit" type="button" class="btn btn-sm btn-outline-secondary" aria-label="Fit 24-hour timeline" title="Fit day"><i class="fas fa-expand-arrows-alt"></i></button>
+                            <time id="historyPlayheadTime" class="history-playhead-label" aria-label="Playhead timestamp"></time>
+                            <button id="historyDrawerToggle" type="button" class="btn btn-sm btn-outline-secondary" aria-label="Toggle keyboard transcript" title="Hide keyboard transcript" aria-controls="historyTranscriptPanel" aria-expanded="true"><i class="fas fa-keyboard"></i></button>
+                        </div>
+                        <div class="key-timeline-scroller" id="historyTimelineViewport">
+                            <div class="key-cctv-ruler history-ruler" id="historyTimelineRuler" tabindex="0" role="group"
+                                 aria-label="CCTV timeline. Drag red playhead to scrub; drag the highlighted range or its borders to pan or resize. Wheel to zoom."></div>
                         </div>
                     </section>
                 </div>
@@ -1838,8 +1876,7 @@ function updateMonitorList(monitors) {
                     <div class="monitor-item-name" title="${title}">${title}</div>
                     <div class="monitor-item-status">
                         <span class="live-status-badge status-${status}">
-                            <i class="fas fa-circle"></i><span>${escapeViewerText(statusText)}</span>
-                            ${status==='online'?'<div class="pulse"></div>':''}
+                            <span class="monitor-status-indicator" aria-hidden="true"></span><span>${escapeViewerText(statusText)}</span>
                         </span>
                     </div>
                 </div>
@@ -2959,7 +2996,8 @@ $(document).on('click','#historyPrevRange,#historyNextRange',function(){
 $(document).on('click','#historyDrawerToggle',function(){
     const collapsed=$('.history-viewer').toggleClass('drawer-collapsed').hasClass('drawer-collapsed');
     $('.history-transcript').toggleClass('is-collapsed',collapsed);
-    $(this).text(collapsed?'Show transcript':'Hide transcript').attr('aria-expanded',String(!collapsed));
+    $(this).attr('aria-expanded',String(!collapsed))
+        .attr('title',collapsed?'Show keyboard transcript':'Hide keyboard transcript');
     historyRenderRuler(false);
 });
 
