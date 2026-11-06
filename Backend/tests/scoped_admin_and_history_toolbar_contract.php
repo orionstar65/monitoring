@@ -43,7 +43,7 @@ $checks=[
  'Media, screenshots and live monitors require assigned access'=>
     str_contains($view,'$this->requireMonitorAccess($monitor_id)')
     &&str_contains($view,'$allowedMedia')
-    &&str_contains($view,"$scope,\$scopeParams"),
+    &&str_contains($view,'[$scope,$scopeParams]'),
  'All Keyboard Browser USB API filters require monitor ownership'=>
     substr_count($log,'requireScopedLogDevice($device_id)')>=4
     &&str_contains($log,'requireScopedLogDevice($deviceId)')
