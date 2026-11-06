@@ -1,8 +1,11 @@
 <?php
-$title = 'Log Browse - ' . APP_NAME;
-$active_page = 'logbrowse';
-$page_title = 'Log Browse';
-ob_start();
+$embeddedLogBrowse = !empty($embeddedLogBrowse);
+if (!$embeddedLogBrowse) {
+    $title = 'Log Browse - ' . APP_NAME;
+    $active_page = 'logbrowse';
+    $page_title = 'Log Browse';
+    ob_start();
+}
 ?>
 
 <style>
@@ -468,7 +471,7 @@ ob_start();
 </style>
 
 <?php include __DIR__.'/partials/key_history_shared.php'; ?>
-<div class="logbrowse-container">
+<div class="logbrowse-container<?= $embeddedLogBrowse ? ' logbrowse-embedded' : '' ?>">
     <!-- Filter Panel -->
     <div class="filter-panel">
         <h5>
@@ -496,16 +499,16 @@ ob_start();
                 <input type="date" id="endDate" class="form-control" value="<?php echo date('Y-m-d'); ?>">
             </div>
             <div class="filter-actions">
-                <button class="btn-filter" onclick="applyFilters()">
+                <button class="btn-filter" onclick="<?= $embeddedLogBrowse ? 'unifiedLogs.' : '' ?>applyFilters()">
                     <i class="fas fa-search"></i>
                     Filter
                 </button>
-                <button class="btn-clear" onclick="clearFilters()">
+                <button class="btn-clear" onclick="<?= $embeddedLogBrowse ? 'unifiedLogs.' : '' ?>clearFilters()">
                     <i class="fas fa-times"></i>
                     Clear
                 </button>
                 <?php if ($_SESSION['role'] === ROLE_ADMIN): ?>
-                <button class="btn-remove" id="btnRemoveScreenshots" onclick="removeScreenshots()">
+                <button class="btn-remove" id="btnRemoveScreenshots" onclick="<?= $embeddedLogBrowse ? 'unifiedLogs.' : '' ?>removeScreenshots()">
                     <i class="fas fa-trash"></i>
                     Remove Screenshots
                 </button>
@@ -547,15 +550,15 @@ ob_start();
     <div class="content-panel">
         <!-- Tabs -->
         <div class="log-tabs" id="logTabs">
-            <button class="nav-link active" onclick="switchTab('browser')">
+            <button class="nav-link active" data-log-tab="browser" onclick="<?= $embeddedLogBrowse ? 'unifiedLogs.' : '' ?>switchTab('browser')">
                 <i class="fas fa-globe"></i>
                 Browser History
             </button>
-            <button class="nav-link" onclick="switchTab('key')">
+            <button class="nav-link" data-log-tab="key" onclick="<?= $embeddedLogBrowse ? 'unifiedLogs.' : '' ?>switchTab('key')">
                 <i class="fas fa-keyboard"></i>
                 Key Logs
             </button>
-            <button class="nav-link" onclick="switchTab('usb')">
+            <button class="nav-link" data-log-tab="usb" onclick="<?= $embeddedLogBrowse ? 'unifiedLogs.' : '' ?>switchTab('usb')">
                 <i class="fas fa-usb"></i>
                 USB Logs
             </button>
@@ -584,6 +587,8 @@ ob_start();
 </div>
 
 <script>
+<?php if($embeddedLogBrowse): ?>(function(){<?php endif; ?>
+const unifiedLogPrefix=<?= json_encode($embeddedLogBrowse ? "unifiedLogs." : "") ?>;
 // Global variables
 let currentTab = 'browser';
 let currentPage = 1;
@@ -664,7 +669,7 @@ function switchTab(tab) {
     document.querySelectorAll('.log-tabs .nav-link').forEach(link => {
         link.classList.remove('active');
     });
-    const activeButton = Array.from(document.querySelectorAll('.log-tabs .nav-link')).find(button => button.getAttribute('onclick') === `switchTab('${tab}')`);
+    const activeButton = Array.from(document.querySelectorAll('.log-tabs .nav-link')).find(button => button.dataset.logTab === tab);
     if (activeButton) activeButton.classList.add('active');
     
     // Load logs for new tab
@@ -1384,7 +1389,7 @@ function updatePagination(pagination) {
     // Previous button
     paginationHtml += `
         <li class="page-item ${pagination.current_page === 1 ? 'disabled' : ''}">
-            <a class="page-link" href="#" onclick="changePage(${pagination.current_page - 1}); return false;">
+            <a class="page-link" href="#" onclick="${unifiedLogPrefix}changePage(${pagination.current_page - 1}); return false;">
                 <i class="fas fa-chevron-left"></i>
             </a>
         </li>
@@ -1402,7 +1407,7 @@ function updatePagination(pagination) {
     for (let i = startPage; i <= endPage; i++) {
         paginationHtml += `
             <li class="page-item ${i === pagination.current_page ? 'active' : ''}">
-                <a class="page-link" href="#" onclick="changePage(${i}); return false;">${i}</a>
+                <a class="page-link" href="#" onclick="${unifiedLogPrefix}changePage(${i}); return false;">${i}</a>
             </li>
         `;
     }
@@ -1410,7 +1415,7 @@ function updatePagination(pagination) {
     // Next button
     paginationHtml += `
         <li class="page-item ${pagination.current_page === pagination.total_pages ? 'disabled' : ''}">
-            <a class="page-link" href="#" onclick="changePage(${pagination.current_page + 1}); return false;">
+            <a class="page-link" href="#" onclick="${unifiedLogPrefix}changePage(${pagination.current_page + 1}); return false;">
                 <i class="fas fa-chevron-right"></i>
             </a>
         </li>
@@ -1453,9 +1458,36 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+<?php if($embeddedLogBrowse): ?>
+window.unifiedLogs = {
+    switchTab, applyFilters, clearFilters, removeScreenshots, changePage,
+    selectMonitor(id) {
+        const select=document.getElementById('deviceFilter');
+        if(select)select.value=String(id||'');
+        currentFilters.device_id=String(id||'');
+        currentPage=1;
+        loadStats();loadLogs();
+    },
+    setDates(from,to){
+        if(from)document.getElementById('startDate').value=from;
+        if(to)document.getElementById('endDate').value=to;
+        updateFilters();currentPage=1;loadStats();loadLogs();
+    },
+    refresh(){updateFilters();loadStats();loadLogs();},
+    getCurrentTab(){return currentTab;}
+};
+})();<?php endif; ?>
 </script>
-
-<?php
-$content = ob_get_clean();
+<?php if($embeddedLogBrowse): ?>
+<style>
+#unifiedLogPanel .logbrowse-container{padding:0;min-height:0;max-width:none;background:transparent}
+#unifiedLogPanel .filter-panel,#unifiedLogPanel .stats-panel,#unifiedLogPanel .log-tabs{display:none!important}
+#unifiedLogPanel .content-panel{margin:0;padding:0;box-shadow:none;border:0;border-radius:0}
+#unifiedLogPanel .log-table-container{margin:0;padding:4px}
+#unifiedLogPanel .logbrowse-container .pagination-panel{padding:7px}
+#unifiedLogPanel .key-timeline-wrapper{padding:6px}
+</style>
+<?php else:
+$content=ob_get_clean();
 include BASEPATH . 'app/views/layouts/main.php';
-?>
+endif; ?>
