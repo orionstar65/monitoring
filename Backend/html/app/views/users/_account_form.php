@@ -43,7 +43,7 @@ $role=$_POST['role']??($current['role']??ROLE_USER);
                         <?php else: ?>
                         <input type="text" id="role" class="form-control" value="User" readonly>
                         <?php endif; ?>
-                        <div class="form-text">Admin sees assigned users and their monitors. Super Admin manages all accounts and destructive actions.</div>
+                        <div class="form-text">Admin sees their own monitors plus assigned users and those users' monitors. Super Admin manages all accounts and destructive actions.</div>
                     </div>
                     <?php if($superAdmin): ?>
                     <div class="col-md-6">
