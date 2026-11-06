@@ -189,7 +189,7 @@ class Cleanup extends Base {
             return ['error' => 'A valid start date and end date (YYYY-MM-DD) are required'];
         }
 
-        if (strtotime($start_date) > strtotime($end_date)) {
+        if ($start_date > $end_date) {
             return ['error' => 'Start date must not be after end date'];
         }
 
