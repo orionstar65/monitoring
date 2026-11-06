@@ -37,6 +37,22 @@ if ($mysqli->connect_error) {
 
 // Initialize database service
 $dbService = new DatabaseService($mysqli);
+// Record every request, including validation/auth failures that exit early.
+// Only route, request type, IP, status and elapsed time are retained.
+$loggedRequestType=substr((string)($_GET['type']??'unknown'),0,50);
+register_shutdown_function(static function() use ($dbService,$start_time,&$loggedRequestType):void {
+    try{
+        $code=http_response_code();
+        $dbService->logApiRequest('/webapi.php',
+            (string)($_SERVER['REQUEST_METHOD']??'GET'),
+            (string)($_SERVER['REMOTE_ADDR']??''),
+            is_int($code)&&$code>=100?$code:200,
+            (microtime(true)-$start_time)*1000,
+            $loggedRequestType);
+    }catch(Throwable $error){
+        error_log('API request logging shutdown failed: '.$error->getMessage());
+    }
+});
 $monitorId=requireClientMonitorOrLegacy($mysqli,(string)($_POST['mac_address']??''));
 $dbService->setAuthenticatedMonitorId($monitorId);
 $uploadErrorMessage='Failed to upload screenshot';
@@ -276,6 +292,7 @@ if($request_type_param==='' && isset($_FILES['imagefile']) &&
 $clientIP = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'POST';
 $log_request_type = null; // Will be set based on the request type
+$loggedRequestType=$request_type_param ?: 'unknown';
 
 // Do not let client-provided IDs override the selected monitor from its session.
 $claimedId=filter_var($_POST['monitor_id']??null,FILTER_VALIDATE_INT);
@@ -286,6 +303,7 @@ if ($macAddress === '') {
     $macAddress = null;
 }
 
+$loggedRequestType=$request_type_param==='upload'?'screenshot':($request_type_param ?: 'unknown');
 switch ($request_type_param) {
     case 'upload':
         $log_request_type = 'screenshot';
@@ -323,19 +341,4 @@ switch ($request_type_param) {
         break;
 }
 
-// Calculate response time
-$response_time_ms = (microtime(true) - $start_time) * 1000;
-
-// Get HTTP status code
-$status_code = http_response_code();
-if ($status_code === false) {
-    $status_code = 200; // Default to 200 if not set
-}
-
-// Log API request with request type (include MAC address in format: MAC/IP)
-// Disabled: daily API log table was for debugging only
-// $dbService->logApiRequest('/webapi.php', $method, $clientIP, $status_code, $response_time_ms, $log_request_type, $macAddress);
-
-// Close database connection
-$mysqli->close();
 ?> 
