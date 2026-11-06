@@ -51,6 +51,22 @@ $checks=[
  'Log management old route redirects to unified view'=>str_contains($view,"redirect('view?tab=browser'"),
  'Admin sidebar has only unified monitoring entry'=>!str_contains($layout,'<span>Log Browse</span>')
      &&!str_contains($layout,'<span>Merge Logs</span>'),
+ 'Browser and Keyboard tabs require an explicit monitor in embedded workspace'=>str_contains($browse,'if(isEmbeddedMonitoring&&!currentFilters.device_id)')
+     &&str_contains($browse,'showSelectMonitorNotice()')&&str_contains($browse,'!isEmbeddedMonitoring || currentFilters.device_id'),
+ 'Log API paginates on the server and uses lightweight count queries'=>substr_count($read('Backend/html/app/controllers/Logbrowse.php'),'LIMIT :limit OFFSET :offset')>=3
+     &&str_contains($read('Backend/html/app/controllers/Logbrowse.php'),'FROM key_logs k'."\n                      {\$where_clause}")
+     &&str_contains($read('Backend/html/app/controllers/Logbrowse.php'),'ORDER BY k.key_date DESC,k.id DESC'),
+ 'Date preset selector defaults to today'=>str_contains($live,'id="unifiedDatePreset"')&&str_contains($live,'value="today" selected')
+     &&str_contains($live,'unifiedPresetRange(preset,now=new Date())')&&str_contains($live,"case 'last_30_days'"),
+ 'Status pill has exactly one generated indicator'=>str_contains($live,'monitor-status-indicator')
+     &&!str_contains($live,'class="pulse"')&&!str_contains($live,'class="fas fa-circle"'),
+ 'Screenshot history has one compact toolbar'=>str_contains($live,'class="history-toolbar"')
+     &&str_contains($live,'.history-ruler.key-cctv-ruler{height:93px}')
+     &&str_contains($live,'class="history-date-field" for="historyFrom"'),
+ 'Screenshot right transcript offers nearest-key fallback'=>str_contains($live,'historyNearestKeyboardBucket()')
+     &&str_contains($live,'historyJumpToKeyboard')&&str_contains($live,'rangeStart:ms-900000,rangeEnd:ms+900000'),
+ 'Special keys are only shown once, with recorded event provenance'=>!str_contains($shared,'Other key events')
+     &&str_contains($shared,'recorded event #')&&str_contains($read('Backend/html/app/controllers/Logbrowse.php'),'k.id AS event_id'),
  'Desktop device labels show #id'=>str_contains($read('Windows/MonitorClient.cpp'),'std::to_string(id)')
      &&str_contains($read('Mac/MonitorClient/AppDelegate.swift'),'#\\(id)')
      &&str_contains($read('Ubuntu/ConfigDialog.cpp'),'#%4'),
