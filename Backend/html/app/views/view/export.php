@@ -535,7 +535,7 @@ async function loadDevices() {
 }
 
 function escapeDeviceLabel(device) {
-    const identity = `${device.user_no || '—'}(${device.username || 'Unassigned'}): ${device.last_seen_ip || device.ip_address || '—'} : ${device.platform || 'Unknown OS'}-${device.type || 'Device'}`;
+    const identity = `${device.user_no || '—'}(${device.username || 'Unassigned'}): ${device.last_seen_ip || device.ip_address || '—'} : ${device.platform || 'Unknown OS'}-${device.type || 'Device'} #${Number(device.id)}`;
     return identity.replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
 
