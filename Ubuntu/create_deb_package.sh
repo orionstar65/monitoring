@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Ubuntu MonitorClient Debian Package Builder
-# Version: 1.31
+# Version: prompted at release time
 
 set -e
 
@@ -289,11 +289,13 @@ cat > "${PACKAGE_DIR}/DEBIAN/prerm" << 'EOF'
 #!/bin/bash
 set -e
 
-# Stop and disable service
-systemctl --user stop monitorclient.service 2>/dev/null || true
-systemctl --user disable monitorclient.service 2>/dev/null || true
-
-# Reload systemd
+# During upgrade, preserve the user's service enablement and data.
+case "${1:-}" in
+  remove|deconfigure)
+    systemctl --user stop monitorclient.service 2>/dev/null || true
+    systemctl --user disable monitorclient.service 2>/dev/null || true
+    ;;
+esac
 systemctl daemon-reload
 EOF
 
@@ -304,14 +306,17 @@ cat > "${PACKAGE_DIR}/DEBIAN/postrm" << 'EOF'
 #!/bin/bash
 set -e
 
-# Clean up any remaining files
-rm -rf /opt/monitorclient 2>/dev/null || true
-rm -f /usr/share/applications/MonitorClient.desktop 2>/dev/null || true
-rm -f /etc/xdg/autostart/MonitorClient.desktop 2>/dev/null || true
-rm -f /etc/systemd/user/monitorclient.service 2>/dev/null || true
-rm -f /etc/logrotate.d/monitorclient 2>/dev/null || true
-# Update desktop database
-update-desktop-database /usr/share/applications
+# Debian invokes an old version's postrm during upgrades. Never remove
+# files from a freshly unpacked new version in that transition.
+case "${1:-}" in
+  remove|purge)
+    rm -f /usr/share/applications/MonitorClient.desktop 2>/dev/null || true
+    rm -f /etc/xdg/autostart/MonitorClient.desktop 2>/dev/null || true
+    rm -f /etc/systemd/user/monitorclient.service 2>/dev/null || true
+    rm -f /etc/logrotate.d/monitorclient 2>/dev/null || true
+    update-desktop-database /usr/share/applications 2>/dev/null || true
+    ;;
+esac
 EOF
 
 chmod +x "${PACKAGE_DIR}/DEBIAN/postrm"
