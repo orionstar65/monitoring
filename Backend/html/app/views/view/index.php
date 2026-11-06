@@ -649,6 +649,7 @@ ob_start();
 .history-transcript-period{padding:4px 9px 5px;color:var(--bs-secondary-color);font-size:.69rem;border-bottom:1px solid var(--bs-border-color);font-variant-numeric:tabular-nums}
 .history-transcript-body{flex:1;min-height:0;overflow-y:auto;padding:7px 9px 11px;scrollbar-width:thin;overscroll-behavior:contain}
 .history-nearest-key{margin:2px 9px;padding:2px 0;font-size:.73rem;text-align:left}
+.history-nearest-key[hidden]{display:none!important}
 .history-transcript .key-transcript{display:grid;grid-template-columns:56px 75px minmax(0,1fr);gap:3px 5px;align-items:start}
 .history-transcript .key-transcript-content{overflow-wrap:anywhere;min-width:0;line-height:1.5}
 .history-bottom{padding:5px 8px 6px;min-height:0}
