@@ -1560,6 +1560,25 @@ let liveScreenshotSnapshot=[];
 let liveScreenshotSelection='';
 let liveScreenshotUpdatedAt=0;
 const BASE_IMAGE_URL=<?php echo json_encode(BASE_URL); ?>;
+
+// The portal's date inputs are calendar days in the viewer's own timezone.
+// Convert each local midnight separately, so DST days span 23 or 25 hours.
+function localCalendarMidnightUtc(day,exclusiveNext=false) {
+    const match=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day||''));
+    if(!match)return null;
+    const year=Number(match[1]),month=Number(match[2]),date=Number(match[3]);
+    const local=new Date(year,month-1,date+(exclusiveNext?1:0));
+    if(!Number.isFinite(local.getTime()) ||
+       new Date(year,month-1,date).getMonth()!==month-1)return null;
+    return local.toISOString();
+}
+function appendLocalCalendarUtcBounds(params,start=window.headerStartDate,end=window.headerEndDate) {
+    const from=start?localCalendarMidnightUtc(start):null;
+    const to=end?localCalendarMidnightUtc(end,true):null;
+    if(from)params.set('start_utc',from);
+    if(to)params.set('end_utc',to);
+}
+
 function attachScreenshotImageFallback(scope) {
     scope.find('img[data-full-image]').on('error', function() {
         const full = this.getAttribute('data-full-image');
@@ -1954,6 +1973,7 @@ function loadScreenshots(page = 1) {
     }
     if(window.headerStartDate)params.append('start_date',window.headerStartDate);
     if(window.headerEndDate)params.append('end_date',window.headerEndDate);
+    appendLocalCalendarUtcBounds(params);
     
     $.ajax({
         url: "<?php echo BASE_URL; ?>view/api_screenshots?" + params.toString(),
@@ -2174,7 +2194,8 @@ function loadScreenshotsForMonitor(monitorId, page = 1) {
     if (window.headerEndDate) {
         params.append('end_date', window.headerEndDate);
     }
-    
+    appendLocalCalendarUtcBounds(params);
+
     console.log('Loading screenshots with params:', params.toString());
     
     $.ajax({
@@ -2560,8 +2581,15 @@ let historyState=null,historySeq=0,historyKeySeq=0,historyVisibleSeq=0,historyVi
 
 function historyMillis(value){
     if(typeof value==='number')return value>100000000000?value:value*1000;
-    const match=String(value||'').match(/^(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d):(\d\d)/);
-    return match?new Date(+match[1],+match[2]-1,+match[3],+match[4],+match[5],+match[6]).getTime():NaN;
+    const raw=String(value||'');
+    const match=raw.match(/^(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d):(\d\d)$/);
+    // A bare DATETIME from MySQL is UTC, not a browser-local timestamp.
+    if(match)return Date.UTC(+match[1],+match[2]-1,+match[3],+match[4],+match[5],+match[6]);
+    const absolute=Date.parse(raw);
+    return Number.isFinite(absolute)?absolute:NaN;
+}
+function historyUtcClock(ms){
+    return new Date(ms).toISOString().slice(0,19).replace('T',' ');
 }
 function historyClock(ms,withDate=false){
     const date=new Date(ms);
@@ -2755,10 +2783,14 @@ function historySeek(time,load=true){
 }
 async function historyLoadDomain(){
     const state=historyState;if(!state)return;
-    const seq=++historySeq,from=historyClock(state.start,true),to=historyClock(state.end,true);
+    const seq=++historySeq,from=historyUtcClock(state.start),to=historyUtcClock(state.end);
     $('#historyTimelineStatus').text('Loading screenshot and keyboard activity…');
     const shotsParams=new URLSearchParams({monitor_id:String(state.monitor),from,to});
-    const keysParams=new URLSearchParams({device_id:String(state.monitor),start_date:from.slice(0,10),end_date:to.slice(0,10)});
+    const keysParams=new URLSearchParams({device_id:String(state.monitor),
+        start_date:historyClock(state.start,true).slice(0,10),
+        end_date:historyClock(state.end,true).slice(0,10),
+        start_utc:new Date(state.start).toISOString(),
+        end_utc:new Date(state.end).toISOString()});
     const getJson=async url=>{
         const response=await fetch(url,{credentials:'same-origin'});
         if(!response.ok)throw new Error('HTTP '+response.status);
@@ -2810,10 +2842,10 @@ async function historyLoadVisibleShots(){
     const from=state.start+left/state.width*span;
     const to=state.start+right/state.width*span;
     if(to<=from)return;
-    const key=String(state.monitor)+'|'+historyClock(from,true)+'|'+historyClock(to,true);
+    const key=String(state.monitor)+'|'+historyUtcClock(from)+'|'+historyUtcClock(to);
     if(state.visibleCacheKey===key)return;
     const sequence=++historyVisibleSeq;
-    const params=new URLSearchParams({monitor_id:String(state.monitor),from:historyClock(from,true),to:historyClock(to,true)});
+    const params=new URLSearchParams({monitor_id:String(state.monitor),from:historyUtcClock(from),to:historyUtcClock(to)});
     try{
         const response=await fetch(historyBase+'view/api_screenshot_timeline?'+params,{credentials:'same-origin'});
         if(!response.ok)throw new Error('HTTP '+response.status);
@@ -2849,7 +2881,7 @@ async function historyLoadTranscript(){
     const panel=$('#historyTranscriptBody').text('Loading recorded keys…');
     const jump=$('#historyJumpToKeyboard').prop('hidden',true);
     $('#historyTranscriptInfo').text('');
-    const from=historyClock(state.rangeStart,true),to=historyClock(state.rangeEnd,true);
+    const from=historyUtcClock(state.rangeStart),to=historyUtcClock(state.rangeEnd);
     const params=new URLSearchParams({device_id:String(state.monitor),from,to});
     try{
         const response=await fetch(historyBase+'logbrowse/api_key_context?'+params,{credentials:'same-origin'});
@@ -2945,8 +2977,8 @@ $(document).on('click','#historyTimelineRuler [data-history-shot]',function(){
 });
 $(document).on('change','#historyFrom,#historyTo',function(){
     const state=historyState;if(!state)return;
-    const from=historyMillis($('#historyFrom').val().replace('T',' '));
-    const to=historyMillis($('#historyTo').val().replace('T',' '));
+    const from=new Date($('#historyFrom').val()).getTime();
+    const to=new Date($('#historyTo').val()).getTime();
     if(!Number.isFinite(from)||!Number.isFinite(to)||from>=to||to-from>86400000){
         $('#historyTimelineStatus').text('Choose a valid time range no longer than 24 hours.');
         historyUpdateVisual();return;
