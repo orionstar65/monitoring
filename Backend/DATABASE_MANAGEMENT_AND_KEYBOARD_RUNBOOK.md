@@ -37,6 +37,21 @@ The feature caps compressed restores at 512 MiB and expanded SQL at 3 GiB.
 For larger databases, use audited command-line \`mysqldump\`/\`mysql\`
 maintenance procedures rather than increasing limits arbitrarily.
 
+## Optional retention performance migration
+
+For large keyboard and USB event tables, apply the idempotent composite
+`created_at,id` indexes during a **database maintenance window**:
+
+```bash
+cd /var/monitor
+sudo mysql monitoring_db < Backend/migrations/2026_11_06_retention_created_at_indexes.sql
+```
+
+Building these indexes can temporarily consume substantial disk, CPU and
+database I/O. The browser history table already has an index on
+`created_at`. The cleanup feature works without the additional indexes,
+but may be slower on large tables.
+
 ## Database Management page
 
 The status table lists every base table in the configured database:
