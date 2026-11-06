@@ -145,6 +145,16 @@ class Users extends Base {
                     }
                     
                     if ($result > 0 || !$dataChanged) {
+                        if($role!==$user['role']){
+                            // Do not resurrect stale delegations when a user is
+                            // demoted then later re-promoted to Admin, or when an
+                            // assigned regular user changes role and changes back.
+                            $this->db->query(
+                                'DELETE FROM admin_user_assignments
+                                 WHERE admin_user_id=:admin OR managed_user_id=:managed',
+                                ['admin'=>$id,'managed'=>$id]
+                            );
+                        }
                         if(!empty($password) || $role!==$user['role']){
                             $this->db->query(
                                 'UPDATE client_sessions SET revoked_at=NOW() WHERE user_id=:id AND revoked_at IS NULL',
