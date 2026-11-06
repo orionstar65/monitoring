@@ -1667,22 +1667,11 @@ void MonitorClient::scheduleConnectionTest(const QString &busyMessage,
 
 void MonitorClient::onTrayIconActivated(QSystemTrayIcon::ActivationReason reason)
 {
-    if (reason == QSystemTrayIcon::DoubleClick)
-        scheduleConnectionTest(QStringLiteral("Testing connection…"),
-            [this](bool ok) {
-                if (!trayIcon)
-                    return;
-                if (ok)
-                    notifyTray(QStringLiteral("Connection"),
-                                          QStringLiteral("Server reachable."),
-                                          QSystemTrayIcon::Information, 2500);
-                else
-                    notifyTray(QStringLiteral("Connection"),
-                                          lastError,
-                                          QSystemTrayIcon::Warning, 5000);
-            });
+    // The tray context menu remains available on right-click. Double-click
+    // now opens the unified Settings window instead of sending a test ping.
+    if(reason==QSystemTrayIcon::DoubleClick)
+        onConfigureAction();
 }
-
 
 
 void MonitorClient::onSendAllAction()
