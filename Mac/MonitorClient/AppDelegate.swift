@@ -2825,7 +2825,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         logo.widthAnchor.constraint(equalToConstant: 43).isActive = true
         logo.heightAnchor.constraint(equalToConstant: 43).isActive = true
         brand.addArrangedSubview(logo)
-        let version = text("MonitorClient · v1.5")
+        let version = text("MonitorClient · v\(APP_VERSION)")
         version.textColor = .secondaryLabelColor
         brand.addArrangedSubview(version)
         stack.addArrangedSubview(brand)
