@@ -520,6 +520,7 @@ if (!$embeddedLogBrowse) {
         <?php endif; ?>
     </div>
 
+    <?php if(!$embeddedLogBrowse): ?>
     <!-- Stats Panel -->
     <div class="stats-panel">
         <h5>
@@ -546,6 +547,7 @@ if (!$embeddedLogBrowse) {
         </div>
     </div>
 
+    <?php endif; ?>
     <!-- Content Panel -->
     <div class="content-panel">
         <!-- Tabs -->
