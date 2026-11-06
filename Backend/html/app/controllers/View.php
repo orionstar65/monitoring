@@ -42,6 +42,30 @@ class View extends Base {
     // logs_detail method removed - use database-based logs() method instead
     
 
+    /** Settings panel data: admin-only, existing monitor plus same-owner merge targets. */
+    public function api_monitor_settings() {
+        $this->requireAdmin();
+        $id=filter_var($_GET['monitor_id']??null,FILTER_VALIDATE_INT);
+        if(!$id){http_response_code(400);$this->json(['success'=>false,'error'=>'Select a monitor']);}
+        $monitor=$this->db->fetch(
+            'SELECT m.*,u.user_no,u.name AS username FROM tbl_monitor_ips m
+             LEFT JOIN users u ON u.id=m.owner_user_id WHERE m.id=:id',
+            ['id'=>$id]
+        );
+        if(!$monitor){http_response_code(404);$this->json(['success'=>false,'error'=>'Monitor not found']);}
+        $users=$this->db->fetchAll(
+            'SELECT u.id,u.user_no,u.name,
+                (SELECT COUNT(*) FROM tbl_monitor_ips t WHERE t.owner_user_id=u.id) AS device_count
+             FROM users u ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id'
+        );
+        $targets=!empty($monitor['owner_user_id'])?$this->db->fetchAll(
+            'SELECT id,ip_address,last_seen_ip,platform,type FROM tbl_monitor_ips
+             WHERE owner_user_id=:owner AND id<>:id ORDER BY id',
+            ['owner'=>$monitor['owner_user_id'],'id'=>$id]
+        ):[];
+        $this->json(['success'=>true,'monitor'=>$monitor,'users'=>$users,'merge_targets'=>$targets]);
+    }
+
     /** Bounded monitor-specific screenshot history for the interactive viewer. */
     public function api_screenshot_timeline() {
         $id=filter_var($_GET['monitor_id']??null,FILTER_VALIDATE_INT);
