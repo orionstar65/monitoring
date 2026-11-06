@@ -590,8 +590,8 @@ ob_start();
 .history-timeline-image.is-active{border:2px solid var(--bs-danger,#e45858)}
 .history-shot-marker{position:absolute;top:47px;width:5px;height:9px;transform:translateX(-50%);border-radius:4px;background:var(--bs-info,#2a9eca);border:0;padding:0;cursor:pointer;z-index:3}
 .history-shot-marker.is-active{background:var(--bs-danger,#e45858)}
-.history-ruler .key-cctv-playhead{height:116px;top:4px;z-index:6;cursor:ew-resize;pointer-events:auto;background:var(--bs-danger,#e45858);padding:0;border:0;outline-offset:3px;width:3px}
-.history-ruler .key-cctv-playhead::before{top:0;border-top-color:var(--bs-danger,#e45858);pointer-events:none}
+.history-ruler .key-cctv-playhead{height:116px;top:4px;z-index:6;cursor:ew-resize;pointer-events:auto;background:linear-gradient(90deg,transparent calc(50% - 1.5px),var(--bs-danger,#e45858) calc(50% - 1.5px),var(--bs-danger,#e45858) calc(50% + 1.5px),transparent calc(50% + 1.5px));padding:0;border:0;outline-offset:3px;width:18px}
+.history-ruler .key-cctv-playhead::before{left:calc(50% - 7px);top:0;border-top-color:var(--bs-danger,#e45858);pointer-events:none}
 .history-ruler .key-cctv-playhead::after{content:"";position:absolute;inset:0 -9px;z-index:-1}
 .history-ruler.is-dragging{cursor:grabbing!important}
 .history-transport{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
