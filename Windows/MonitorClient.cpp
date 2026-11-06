@@ -2628,6 +2628,8 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
                 selectedMonitorId.store(chosen);
                 if(!keyboardHook)setupKeyboardHook();
                 if(!usbMonitoringActive)setupUSBMONITORING();
+                // Confirm the new backend binding immediately, without blocking UI.
+                std::thread([]{sendTicEvent();}).detach();
             }
             if(chosen>0&&!settingsEditing){
                 updateUnifiedVisibility(dlg);return TRUE;
@@ -2657,6 +2659,9 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
                         "Monitor Settings",MB_OK|MB_ICONERROR);return TRUE;
                 }
                 selectedMonitorId.store(created);
+                if(!keyboardHook)setupKeyboardHook();
+                if(!usbMonitoringActive)setupUSBMONITORING();
+                std::thread([]{sendTicEvent();}).detach();
             }
             refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);
             updateTrayIcon();return TRUE;
