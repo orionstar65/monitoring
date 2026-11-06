@@ -2261,7 +2261,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         
         // Get current timestamp for ctime parameter
         let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssXXXXX"
+        formatter.timeZone = .current
         let currentTime = formatter.string(from: Date())
         
         // Get computer name for com_name parameter
