@@ -299,8 +299,10 @@ void MonitorClient::processUsbEvent(struct udev_device* dev)
         usbDeviceInfo[syspath] = deviceInfo;  // Store device info
         QJsonObject entryObj;
         entryObj["date"] = timestamp;
-        entryObj["device_name"] = "Connected: " + deviceInfo;
-        entryObj["action"] = "Nothing";  // Indicate this is a connection event
+        entryObj["device_name"] = deviceInfo;
+        entryObj["device_path"] = QString::fromUtf8(syspath);
+        entryObj["device_type"] = "USB Device";
+        entryObj["action"] = "Connected";
 
         usbLogs.append(entryObj);
         emit usbEvent();
@@ -309,8 +311,10 @@ void MonitorClient::processUsbEvent(struct udev_device* dev)
         usbDeviceInfo.remove(syspath);  // Remove from map
         QJsonObject entryObj;
         entryObj["date"] = timestamp;
-        entryObj["device_name"] = "Disconnected: " + deviceInfo;
-        entryObj["action"] = "Nothing";  // Indicate this is a connection event
+        entryObj["device_name"] = deviceInfo;
+        entryObj["device_path"] = QString::fromUtf8(syspath);
+        entryObj["device_type"] = "USB Device";
+        entryObj["action"] = "Disconnected";
 
         usbLogs.append(entryObj);
         emit usbEvent();
