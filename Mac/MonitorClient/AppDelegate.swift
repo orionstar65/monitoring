@@ -2716,12 +2716,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             row.spacing = 8
             return row
         }
-        func rule() {
-            let divider = NSBox()
-            divider.boxType = .separator
-            divider.widthAnchor.constraint(equalToConstant: 450).isActive = true
-            stack.addArrangedSubview(divider)
-        }
         func action(_ title: String, _ key: String) -> NSButton {
             let button = NSButton(title: title, target: nil, action: nil)
             button.identifier = NSUserInterfaceItemIdentifier(key)
@@ -2741,8 +2735,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         version.textColor = .secondaryLabelColor
         brand.addArrangedSubview(version)
         stack.addArrangedSubview(brand)
-        rule()
-
         let server = section("Server Settings")
         let ipField = entry("Server address", value: (storage.string(forKey: "server-ip") ?? "").split(separator: ":").first.map(String.init) ?? "")
         let portField = entry("Port", value: storage.string(forKey: "server-port") ?? "8925")
@@ -2770,8 +2762,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         server.addArrangedSubview(line("Account", checkRow))
         // Sign Out is placed below after its control is constructed.
         stack.addArrangedSubview(server)
-        rule()
-
         let userPane = NSStackView()
         userPane.orientation = .vertical
         userPane.alignment = .leading
@@ -2846,7 +2836,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let saveRow = line("", save)
         monitorPane.addArrangedSubview(saveRow)
         stack.addArrangedSubview(monitorPane)
-        rule()
         let notifications = NSButton(checkboxWithTitle: "Show status notifications",
                                      target: nil, action: nil)
         notifications.state = self.notificationsEnabled ? .on : .off
