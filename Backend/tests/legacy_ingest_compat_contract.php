@@ -39,6 +39,8 @@ $checks=[
  'Ubuntu retries failed key logs'=>str_contains($ubuntu,'keyLogs.swap(pending)'),
  'Ubuntu retries failed USB logs'=>str_contains($ubuntu,'usbLogs.swap(pending)'),
  'Ubuntu retries failed browser history'=>str_contains($ubuntu,'browserHistories.swap(pending)'),
+ 'Ubuntu validates JSON acknowledgement'=>str_contains($ubuntu,'body.value("status").toString()=="success"'),
+ 'Ubuntu reports HTTP rejection without logging event payload'=>str_contains($ubuntu,'"[MonitorUpload]"')&&str_contains($ubuntu,'body.value("error").toString()'),
  'Ubuntu sends heartbeat while screen unavailable'=>str_contains($ubuntu,'screenAvailable')&&str_contains($ubuntu,'if (isInterruptionRequested()) return;'),
 ];
 $failed=0;
