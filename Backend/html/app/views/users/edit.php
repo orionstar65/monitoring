@@ -1,53 +1,54 @@
 <?php
-$title = 'Edit User - ' . APP_NAME;
-$active_page = 'users';
-$page_title = 'Edit User';
+$title='Edit User - '.APP_NAME;
+$active_page='users';
+$page_title='Edit User';
 ob_start();
+$userFormMode='edit';
+include __DIR__.'/_account_form.php';
 ?>
-<div class="card">
+<?php if(($_SESSION['role']??'')===ROLE_SUPER_ADMIN && $user['role']===ROLE_SCOPED_ADMIN):
+    $assignableUsers=$this->db->fetchAll(
+        'SELECT id,user_no,name FROM users WHERE role=:role ORDER BY CAST(user_no AS UNSIGNED),name,id',
+        ['role'=>ROLE_USER]);
+    $assignedRows=$this->db->fetchAll(
+        'SELECT managed_user_id FROM admin_user_assignments WHERE admin_user_id=:admin',
+        ['admin'=>$user['id']]);
+    $assignedIds=array_map('intval',array_column($assignedRows,'managed_user_id'));
+?>
+<div class="card shadow-sm mb-3" style="max-width:900px">
+    <div class="card-header bg-transparent py-2"><strong>Assigned users</strong></div>
     <div class="card-body">
-        <form method="POST" action="<?php echo BASE_URL; ?>users/edit/<?php echo $user['id']; ?>">
-            <div class="mb-3">
-                <label class="form-label">User No
-                <input class="form-control font-monospace" type="text" inputmode="numeric" pattern="[1-9][0-9]{0,14}" maxlength="15" name="user_no" required value="<?= htmlspecialchars($user['user_no']??'',ENT_QUOTES,'UTF-8') ?>"></label>
-                <div class="form-text">Unique numeric User No. Administrators can update it; desktop selectors will use the new number.</div>
+        <p class="small text-muted mb-2">This Admin can inspect logs and update account or monitor details only for the selected users. Assignments take effect immediately.</p>
+        <form method="post" action="<?= BASE_URL ?>users/assign_users/<?= (int)$user['id'] ?>">
+            <input type="search" class="form-control form-control-sm mb-2" id="assignedUserSearch" placeholder="Find user by number or name" aria-label="Filter assignable users">
+            <div class="row g-2" style="max-height:260px;overflow:auto" id="assignedUserChecks">
+                <?php foreach($assignableUsers as $account):
+                    $label=($account['user_no']??'—').': '.($account['name']??'');
+                ?>
+                <label class="col-md-4 col-sm-6 assigned-user-option">
+                    <span class="d-flex gap-2 align-items-center border rounded p-2 small">
+                        <input type="checkbox" name="managed_user_ids[]" value="<?= (int)$account['id'] ?>" <?= in_array((int)$account['id'],$assignedIds,true)?'checked':'' ?>>
+                        <span><?= htmlspecialchars($label,ENT_QUOTES,'UTF-8') ?></span>
+                    </span>
+                </label>
+                <?php endforeach; ?>
             </div>
-            <div class="mb-3"><label class="form-label">Full name<input class="form-control" name="name" maxlength="150" value="<?= htmlspecialchars($user['name']??'',ENT_QUOTES,'UTF-8') ?>" required></label></div>
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Password (leave blank to keep current)</label>
-                        <input type="password" class="form-control" id="password" name="password" minlength="6" maxlength="1024" autocomplete="new-password">
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="mb-3">
-                        <label for="role" class="form-label">Role</label>
-                        <select class="form-select" id="role" name="role">
-                            <option value="<?php echo ROLE_USER; ?>" <?php echo $user['role'] === ROLE_USER ? 'selected' : ''; ?>>User</option>
-                            <option value="<?php echo ROLE_ADMIN; ?>" <?php echo $user['role'] === ROLE_ADMIN ? 'selected' : ''; ?>>Admin</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="d-flex justify-content-between">
-                <a href="<?php echo BASE_URL; ?>users" class="btn btn-secondary">Cancel</a>
-                <button type="submit" class="btn btn-primary">Update User</button>
-            </div>
-            
-            <?php if (isset($error)): ?>
-                <div class="alert alert-danger mt-3">
-                    <?php echo htmlspecialchars($error); ?>
-                </div>
-            <?php endif; ?>
-            
-
+            <div class="text-end mt-2"><button class="btn btn-sm btn-primary" type="submit">Save assignments</button></div>
         </form>
     </div>
 </div>
-
-<?php if((int)$user['id']!==(int)($_SESSION['user_id']??0)): ?>
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('assignedUserSearch')?.addEventListener('input',event=>{
+    const query=event.target.value.toLocaleLowerCase();
+    document.querySelectorAll('#assignedUserChecks .assigned-user-option').forEach(element=>{
+      element.hidden=!element.textContent.toLocaleLowerCase().includes(query);
+    });
+  });
+});
+</script>
+<?php endif; ?>
+<?php if(($_SESSION['role']??'')===ROLE_SUPER_ADMIN && (int)$user['id']!==(int)($_SESSION['user_id']??0)): ?>
 <div class="card mt-3">
  <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
   <div>
@@ -114,6 +115,7 @@ ob_start();
        <td><?= $esc($monitor['remark']??'—') ?></td>
        <td><?= !empty($monitor['settings_locked'])||!empty($monitor['assignment_locked'])?'<span class="badge bg-warning text-dark">Locked</span>':'<span class="badge bg-light text-dark">Unlocked</span>' ?></td>
        <td>
+        <?php if(($_SESSION['role']??'')===ROLE_SUPER_ADMIN): ?>
         <form method="post" class="d-flex gap-2 align-items-center" action="<?= BASE_URL ?>users/remap_monitor/<?= (int)$user['id'] ?>" onsubmit="return confirm('Change this monitor assignment? This revokes its desktop session.')">
           <input type="hidden" name="monitor_id" value="<?= (int)$monitor['id'] ?>">
           <select class="form-select form-select-sm" name="owner_user_id" aria-label="Remap monitor">
@@ -125,6 +127,7 @@ ob_start();
           <button type="submit" class="btn btn-sm btn-primary">Apply</button>
           <button type="submit" class="btn btn-sm btn-outline-danger" onclick="this.form.querySelector('select[name=owner_user_id]').value=''" title="Unlink monitor">Unlink</button>
         </form>
+        <?php else: ?><a class="btn btn-sm btn-outline-secondary" href="<?= BASE_URL ?>monitors/edit/<?= (int)$monitor['id'] ?>">Edit monitor</a><?php endif; ?>
        </td>
      </tr>
     <?php endforeach; ?>
