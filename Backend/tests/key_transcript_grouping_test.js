@@ -43,4 +43,32 @@ assert(!xss.includes('<script>')&&!xss.includes('<img>'),
     'Application names and key labels must escape HTML');
 assert(render([],esc).includes('No keyboard events'),
     'Empty selections should show a clear empty state');
-console.log('PASS grouped application headings, timestamp rows, repeat counts, ID deduplication and escaping');
+
+// Visible Backspace markers are redundant when the affected characters are
+// already struck through. Check both the single-character and word variants.
+const deleted=render([
+    [10,'h'],[11,'i'],[12,'Backspace'],[13,'Ctrl+Backspace']
+].map(([event_id,key_pressed])=>({
+    event_id,key_pressed,key_date:'2026-11-06 12:30:00',application:'Editor'
+})),esc);
+assert.equal((deleted.match(/class="key-deleted"/g)||[]).length,2,
+    'Each Backspace must strike through the corresponding character');
+assert(!deleted.includes('⌫'),
+    'Do not render a Backspace glyph in addition to the strikethrough');
+assert(!deleted.includes('>Backspace</span>'),
+    'Successfully applied Backspace must not produce a duplicate badge');
+const unmatched=render([{event_id:14,key_pressed:'Backspace',
+    key_date:'2026-11-06 12:30:00',application:'Editor'}],esc);
+assert(unmatched.includes('>Backspace</span>'),
+    'A Backspace with no preceding character should still be recorded as a labeled special key');
+
+// History overrides must not reintroduce the old three-column grid.
+const history=fs.readFileSync(path.resolve(__dirname,
+    '../html/app/views/view/index.php'),'utf8');
+const overrides=[...history.matchAll(/\.history-transcript \.key-transcript\{([^}]*)\}/g)];
+assert(overrides.length>=1,'History transcript CSS overrides missing');
+for(const match of overrides) {
+    assert(/grid-template-columns:\s*(?:56px|64px)\s+minmax\(0,1fr\)/.test(match[1]),
+        'History transcript must have only timestamp and content columns');
+}
+console.log('PASS app grouping, repeat counts, ID deduplication, escaping, 2-column history and Backspace strikethrough');
