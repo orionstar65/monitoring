@@ -5,7 +5,7 @@ The web dashboard has three roles:
 | Role | Data scope | Account/monitor management | Destructive actions |
 |---|---|---|---|
 | Super Admin (`super-admin`) | Every user and monitor | Full administration, including role/assignment management | Yes, including log and monitor deletion/merge |
-| Admin (`admin`) | Only explicitly assigned regular users and their monitors | View logs/screenshots, edit assigned users' profile data and monitor metadata | No deletion, merge, user creation/role changes, ownership transfers or password resets |
+| Admin (`admin`) | Own account and monitors, plus explicitly assigned regular users and their monitors | View logs/screenshots, edit assigned users' profile data and monitor metadata | No deletion, merge, user creation/role changes, ownership transfers or password resets |
 | User (`user`) | Own aggregate summaries | Existing nonprivileged functions | No |
 
 ## Before deploying
@@ -29,7 +29,7 @@ This migration **has not been executed on your server** by these commits.
 
 Sign in as a Super Admin. In **User Management**, create a user with role **Admin**, or edit an existing account's role. In **Edit User → Assigned users**, check the regular users they may manage and save. The server checks assignments on every request, including screenshot media and keyboard context endpoints; removing an assignment revokes new requests immediately.
 
-User-management and monitor-management pages list only assigned accounts/devices to that Admin. The Admin cannot grant itself additional access. The Settings tab hides the merge action and keeps ownership read-only.
+User-management and monitor-management pages show the Admin's own account/devices plus assigned regular users' accounts/devices. The Admin's own user row is read-only in User Management; profile-management permissions for assigned users remain unchanged. The Admin cannot grant itself access to unassigned users. The Settings tab hides the merge action and keeps ownership read-only.
 
 ## Verification before opening access
 
@@ -54,7 +54,7 @@ node Backend/tests/keyboard_history_toolbar_test.js
 
 **Live negative tests are mandatory before production use.** Create two regular users, each with a monitor and keyboard/browser records. Assign only one user to an Admin. Verify that the Admin:
 
-- Sees only assigned monitors in the left list, management tables and live status.
+- Sees their own monitors plus assigned users' monitors in the left list, management tables and live status, without duplicated entries.
 - Can edit assigned user's User No/full name and monitor type, OS, notes and lock. Cannot alter role, password or monitor ownership.
 - Receives HTTP 403 for unassigned monitor IDs when requesting screenshots, image files, navigation, timeline, keyboard context, browser logs, USB logs and settings.
 - Receives HTTP 403 when invoking delete, merge, user creation and password reset endpoints, even by manually issuing requests.
