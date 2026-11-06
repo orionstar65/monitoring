@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(MonitorClient)
+set(MONITORCLIENT_VERSION "1.5" CACHE STRING "MonitorClient runtime version")
 
 # Ubuntu/Linux-specific build configuration
 # Respect -DCMAKE_BUILD_TYPE from callers; prefer optimized releases by default.
@@ -78,6 +79,7 @@ target_link_libraries(MonitorClient
 # Ubuntu-specific compiler definitions
 target_compile_definitions(MonitorClient PRIVATE
     QT_DEPRECATED_WARNINGS
+    MONITORAPP_VERSION="${MONITORCLIENT_VERSION}"
     _GNU_SOURCE
 )
 
