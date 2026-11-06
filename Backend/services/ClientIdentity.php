@@ -113,10 +113,10 @@ function clientAuthenticatedSession(mysqli $db,bool $bound=true): ?array {
  * Explicit transitional bridge for already-installed v1.3 devices that cannot
  * send a bearer token. Disabled by default; never creates monitors or sessions.
  *
- * It requires (1) a direct private-LAN peer, (2) an exact source-IP entry in
- * MONITOR_LEGACY_V13_IPS, (3) precisely one existing assigned monitor whose
- * registered IP matches the peer, and (4) optional MAC equality when the
- * client supplied a MAC. Do not put a reverse proxy in front of this bridge.
+ * It requires (1) a direct private-LAN peer and (2)
+ * precisely one existing assigned monitor whose registered IP matches the
+ * peer, and optional MAC equality when the client supplied a MAC.
+ * Do not put a reverse proxy in front of this bridge.
  */
 function monitoringLegacyV13Monitor(mysqli $db, ?string $claimedMac = null): ?int {
     // Legacy clients lack tokens. Only uniquely registered direct-LAN peers may use this route.
