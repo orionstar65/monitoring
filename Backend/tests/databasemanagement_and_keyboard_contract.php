@@ -42,6 +42,16 @@ $checks=[
         str_contains($db,'-- MonitorClient DB Backup v1 database=') &&
         str_contains($db,"'RESTORE DATABASE'") &&
         str_contains($db,'monitor_backup_at'),
+    'Restore archive is byte-for-byte bound to the downloaded backup'=>
+        str_contains($db,"hash_file('sha256',\$file)") &&
+        str_contains($db,"hash_file('sha256',(string)\$upload['tmp_name'])") &&
+        str_contains($db,'hash_equals($expectedChecksum,$uploadedChecksum)') &&
+        str_contains($db,'monitor_backup_sha256'),
+    'Retained database restore notice survives the login session reset'=>
+        strpos($db,'session_unset();') < strrpos($db,"\$_SESSION['success_message']='Database restored."),
+    'Month-end preview uses clamped MySQL-style calendar subtraction'=>
+        str_contains($view,'const lastDay=new Date(cutoff.getFullYear(),cutoff.getMonth()+1,0).getDate()') &&
+        str_contains($view,'Math.min(today.getDate(),lastDay)'),
     'DB link belongs to the protected Super Admin sidebar section'=>
         str_contains($layout,'href="<?= BASE_URL ?>databasemanagement"')
         &&str_contains($layout,'<?php if($privileged): ?>'),
