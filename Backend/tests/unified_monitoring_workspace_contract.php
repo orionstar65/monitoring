@@ -16,6 +16,24 @@ $db=$read('Backend/html/app/services/DatabaseService.php');
 $monitor=$read('Backend/html/app/controllers/Monitors.php');
 $layout=$read('Backend/html/app/views/layouts/main.php');
 $checks=[
+ 'Monitoring overview uses consistent status groups and single update label'=>
+     str_contains($live,'id="liveSummary" class="monitoring-overview"')
+     &&str_contains($live,'class="monitoring-device-summary"')
+     &&str_contains($live,'class="monitoring-overview-actions"')
+     &&substr_count($live,'id="lastLiveRefresh"')===1,
+ 'Monitoring filter and screenshot toolbar retain existing JS bindings'=>
+     str_contains($live,'class="monitoring-filter-main"')
+     &&str_contains($live,'class="monitoring-filter-context"')
+     &&str_contains($live,'class="main-header monitoring-screenshot-header"')
+     &&str_contains($live,'class="monitoring-screenshot-actions"')
+     &&substr_count($live,'id="unifiedDatePreset"')===1
+     &&substr_count($live,'id="perPageSelect"')===1
+     &&substr_count($live,'id="screenshotCount"')===1,
+ 'Statistic values preserve their unique element IDs'=>
+     substr_count($live,'id="totalLogs"')===1
+     &&substr_count($live,'id="browserLogs"')===1
+     &&substr_count($live,'id="keyLogs"')===1
+     &&substr_count($live,'id="usbLogs"')===1,
  'Tabbed workspace includes Screenshots, Keyboard, Browser, USB, Settings'=>str_contains($live,'data-monitor-tab="screenshots"')
      &&str_contains($live,'data-monitor-tab="key"')&&str_contains($live,'data-monitor-tab="browser"')
      &&str_contains($live,'data-monitor-tab="usb"')&&str_contains($live,'data-monitor-tab="settings"'),
