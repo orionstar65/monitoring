@@ -9,6 +9,8 @@ $view=$read('Backend/html/app/controllers/View.php');
 $logs=$read('Backend/html/app/controllers/Logbrowse.php');
 $browser=$read('Backend/html/app/views/view/index.php');
 $logUI=$read('Backend/html/app/views/view/logbrowse.php');
+$cleanup=$read('Backend/html/app/controllers/Cleanup.php');
+$apiLogService=$read('Backend/html/app/services/DatabaseService.php');
 $ubuntu=$read('Ubuntu/MonitorClient.cpp');
 $mac=$read('Mac/MonitorClient/AppDelegate.swift');
 $windows=$read('Windows/MonitorClient.cpp');
@@ -89,6 +91,12 @@ $checks=[
     str_contains($ubuntu,'ctimePart.setBody(QDateTime::currentDateTime().toString(Qt::ISODate)') &&
     str_contains($mac,"formatter.dateFormat = \"yyyy-MM-dd'T'HH:mm:ssXXXXX\"") &&
     str_contains($windows,'formData += getWireDateTimeString()'),
+ 'Screenshot cleanup preview and deletion share the same UTC half-open bounds'=>
+    str_contains($cleanup,'monitorUtcBounds($input)') &&
+    str_contains($cleanup,'capture_datetime < :end_date') &&
+    str_contains($logUI,'appendBrowseUtcBounds(body)'),
+ 'API request-log partitions use UTC calendar days'=>
+    str_contains($apiLogService,"$".'date = gmdate('."'Y-m-d'".');'),
  'Hardcoded +10 hour browser time adjustments removed'=>
     !str_contains($ubuntu,"'+10:00'") && !str_contains($mac,"'+10:00'")
 ];
