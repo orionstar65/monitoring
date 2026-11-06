@@ -1405,6 +1405,10 @@ let filteredMonitors = [];
 let fullscreenShotMap = new Map();
 let visibleShotMap = new Map();
 let screenshotRequestSeq=0;
+let liveScreenshotSnapshot=[];
+let liveScreenshotSelection='';
+let liveScreenshotUpdatedAt=0;
+const BASE_IMAGE_URL=<?php echo json_encode(BASE_URL); ?>;
 function attachScreenshotImageFallback(scope) {
     scope.find('img[data-full-image]').on('error', function() {
         const full = this.getAttribute('data-full-image');
@@ -1448,16 +1452,13 @@ waitForJQuery(function() {
     });
     
     
-    // Auto-refresh every 30 seconds
+    // One timer supplies screenshot updates to normal and fullscreen cards.
     setInterval(function() {
-        if (isAutoRefresh) {
-            loadMonitors();
-            // Preserve current view - if single monitor is selected, keep showing historical screenshots
-            if (selectedMonitors.length === 1) {
-                loadScreenshotsForMonitor(selectedMonitors[0], currentPage);
-            } else {
-                loadScreenshots(currentPage);
-            }
+        if(!isAutoRefresh)return;
+        loadMonitors();
+        if(unifiedActiveTab==='screenshots'||$('#fullscreenModal').hasClass('show')){
+            const page=$('#fullscreenModal').hasClass('show')?1:currentPage;
+            loadScreenshotsForSelectedMonitor(page);
         }
     }, 30000);
     
@@ -1474,174 +1475,50 @@ waitForJQuery(function() {
         refreshFullscreenView();
     });
     
-    // Full Screen CCTV View Functions
-    let fullscreenRefreshInterval;
-    
+    // Main monitoring and fullscreen share the same screenshot response.
     function openFullscreenView() {
-        // Show loading state
-        $('#fullscreenContainer').html(`
-            <div class="d-flex justify-content-center align-items-center" style="height: 400px; grid-column: 1 / -1;">
-                <div class="text-center text-white">
-                    <i class="fas fa-spinner fa-spin fa-2x mb-3"></i>
-                    <div>Loading CCTV View...</div>
-                </div>
-            </div>
-        `);
-        
         $('#fullscreenModal').modal('show');
-        
-        // Load screenshots for fullscreen view
-        loadFullscreenScreenshots();
-        
-        // Start auto-refresh every 30 seconds
-        startFullscreenAutoRefresh();
+        const selection=selectedMonitors.join(',');
+        if(liveScreenshotSelection===selection&&liveScreenshotUpdatedAt
+            &&Date.now()-liveScreenshotUpdatedAt<30000){
+            displayFullscreenScreenshots(liveScreenshotSnapshot);
+        }else{
+            $('#fullscreenContainer').html('<div class="small text-white p-3">Loading screenshots…</div>');
+            loadScreenshotsForSelectedMonitor(1);
+        }
     }
-
     function loadFullscreenScreenshots() {
-        const params = new URLSearchParams({
-            page: 1,
-            per_page: 50, // Backend caps pagination at 50 records
-            format: 'fullscreen'
-        });
-        
-        // Add device filter if single monitor is selected
-        if (selectedMonitors.length === 1) {
-            params.append('monitor_id', selectedMonitors[0]);
-        }
-        
-        // Show loading indicator on refresh button
-        const refreshBtn = $('#refreshFullscreenBtn');
-        const originalIcon = refreshBtn.html();
-        refreshBtn.html('<i class="fas fa-spinner fa-spin"></i>');
-        
-        fetch(`<?php echo BASE_URL; ?>view/api_screenshots?${params}`)
-            .then(response => response.json())
-            .then(data => {
-                console.log('Fullscreen API response:', data); // Debug log
-                if (data.screenshots && data.screenshots.length > 0) {
-                    displayFullscreenScreenshots(data.screenshots);
-                    const now = new Date();
-                    const timeStr = now.toLocaleTimeString('en-US', { 
-                        hour12: false, 
-                        hour: '2-digit', 
-                        minute: '2-digit', 
-                        second: '2-digit' 
-                    });
-                    $('#fullscreenCount').text(`${data.screenshots.length} screenshots • Updated ${timeStr}`);
-                } else {
-                    showFullscreenError('No screenshots available');
-                }
-            })
-            .catch(error => {
-                console.error('Error loading fullscreen screenshots:', error);
-                showFullscreenError('Error loading screenshots');
-            })
-            .finally(() => {
-                // Restore refresh button icon
-                refreshBtn.html(originalIcon);
-            });
+        loadScreenshotsForSelectedMonitor(1);
     }
-
     function displayFullscreenScreenshots(screenshots) {
-        if (screenshots.length === 0) {
-            showFullscreenError('No screenshots available');
-            return;
-        }
-        
-        let html = '';
-        fullscreenShotMap = new Map();
-        screenshots.forEach(function(item) {
-            const monitor = item.monitor || {};
-            const thumbnailUrl = "<?php echo BASE_URL; ?>" + (item.thumbnail||item.screenshot||'');
-            const fullUrl = "<?php echo BASE_URL; ?>" + (item.screenshot||'');
-            const id = String(item.global_id||'');
-            fullscreenShotMap.set(id,{url:fullUrl,user:monitor.username||'Unknown User',
-                                      ip:monitor.ip_address||'—',time:String(item.modified||''),thumbnail:thumbnailUrl});
-            const live = allMonitors.find(m=>m.id===Number(monitor.id||monitor.monitor_id));
-            const state = live?.live_status || 'offline';
-            const statusClass = 'cctv-status-' + (['online','inactive','offline'].includes(state)?state:'offline');
-            const statusText = live?.status_text || 'Offline';
-            
-            html += `
-                <div class="cctv-screenshot-card" data-shot-id="${escapeViewerText(id)}"
-                     title="View screenshot">
-                    <div class="cctv-status-indicator ${statusClass}" title="Status: ${escapeViewerText(statusText)}"></div>
-                    <img src="${escapeViewerText(thumbnailUrl)}" data-full-image="${escapeViewerText(fullUrl)}" alt="Screenshot" loading="lazy">
-                    <div class="cctv-screenshot-info">
-                        <div class="cctv-user-info">
-                            <div class="cctv-username">
-                                <i class="fas fa-user"></i>
-                                ${escapeViewerText(monitor.username || 'Unknown User')}
-                            </div>
-                            <div class="cctv-ip">
-                                <i class="fas fa-desktop"></i>
-                                ${escapeViewerText(monitor.ip_address||'—')}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-        
+        const list=Array.isArray(screenshots)?screenshots:[];
+        fullscreenShotMap=new Map();
+        if(!list.length){showFullscreenError('No screenshots available');return;}
+        const html=list.map(item=>{
+            const id=String(item.global_id||'');
+            const monitor=item.monitor||{};
+            const thumbnail=BASE_IMAGE_URL+(item.thumbnail||item.screenshot||'');
+            const full=BASE_IMAGE_URL+(item.screenshot||'');
+            fullscreenShotMap.set(id,{url:full,user:monitor.username||'Unknown User',
+                ip:monitor.ip_address||'—',time:Number(item.modified_time)||0,thumbnail});
+            return monitorScreenshotCard(item,'cctv-screenshot-card');
+        }).join('');
         $('#fullscreenContainer').html(html);
         attachScreenshotImageFallback($('#fullscreenContainer'));
+        $('#fullscreenCount').text(list.length+' screenshots · Updated '+new Date(liveScreenshotUpdatedAt||Date.now()).toLocaleTimeString());
     }
-
     function showFullscreenError(message) {
-        $('#fullscreenContainer').html(`
-            <div class="d-flex justify-content-center align-items-center" style="height: 400px; grid-column: 1 / -1;">
-                <div class="text-center text-white">
-                    <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
-                    <div>${message}</div>
-                </div>
-            </div>
-        `);
+        $('#fullscreenContainer').empty().append(
+            $('<div class="text-white p-3 small"></div>').text(message));
         $('#fullscreenCount').text('0 screenshots');
     }
-
-    function refreshFullscreenView() {
-        loadFullscreenScreenshots();
-    }
-    
-    function startFullscreenAutoRefresh() {
-        // Clear any existing interval
-        if (fullscreenRefreshInterval) {
-            clearInterval(fullscreenRefreshInterval);
-        }
-        
-        // Set up auto-refresh every 30 seconds
-        fullscreenRefreshInterval = setInterval(function() {
-            if ($('#fullscreenModal').hasClass('show')) {
-                loadFullscreenScreenshots();
-            }
-        }, 30000); // 30 seconds
-    }
-    
+    function refreshFullscreenView() {loadFullscreenScreenshots();}
     function stopFullscreenAutoRefresh() {
-        if (fullscreenRefreshInterval) {
-            clearInterval(fullscreenRefreshInterval);
-            fullscreenRefreshInterval = null;
-        }
+        // No per-modal timer. The shared monitoring timer refreshes both.
     }
-
     function getMonitorStatusClass(status) {
-        switch(status) {
-            case 'online': return 'cctv-status-online';
-            case 'inactive': return 'cctv-status-inactive';
-            case 'offline': return 'cctv-status-offline';
-            default: return 'cctv-status-offline';
-        }
+        return 'cctv-status-'+(['online','inactive','offline'].includes(status)?status:'offline');
     }
-
-    function getMonitorStatusText(status) {
-        switch(status) {
-            case 'online': return 'Online';
-            case 'inactive': return 'Inactive';
-            case 'offline': return 'Offline';
-            default: return 'Unknown';
-        }
-    }
-
     // Make fullscreen functions globally available
     window.openFullscreenView = openFullscreenView;
     window.refreshFullscreenView = refreshFullscreenView;
