@@ -1921,33 +1921,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 }
                 return
             }
-            let collected=(self.safariChecked,self.chromeChecked,self.firefoxChecked,self.edgeChecked,
-                           self.operaChecked,self.yandexChecked,self.vivaldiChecked,self.braveChecked)
+            let collected=(safariChecked,chromeChecked,firefoxChecked,edgeChecked,
+                           operaChecked,yandexChecked,vivaldiChecked,braveChecked)
             DispatchQueue.main.async {
                 // Collection itself must not advance the committed cursor:
                 // a failed HTTP request otherwise loses browser history.
-                self.safariChecked=previous.0
-                self.chromeChecked=previous.1
-                self.firefoxChecked=previous.2
-                self.edgeChecked=previous.3
-                self.operaChecked=previous.4
-                self.yandexChecked=previous.5
-                self.vivaldiChecked=previous.6
-                self.braveChecked=previous.7
+                safariChecked=previous.0
+                chromeChecked=previous.1
+                firefoxChecked=previous.2
+                edgeChecked=previous.3
+                operaChecked=previous.4
+                yandexChecked=previous.5
+                vivaldiChecked=previous.6
+                braveChecked=previous.7
                 if records.isEmpty {
                     self.browserUploadInProgress=false
                     return
                 }
                 self.sendDataInChunks(data:records,eventType:"BrowserHistory",chunkSize:500) { ok in
                     if ok {
-                        self.safariChecked=collected.0
-                        self.chromeChecked=collected.1
-                        self.firefoxChecked=collected.2
-                        self.edgeChecked=collected.3
-                        self.operaChecked=collected.4
-                        self.yandexChecked=collected.5
-                        self.vivaldiChecked=collected.6
-                        self.braveChecked=collected.7
+                        safariChecked=collected.0
+                        chromeChecked=collected.1
+                        firefoxChecked=collected.2
+                        edgeChecked=collected.3
+                        operaChecked=collected.4
+                        yandexChecked=collected.5
+                        vivaldiChecked=collected.6
+                        braveChecked=collected.7
                         self.lastBrowserHistorySent=Date()
                         self.logMessage("Browser history batch acknowledged by server",level:.info)
                     }else{
@@ -4088,7 +4088,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 "Event":"BrowserHistory",
                 "MonitorId":monitor,
                 "Version":APP_VERSION,
-                "MacAddress":self.macAddress,
+                "MacAddress":macAddress,
                 "BrowserHistories":history
             ]
             guard let body=try? JSONSerialization.data(withJSONObject:payload) else {
