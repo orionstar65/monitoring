@@ -19,7 +19,7 @@
 .key-timeline-wrapper .key-cctv-tick.major{top:24px;height:23px}
 .key-timeline-wrapper .key-cctv-tick-label{font-size:.6rem}
 .key-timeline-wrapper .key-cctv-selection{top:3px;bottom:3px}
-.key-timeline-wrapper .key-cctv-activity{top:51px!important;height:17px;max-height:22px}
+.key-timeline-wrapper .key-cctv-activity{opacity:.85}
 .key-timeline-wrapper .key-context-panel{margin-top:6px;padding:7px 9px;border-radius:6px;min-height:90px}
 .key-transcript-header{display:flex;align-items:center;justify-content:space-between;gap:7px;border-bottom:1px solid var(--bs-border-color);margin-bottom:6px;padding-bottom:6px;font-size:.79rem}
 .key-transcript-header small{font-size:.67rem;font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis}
