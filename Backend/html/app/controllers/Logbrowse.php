@@ -14,7 +14,7 @@ class Logbrowse extends Base {
      * Main log browsing page
      */
     public function index() {
-        $this->redirect('view?tab=browser');
+        if($this->isAdmin())$this->redirect('view?tab=browser');
         if(($this->user['role']??'')==='user'){
             $this->view('view/aggregate');return;
         }
