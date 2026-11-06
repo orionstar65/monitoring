@@ -2550,7 +2550,7 @@ document.addEventListener('pointermove',event=>{
         historySetRange(start,start+duration,false);
     }else if(drag.mode==='start'){
         historySetRange(Math.min(drag.to-minimum,Math.max(state.start,drag.from+delta)),drag.to,false);
-    }else{
+    }else if(drag.mode==='end'){
         historySetRange(drag.from,Math.max(drag.from+minimum,Math.min(state.end,drag.to+delta)),false);
     }
 });
