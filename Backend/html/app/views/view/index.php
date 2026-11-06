@@ -606,6 +606,28 @@ ob_start();
  .history-viewer.drawer-collapsed{grid-template-rows:minmax(160px,1fr) auto}
 }
 @media(max-width:600px){.dashboard-container{flex-direction:column}.sidebar-panel{width:100%;max-width:none;max-height:38vh}.history-bottom .key-ruler-selected{display:none}}
+.monitoring-filter-bar{display:flex;flex-wrap:wrap;align-items:end;gap:6px;padding:7px 10px;border-bottom:1px solid var(--bs-border-color)}
+.monitoring-filter-bar label{font-size:.7rem;min-width:125px;margin:0}.monitoring-filter-bar input{font-size:.78rem;padding:3px 5px}
+.monitoring-statistics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;padding:6px 10px;border-bottom:1px solid var(--bs-border-color)}
+.monitoring-statistics>div{border:1px solid var(--bs-border-color);border-radius:5px;padding:4px 8px;min-width:0;display:flex;gap:7px;align-items:baseline}
+.monitoring-statistics span{font-weight:700;font-size:1.15rem;font-variant-numeric:tabular-nums}.monitoring-statistics small{font-size:.7rem;color:var(--bs-secondary-color)}
+.monitoring-tabs{display:flex;overflow-x:auto;padding:0 8px;border-bottom:1px solid var(--bs-border-color);gap:3px}
+.monitoring-tab{border:0;border-bottom:2px solid transparent;background:transparent;padding:8px 13px;font-size:.84rem;color:var(--bs-secondary-color)}
+.monitoring-tab.active{color:var(--bs-primary);border-color:var(--bs-primary);font-weight:650}
+#unifiedScreenshotPanel,#unifiedLogPanel,#unifiedSettingsPanel{min-height:0;flex:1;overflow:auto}
+#unifiedScreenshotPanel[hidden],#unifiedLogPanel[hidden],#unifiedSettingsPanel[hidden]{display:none!important}
+.sidebar-panel .sidebar-content{overflow-y:auto;min-height:0;flex:1;scrollbar-width:thin;overscroll-behavior:contain}
+.sidebar-panel{max-height:calc(100dvh - 110px);height:calc(100dvh - 110px)}
+.sidebar-panel .monitor-item{cursor:pointer;position:relative}
+.sidebar-panel .monitor-item-name{font-size:.85rem;font-weight:650;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sidebar-panel .monitor-item-username{margin-left:0;font-size:.72rem}
+.sidebar-panel .monitor-item-status .live-status-badge{font-size:.62rem;padding:2px 6px;border-radius:9px;gap:4px;box-shadow:none}
+.sidebar-panel .monitor-item-status .live-status-badge i{font-size:.45rem}
+.sidebar-panel .monitor-item-status .live-status-badge .pulse{display:none}
+#unifiedSettingsPanel .card{border-radius:7px}
+#unifiedSettingsPanel .form-label{font-size:.77rem;margin-bottom:3px}
+#unifiedSettingsPanel .form-control,#unifiedSettingsPanel .form-select{font-size:.83rem}
+@media(max-width:900px){.sidebar-panel{max-height:50dvh}.monitoring-statistics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* Log Modal Styles */
 .log-sub-modal .modal-dialog {
     max-width: 90%;
@@ -1128,39 +1150,48 @@ ob_start();
                 <span class="small text-muted" id="lastLiveRefresh" aria-live="polite">Not updated</span>
             </div>
             <div class="d-flex align-items-center gap-2">
-                <a href="<?= BASE_URL ?>view/logs" class="btn btn-sm btn-outline-secondary"><i class="fas fa-list me-1"></i>Activity Logs</a>
+
                 <button type="button" class="btn btn-sm btn-outline-primary" id="refreshLiveNow"><i class="fas fa-sync-alt me-1"></i>Refresh</button>
             </div>
         </div>
 
-        <!-- Modern Screenshots Section -->
-        <div class="main-header">
-            <h6>
-                <i class="fas fa-image me-2"></i>
-                Screenshots
-                <span class="badge bg-secondary ms-2" id="screenshotCount">0</span>
-                <small class="text-muted ms-2" id="timezoneIndicator">
-                    <i class="fas fa-clock me-1"></i>
-                    <span id="userTimezone">Loading...</span>
-                </small>
-            </h6>
-            <div class="d-flex align-items-center gap-3">
-                <div id="headerDateFilterContainer"></div>
-                <div class="d-flex align-items-center gap-2">
-                    <label class="form-label mb-0">Per page:</label>
-                    <select class="form-select" id="perPageSelect" style="width: auto;">
-                        <option value="10">10</option>
-                        <option value="20">20</option>
-                        <option value="30">30</option>
-                        <option value="50" selected>50</option>
-                    </select>
-                </div>
-                <button class="btn btn-outline-primary" id="fullscreenBtn" title="Full Screen View">
-                    <i class="fas fa-expand"></i>
-                    Full Screen
-                </button>
-            </div>
+        <div class="monitoring-filter-bar" id="monitoringActionBar">
+            <label>From <input type="date" id="unifiedStartDate" class="form-control form-control-sm"></label>
+            <label>To <input type="date" id="unifiedEndDate" class="form-control form-control-sm"></label>
+            <button type="button" class="btn btn-sm btn-primary" id="unifiedApplyFilters">Filter</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="unifiedClearFilters">Clear</button>
+            <?php if(($_SESSION['role']??'')===ROLE_ADMIN): ?>
+            <button type="button" class="btn btn-sm btn-outline-danger" id="unifiedRemoveScreenshots"><i class="fas fa-trash-alt me-1"></i>Remove screenshots</button>
+            <?php endif; ?>
+            <span id="unifiedSelectionSummary" class="small text-muted ms-auto">All devices</span>
         </div>
+        <div id="unifiedCleanupProgress" class="small px-2" role="status" aria-live="polite" hidden></div>
+        <div class="monitoring-statistics" aria-label="Monitoring statistics">
+            <div><span id="totalLogs">0</span><small>Total logs</small></div>
+            <div><span id="browserLogs">0</span><small>Browser</small></div>
+            <div><span id="keyLogs">0</span><small>Keyboard</small></div>
+            <div><span id="usbLogs">0</span><small>USB</small></div>
+        </div>
+        <nav class="monitoring-tabs" id="monitoringTabs" role="tablist" aria-label="Monitor information">
+            <button class="monitoring-tab active" role="tab" aria-selected="true" data-monitor-tab="screenshots">Screenshots</button>
+            <button class="monitoring-tab" role="tab" aria-selected="false" data-monitor-tab="key">Keyboard</button>
+            <button class="monitoring-tab" role="tab" aria-selected="false" data-monitor-tab="browser">Browser</button>
+            <button class="monitoring-tab" role="tab" aria-selected="false" data-monitor-tab="usb">USB</button>
+            <button class="monitoring-tab" role="tab" aria-selected="false" data-monitor-tab="settings">Settings</button>
+        </nav>
+        <section id="unifiedScreenshotPanel" role="tabpanel">
+            <div class="main-header">
+                <h6><i class="fas fa-image me-2"></i>Screenshots <span class="badge bg-secondary ms-2" id="screenshotCount">0</span>
+                <small class="text-muted ms-2" id="timezoneIndicator"><i class="fas fa-clock me-1"></i><span id="userTimezone">Loading...</span></small></h6>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <div id="headerDateFilterContainer"></div>
+                    <label class="small mb-0" for="perPageSelect">Per page</label>
+                    <select class="form-select form-select-sm" id="perPageSelect" style="width:auto">
+                        <option value="10">10</option><option value="20">20</option><option value="30">30</option><option value="50" selected>50</option>
+                    </select>
+                    <button class="btn btn-sm btn-outline-primary" id="fullscreenBtn" title="Full Screen View"><i class="fas fa-expand me-1"></i>Full Screen</button>
+                </div>
+            </div>
         <div class="main-content-area">
             <div id="screenshotsContainer">
                 <div class="loading-container">
@@ -1169,6 +1200,13 @@ ob_start();
                 </div>
             </div>
         </div>
+        </section>
+        <section id="unifiedLogPanel" role="tabpanel" hidden>
+            <?php $embeddedLogBrowse=true;include __DIR__.'/logbrowse.php';unset($embeddedLogBrowse); ?>
+        </section>
+        <section id="unifiedSettingsPanel" role="tabpanel" hidden>
+            <div id="unifiedSettingsContent" class="p-2 small text-muted">Select a monitor to view its settings.</div>
+        </section>
     </div>
 </div>
 
@@ -1278,7 +1316,7 @@ ob_start();
 
 <!-- Log modals removed - screenshots only -->
 
-<?php include __DIR__.'/partials/key_history_shared.php'; ?>
+<?php // Shared key history assets are loaded by the embedded Log Browse view. ?>
 
 <script>
 // Wait for jQuery to be available
