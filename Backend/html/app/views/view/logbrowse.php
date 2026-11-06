@@ -1516,19 +1516,36 @@ function escapeHtml(text) {
 <?php if($embeddedLogBrowse): ?>
 window.unifiedLogs = {
     switchTab, applyFilters, clearFilters, removeScreenshots, changePage,
+    // Avoid even paginated log requests while viewing Screenshots or Settings.
+    // Switching into Keyboard/Browser/USB will load the current selection.
+    logsVisible(){
+        const panel=document.getElementById('unifiedLogPanel');
+        return !isEmbeddedMonitoring||!!(panel&&!panel.hidden);
+    },
+    loadWhenVisible(){
+        const panel=document.getElementById('unifiedLogPanel');
+        if(!isEmbeddedMonitoring||(panel&&!panel.hidden)){
+            loadLogs();
+        }else{
+            ++browseLogsRequest;
+            ++keyContextRequestId;
+            keyRulerState=null;
+        }
+    },
     selectMonitor(id) {
         const select=document.getElementById('deviceFilter');
         if(select)select.value=String(id||'');
         currentFilters.device_id=String(id||'');
         currentPage=1;
-        loadStats();loadLogs();
+        loadStats();this.loadWhenVisible();
     },
     setDates(from,to){
         if(from)document.getElementById('startDate').value=from;
         if(to)document.getElementById('endDate').value=to;
-        updateFilters();currentPage=1;loadStats();loadLogs();
+        updateFilters();currentPage=1;
+        loadStats();this.loadWhenVisible();
     },
-    refresh(){updateFilters();loadStats();loadLogs();},
+    refresh(){updateFilters();loadStats();this.loadWhenVisible();},
     refreshStats(){loadStats();},
     getCurrentTab(){return currentTab;}
 };
