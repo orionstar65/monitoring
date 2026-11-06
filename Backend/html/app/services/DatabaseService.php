@@ -920,12 +920,12 @@ class DatabaseService {
      */
     public function ensureDailyLogTable($date = null) {
         if ($date === null) {
-            $date = date('Y-m-d');
+            $date = gmdate('Y-m-d');
         }
         
         // Validate date format
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
-            $date = date('Y-m-d');
+            $date = gmdate('Y-m-d');
         }
         
         $table_name = 'api_logs_' . str_replace('-', '_', $date);
