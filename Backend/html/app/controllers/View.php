@@ -130,7 +130,29 @@ class View extends Base {
         
         // Get specific monitor ID for detail device view
         $specific_monitor_id = isset($_GET['monitor_id']) ? intval($_GET['monitor_id']) : null;
-        
+        if($specific_monitor_id)$this->requireMonitorAccess($specific_monitor_id);
+        if($this->isScopedAdmin() && !$specific_monitor_id){
+            // The all-devices view means only devices owned by assigned users.
+            // Never trust a caller-supplied monitors list.
+            [$scope,$params]=$this->monitorScope('m');
+            $rows=$this->db->fetchAll("SELECT m.id FROM tbl_monitor_ips m WHERE {$scope}",$params);
+            $allowed=array_map('intval',array_column($rows,'id'));
+            if($selected_monitors){
+                foreach($selected_monitors as $candidate){
+                    if(!in_array((int)$candidate,$allowed,true)){
+                        http_response_code(403);$this->json(['error'=>'Monitor not assigned']);return;
+                    }
+                }
+            }else $selected_monitors=$allowed;
+            if(!$selected_monitors){
+                $this->json(['screenshots'=>[],'pagination'=>[
+                    'current_page'=>$page,'per_page'=>$per_page,
+                    'total_screenshots'=>0,'total_pages'=>0,
+                    'has_next'=>false,'has_prev'=>false
+                ],'view_type'=>'entire_device']);return;
+            }
+        }
+
         if ($specific_monitor_id) {
             // DETAIL DEVICE VIEW: Load paginated screenshots for a specific monitor from database
             $monitor = $this->db->fetch(
@@ -291,6 +313,7 @@ class View extends Base {
     // api_all_screenshots method removed - use database-based api_screenshots() method instead
     
     public function api_parsed_log($ip_id, $log_type, $file_path) {
+        $this->requireMonitorAccess((int)$ip_id);
         $monitor = $this->db->fetch(
             "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id WHERE m.id=:id",
             ['id' => $ip_id]
@@ -381,6 +404,29 @@ class View extends Base {
         // known screenshot/log roots rather than assuming Apache's CWD.
         $requested=(string)($_GET['path']??$file_path);
         $absolute=monitorResolveMediaPath($requested);
+        if($this->isScopedAdmin()){
+            // A scoped admin cannot fetch an arbitrary file by guessing its path.
+            // Require matching screenshot metadata AND monitor ownership.
+            $path=monitorPublicMediaPath($requested);
+            if($path===null || !preg_match('#^data/(?:screens|thumbnails)/#',$path)){
+                http_response_code(403);exit('Media unavailable');
+            }
+            [$scope,$params]=$this->monitorScope('m');
+            $variants=[$path,'./'.$path,'html/'.$path,'./html/'.$path];
+            $columns=[];
+            foreach($variants as $idx=>$variant){
+                $params['source_path_'.$idx]=$variant;
+                $params['thumb_path_'.$idx]=$variant;
+                $columns[]='s.file_path=:source_path_'.$idx;
+                $columns[]='s.thumbnail_path=:thumb_path_'.$idx;
+            }
+            $allowedMedia=$this->db->fetch(
+                'SELECT s.id FROM screenshot_metadata s
+                 JOIN tbl_monitor_ips m ON m.id=s.monitor_ip_id
+                 WHERE '.$scope.' AND ('.implode(' OR ',$columns).') LIMIT 1',$params
+            );
+            if(!$allowedMedia){http_response_code(403);exit('Media unavailable');}
+        }
         if($absolute===null){
             http_response_code(404);
             header('Content-Type: text/plain; charset=utf-8');
@@ -444,6 +490,7 @@ class View extends Base {
         }
         
         $monitor_id = intval($matches[1]);
+        $this->requireMonitorAccess($monitor_id);
         $file_hash = $matches[2];
         
         $monitor = $this->db->fetch(
@@ -502,6 +549,7 @@ class View extends Base {
         }
         
         $monitor_id = intval($matches[1]);
+        $this->requireMonitorAccess($monitor_id);
         $file_hash = $matches[2];
         
         $monitor = $this->db->fetch(
