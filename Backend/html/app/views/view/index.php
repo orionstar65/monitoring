@@ -1603,15 +1603,19 @@ waitForJQuery(function() {
     });
     
     
-    // One timer supplies screenshot updates to normal and fullscreen cards.
+    // Monitor status can refresh less frequently than screenshot tiles.
+    // After a manual Send All, the new stored screenshot should appear promptly
+    // without a full portal reload or a 30-second wait.
+    setInterval(function() {
+        if(isAutoRefresh)loadMonitors();
+    }, 30000);
     setInterval(function() {
         if(!isAutoRefresh)return;
-        loadMonitors();
         if(unifiedActiveTab==='screenshots'||$('#fullscreenModal').hasClass('show')){
             const page=$('#fullscreenModal').hasClass('show')?1:currentPage;
             loadScreenshotsForSelectedMonitor(page);
         }
-    }, 30000);
+    }, 10000);
     
     // Event handlers
     setupEventHandlers();
