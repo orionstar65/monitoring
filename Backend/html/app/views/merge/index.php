@@ -319,7 +319,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const ip = monitor.last_seen_ip || monitor.ip_address || '—';
         const os = monitor.platform || 'Unknown OS';
         const machine = monitor.type || 'Device';
-        return `${number}(${name}): ${ip} : ${os}-${machine}`;
+        return `${number}(${name}): ${ip} : ${os}-${machine} #${Number(monitor.id)}`;
     }
 
     function populateSelects() {
