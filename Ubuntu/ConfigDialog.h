@@ -63,6 +63,7 @@ private:
 
     QString authToken;
     QString activeUserNo;
+    QString activeUserName;
     QString pendingUserNo;
     QString directoryError;
     QJsonArray assignedMonitors;
@@ -78,6 +79,7 @@ private:
     QComboBox *userSelector=nullptr,*monitorSelector=nullptr;
     QButtonGroup *osRadios=nullptr,*machineRadios=nullptr;
     QLabel *connectionStatusLabel=nullptr,*assignmentStatusLabel=nullptr,*monitorIPLabel=nullptr;
+    QLabel *userNoFieldLabel=nullptr,*passwordFieldLabel=nullptr,*accountFieldLabel=nullptr,*accountInfoLabel=nullptr;
     QLabel *osInfo=nullptr,*machineInfo=nullptr,*remarkInfo=nullptr;
     QStackedWidget *osStack=nullptr,*machineStack=nullptr,*remarkStack=nullptr;
     QCheckBox *notificationsCheck=nullptr;
