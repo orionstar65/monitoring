@@ -1282,19 +1282,25 @@ ob_start();
             <?php endif; ?>
         </nav>
         <section id="unifiedScreenshotPanel" role="tabpanel">
-            <div class="main-header">
-                <h6><i class="fas fa-image me-2"></i>Screenshots <span class="badge bg-secondary ms-2" id="screenshotCount">0</span>
-                <small class="text-muted ms-2" id="timezoneIndicator"><i class="fas fa-clock me-1"></i><span id="userTimezone">Loading...</span></small></h6>
-                <div class="d-flex flex-wrap align-items-center gap-2">
-                    <div id="headerDateFilterContainer"></div>
-                    <label class="small mb-0" for="perPageSelect">Per page</label>
-                    <select class="form-select form-select-sm" id="perPageSelect" style="width:auto">
-                        <option value="10">10</option><option value="20">20</option><option value="30">30</option><option value="50" selected>50</option>
-                    </select>
-                    <button class="btn btn-sm btn-outline-primary" id="fullscreenBtn" title="Full Screen View"><i class="fas fa-expand me-1"></i>Full Screen</button>
+            <div class="main-header monitoring-screenshot-header">
+                <div class="monitoring-screenshot-heading">
+                    <h3>Screenshots <span class="monitoring-count-chip" id="screenshotCount">0</span></h3>
+                    <small id="timezoneIndicator"><i class="far fa-clock me-1"></i><span id="userTimezone">Loading...</span></small>
+                </div>
+                <div class="monitoring-screenshot-actions">
+                    <div id="headerDateFilterContainer" hidden></div>
+                    <label class="monitoring-pagesize" for="perPageSelect">
+                        Per page
+                        <select class="form-select form-select-sm" id="perPageSelect">
+                            <option value="10">10</option><option value="20">20</option><option value="30">30</option><option value="50" selected>50</option>
+                        </select>
+                    </label>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="fullscreenBtn" title="Full screen view">
+                        <i class="fas fa-expand me-1"></i>Full screen
+                    </button>
                 </div>
             </div>
-        <div class="main-content-area">
+            <div class="main-content-area">
             <div id="screenshotsContainer">
                 <div class="loading-container">
                     <i class="fas fa-spinner fa-spin"></i>
