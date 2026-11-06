@@ -43,7 +43,10 @@ ob_start();
             <div class="row g-3">
               <div class="col-12">
                 <label class="form-label" for="owner_user_id">Assigned user</label>
-                <select class="form-select" id="owner_user_id" name="owner_user_id">
+                <?php if(($_SESSION['role']??'')===ROLE_SCOPED_ADMIN): ?>
+                <input type="hidden" name="owner_user_id" value="<?= (int)$monitor['owner_user_id'] ?>">
+                <?php endif; ?>
+                <select class="form-select" id="owner_user_id" name="owner_user_id" <?= ($_SESSION['role']??'')===ROLE_SCOPED_ADMIN?'disabled':'' ?>>
                   <option value="">Unassigned</option>
                   <?php foreach($accounts as $account): ?>
                     <?php $number=(string)($account['user_no']??'—');$count=(int)($account['device_count']??0); ?>
@@ -124,7 +127,7 @@ ob_start();
         </div>
       </div>
       <div class="mt-3 d-flex gap-2">
-        <a href="<?= BASE_URL ?>view/logs/<?= (int)$monitor['id'] ?>" class="btn btn-outline-primary"><i class="fas fa-chart-line me-2"></i>View Logs</a>
+        <a href="<?= BASE_URL ?>view?tab=browser&monitor_id=<?= (int)$monitor['id'] ?>" class="btn btn-outline-primary"><i class="fas fa-chart-line me-2"></i>View Logs</a>
         <a href="<?= BASE_URL ?>view" class="btn btn-outline-secondary"><i class="fas fa-desktop me-2"></i>Live Monitoring</a>
       </div>
     </div>
