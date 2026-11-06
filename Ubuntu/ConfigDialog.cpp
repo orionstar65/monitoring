@@ -292,15 +292,18 @@ void ConfigDialog::loadSettings(){
 }
 void ConfigDialog::saveSettings(){
     QDir().mkpath(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)+"/monitorclient");
-    for(const QString &path:{settingsPath(),QStringLiteral("settings.ini")}){
-        QSettings cfg(path,QSettings::IniFormat);
-        cfg.setValue("Server/ip",getServerIP());
-        cfg.setValue("Server/port",getServerPort());
-        cfg.setValue("Notifications/enabled",notificationsCheck->isChecked());
-        cfg.setValue("Monitor/id",monitorId);
-        cfg.setValue("User/no",activeUserNo);
-        cfg.setValue("Updates/url",updateServerInput->text().trimmed());
-    }
+    // Persist a single authoritative configuration. The monitoring engine
+    // reads this file live, so it must not drift from the dialog's values.
+    QSettings cfg(settingsPath(),QSettings::IniFormat);
+    cfg.setValue("Server/ip",getServerIP());
+    cfg.setValue("Server/port",getServerPort());
+    cfg.setValue("Notifications/enabled",notificationsCheck->isChecked());
+    cfg.setValue("Monitor/id",monitorId);
+    cfg.setValue("User/no",activeUserNo);
+    cfg.setValue("Updates/url",updateServerInput->text().trimmed());
+    cfg.sync();
+    if(cfg.status()!=QSettings::NoError)
+        qWarning() << "[Settings] Failed to persist server configuration at" << settingsPath();
 }
 QJsonObject ConfigDialog::authRequest(const QJsonObject &payload,bool authenticated){
     QNetworkAccessManager manager;
@@ -365,10 +368,14 @@ void ConfigDialog::onSignInClicked(){
     // Sign In commits the authenticated server connection, but must not
     // silently apply draft notification or monitor settings. Those need Save.
     QDir().mkpath(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)+"/monitorclient");
-    for(const QString &path:{settingsPath(),QStringLiteral("settings.ini")}){
-        QSettings cfg(path,QSettings::IniFormat);
-        cfg.setValue("Server/ip",getServerIP());
-        cfg.setValue("Server/port",getServerPort());
+    QSettings cfg(settingsPath(),QSettings::IniFormat);
+    cfg.setValue("Server/ip",getServerIP());
+    cfg.setValue("Server/port",getServerPort());
+    cfg.sync();
+    if(cfg.status()!=QSettings::NoError){
+        qWarning() << "[Settings] Failed to save signed-in server address";
+        connectionStatusLabel->setText("Server settings could not be saved");
+        return;
     }
     connectionStatusLabel->setText("Signed in");
     updateMonitorList(result.value("monitors").toArray());
