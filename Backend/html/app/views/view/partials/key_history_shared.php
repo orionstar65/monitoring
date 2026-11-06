@@ -115,16 +115,17 @@ function monitorTranscriptKeyRows(keys,escapeHtml) {
                 if(token.value.trim()==='' && started)break;
                 token.deleted=true;count++;started=true;
             }
-            if(count)current.tokens.push({kind:'effect',value:'⌫ word',time});
-            else addBadge(raw||'Ctrl+Backspace',time,eventId);
+            // Strikethrough already communicates the deletion. Keep an
+            // unmatched Ctrl+Backspace as a special-key event for context.
+            if(!count)addBadge(raw||'Ctrl+Backspace',time,eventId);
         }else if(/^(backspace|back|bksp|vk_back)$/i.test(key)){
             let last=null;
             for(let k=current.tokens.length-1;k>=0;k--){
                 if(current.tokens[k].kind==='char'&&!current.tokens[k].deleted){last=current.tokens[k];break;}
             }
             if(last){
+                // Show only the struck-through character, not an extra ⌫ glyph.
                 last.deleted=true;
-                current.tokens.push({kind:'effect',value:'⌫',time});
             }else addBadge(raw||'Backspace',time,eventId);
         }else if(/^(space|spacebar)$/i.test(key)||raw===' '){
             current.tokens.push({kind:'char',value:' ',time,deleted:false});
@@ -147,7 +148,6 @@ function monitorTranscriptKeyRows(keys,escapeHtml) {
         const content=line.tokens.map(token=>{
             if(token.kind==='char')return `<span class="${token.deleted?'key-deleted':''}" title="${escapeHtml(token.time)}">${escapeHtml(token.value)}</span>`;
             if(token.kind==='newline')return '<span class="key-control-symbol" title="Enter">↵</span>';
-            if(token.kind==='effect')return `<span class="key-control-symbol" title="Backspace at ${escapeHtml(token.time)}">${token.value}</span>`;
             const label=token.repeat>1?token.raw+' ×'+token.repeat:token.raw;
             const description=token.time+(token.repeat>1?'–'+token.lastTime+' · '+token.repeat+' consecutive events':'')+
                 (token.eventId?' · first event #'+token.eventId:'');
