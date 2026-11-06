@@ -1378,7 +1378,7 @@ std::string httpPostFile(const std::string& url, const std::string& filePath) {
     std::string contentType = "multipart/form-data; boundary=" + boundary;
     
     std::string formData = "--" + boundary + "\r\n";
-    formData += "Content-Disposition: form-data; name=\"imagefile\"; filename=\"" + filePath + "\"\r\n";
+    formData += "Content-Disposition: form-data; name=\"imagefile\"; filename=\"screenshot.jpg\"\r\n";
     formData += "Content-Type: image/jpeg\r\n\r\n";
     formData += fileContent + "\r\n";
     
