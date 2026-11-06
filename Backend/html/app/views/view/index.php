@@ -2593,12 +2593,13 @@ function startHistoryViewer(id,timestamp,fullUrl='',thumbnailUrl=''){
     const ms=Number.isFinite(center)?center:Date.now();
     historyState={
         monitor:Number(match[1]),start:ms-12*3600000,end:ms+12*3600000,
-        rangeStart:ms-150000,rangeEnd:ms+150000,
+        rangeStart:ms-900000,rangeEnd:ms+900000,
         scale:$('#historyScale').val()||'medium',pxPerMinute:HISTORY_SCALES[$('#historyScale').val()]||14,width:0,
         keys:[],shots:[],drag:null,activeId:id,activeTime:ms,cursorTime:ms,
         focus:{global_id:id,ms,full:fullUrl,thumb:thumbnailUrl||fullUrl}
     };
     $('#historyTranscriptInfo').text('');
+    $('#historyJumpToKeyboard').prop('hidden',true);
     historyRenderRuler(true);
     historyLoadDomain();
 }
@@ -2847,10 +2848,18 @@ async function historyLoadVisibleShots(){
         if(sequence===historyVisibleSeq)$('#historyTimelineStatus').text('Visible screenshot samples unavailable: '+error.message);
     }
 }
+
+function historyNearestKeyboardBucket(){
+    const state=historyState;if(!state||!state.keys?.length)return null;
+    const center=(state.rangeStart+state.rangeEnd)/2;
+    return state.keys.reduce((nearest,item)=>
+        Math.abs(item.ms-center)<Math.abs(nearest.ms-center)?item:nearest,state.keys[0]);
+}
 async function historyLoadTranscript(){
     const state=historyState;if(!state)return;
     const seq=++historyKeySeq;
-    const panel=$('#historyTranscriptBody').text('Loading keyboard events for selected range…');
+    const panel=$('#historyTranscriptBody').text('Loading recorded keys…');
+    const jump=$('#historyJumpToKeyboard').prop('hidden',true);
     $('#historyTranscriptInfo').text('');
     const from=historyClock(state.rangeStart,true),to=historyClock(state.rangeEnd,true);
     const params=new URLSearchParams({device_id:String(state.monitor),from,to});
@@ -2860,15 +2869,35 @@ async function historyLoadTranscript(){
         const data=await response.json();
         if(!data.success)throw new Error(data.error||'Unable to load keylogs');
         if(state!==historyState||seq!==historyKeySeq)return;
-        const keys=data.logs||[];
-        $('#historyTranscriptInfo').text(keys.length+' key events'+(data.limited?' · First 2,000 shown; narrow the range for more':''));
-        panel.html(keys.length?monitorTranscriptKeyRows(keys,escapeViewerText)
-            :'<div class="text-muted">No keys were recorded in this time range.</div>');
+        const keys=Array.isArray(data.logs)?data.logs:[];
+        $('#historyTranscriptInfo').text(keys.length+' recorded key events'+(data.limited?' · showing first 2,000':''));
+        if(keys.length){
+            if(typeof monitorTranscriptKeyRows!=='function')throw Error('Transcript renderer failed to load');
+            panel.html(monitorTranscriptKeyRows(keys,escapeViewerText));
+        }else{
+            panel.html('<div class="text-muted p-2">No keyboard events were recorded within this selected range. Drag or resize the selection on the timeline to inspect another period.</div>');
+            const nearest=historyNearestKeyboardBucket();
+            if(nearest){
+                jump.prop('hidden',false).attr('title','Nearest activity: '+historyClock(nearest.ms,true));
+                $('#historyTranscriptInfo').text('No keys in selected range');
+            }
+        }
     }catch(error){
-        if(state===historyState&&seq===historyKeySeq)panel.text('Cannot load keylogs: '+error.message);
+        if(state===historyState&&seq===historyKeySeq){
+            $('#historyTranscriptInfo').text('Transcript unavailable');
+            panel.text('Could not load keyboard transcript: '+error.message);
+        }
     }
 }
-
+$(document).on('click','#historyJumpToKeyboard',function(){
+    const state=historyState,nearest=historyNearestKeyboardBucket();
+    if(!state||!nearest)return;
+    const duration=state.rangeEnd-state.rangeStart;
+    const from=MonitorCctvRange.clamp(nearest.ms-duration/2,state.start,state.end-duration);
+    historySetRange(from,from+duration,true);
+    historySeek(nearest.ms,false);
+    historyCenterView();
+});
 function historyPointerTime(event,ruler){
     return MonitorCctvRange.point(event,ruler,historyState);
 }
