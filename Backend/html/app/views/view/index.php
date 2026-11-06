@@ -628,6 +628,8 @@ ob_start();
 #unifiedSettingsPanel .form-label{font-size:.77rem;margin-bottom:3px}
 #unifiedSettingsPanel .form-control,#unifiedSettingsPanel .form-select{font-size:.83rem}
 @media(max-width:900px){.sidebar-panel{max-height:50dvh}.monitoring-statistics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+#headerDateFilterContainer{display:none}
+#monitorList .monitor-item:focus-visible{outline:2px solid var(--bs-primary);outline-offset:-2px}
 /* Log Modal Styles */
 .log-sub-modal .modal-dialog {
     max-width: 90%;
@@ -1638,66 +1640,26 @@ function setupEventHandlers() {
     $('#selectAllMonitors').click(function() {
         // Clear all selections to show all devices
         selectedMonitors = [];
-        $('.monitor-radio').prop('checked', false);
         $('.monitor-item').removeClass('selected');
         
         // Update UI
         updateSelectAllCheckbox();
         
-        loadScreenshots();
+        unifiedSelectMonitor(0);
     });
     
-    // Individual monitor selection (radio button mode)
-    $(document).on('change', '.monitor-radio', function() {
-        const monitorId = parseInt($(this).val());
-        const isChecked = $(this).is(':checked');
-        
-        if (isChecked) {
-            // Radio button selection - only one monitor can be selected
-            selectedMonitors = [monitorId];
-            
-            // Remove selected class from all items and add to current
-            $('.monitor-item').removeClass('selected');
-            $(this).closest('.monitor-item').addClass('selected');
-        } else {
-            // If unchecked, clear selection (show all devices)
-            selectedMonitors = [];
-            $('.monitor-item').removeClass('selected');
+    // Entire monitor row is the selector; no radio input is necessary.
+    $(document).on('click','.monitor-item',function(){
+        const id=Number($(this).attr('data-monitor-id'));
+        if(!Number.isInteger(id)||id<1)return;
+        unifiedSelectMonitor(id);
+    });
+    $(document).on('keydown','.monitor-item',function(event){
+        if(event.key==='Enter'||event.key===' '){
+            event.preventDefault();
+            unifiedSelectMonitor(Number($(this).attr('data-monitor-id')));
         }
-        
-        // Update select all checkbox
-        updateSelectAllCheckbox();
-        
-        loadScreenshots();
     });
-    
-    // Click anywhere on monitor item to select radio button
-    $(document).on('click', '.monitor-item', function(e) {
-        // Don't trigger if clicking directly on the radio button
-        if ($(e.target).is('input[type="radio"]') || $(e.target).is('label')) {
-            return;
-        }
-        
-        const radio = $(this).find('.monitor-radio');
-        const monitorId = parseInt(radio.val());
-        
-        // Clear all selections first
-        $('.monitor-radio').prop('checked', false);
-        $('.monitor-item').removeClass('selected');
-        selectedMonitors = [];
-        
-        // Select only this monitor
-        radio.prop('checked', true);
-        $(this).addClass('selected');
-        selectedMonitors = [monitorId];
-        
-        // Update select all checkbox
-        updateSelectAllCheckbox();
-        
-        // Load screenshots for this specific monitor
-        loadScreenshotsForMonitor(monitorId);
-    });
-    
     // Monitor filter
     $('#monitorFilter').on('input', function() {
         filterMonitors();
@@ -1739,10 +1701,12 @@ function filterMonitors() {
     } else {
         filteredMonitors = allMonitors.filter(monitor => {
             const username = (monitor.username || '').toLowerCase();
+            const userNo=String(monitor.user_no||'').toLowerCase();
             const type = (monitor.type || '').toLowerCase();
             const ip = String(monitor.last_seen_ip || monitor.ip_address || '').toLowerCase();
             
             return username.includes(filterText) ||
+                   userNo.includes(filterText) ||
                    type.includes(filterText) ||
                    ip.includes(filterText);
         });
@@ -1816,8 +1780,7 @@ function formatTimeAgo(seconds) {
 }
 
 function updateMonitorList(monitors) {
-    const ordered=[...monitors].sort((a,b)=>String(a.name||a.username||'')
-        .localeCompare(String(b.name||b.username||''),undefined,{sensitivity:'base'}));
+    const ordered=window.sortMonitorOptions(monitors);
     if(!ordered.length){
         $('#monitorList').html('<div class="p-4 text-center text-muted">No monitors found</div>');
         return;
@@ -1829,15 +1792,14 @@ function updateMonitorList(monitors) {
         const statusText=monitor.status_text||'Offline';
         const label=escapeViewerText(monitor.username||'Unassigned');
         const number=escapeViewerText(monitor.user_no||'—');
+        const title=number+': '+label;
         const ip=escapeViewerText(monitor.last_seen_ip||monitor.ip_address||'—');
         const platform=escapeViewerText(monitor.platform||'—');
         const machine=escapeViewerText(monitor.type||'—');
         return `
-            <div class="monitor-item ${chosen?'selected':''}" data-monitor-id="${Number(monitor.id)}">
+            <div class="monitor-item ${chosen?'selected':''}" role="button" tabindex="0" aria-pressed="${chosen?'true':'false'}" data-monitor-id="${Number(monitor.id)}">
                 <div class="monitor-item-header">
-                    <input type="radio" class="monitor-radio" name="monitor_selection"
-                           value="${Number(monitor.id)}" ${chosen?'checked':''}>
-                    <div class="monitor-item-name" title="${label}">${label}</div>
+                    <div class="monitor-item-name" title="${title}">${title}</div>
                     <div class="monitor-item-status">
                         <span class="live-status-badge status-${status}">
                             <i class="fas fa-circle"></i><span>${escapeViewerText(statusText)}</span>
@@ -1845,11 +1807,8 @@ function updateMonitorList(monitors) {
                         </span>
                     </div>
                 </div>
-                <div class="monitor-item-username" title="${label}">
-                    <i class="fas fa-desktop me-1"></i>Device #${Number(monitor.id)} · User No ${number}
-                </div>
                 <div class="monitor-item-username">
-                    <i class="fas fa-desktop me-1"></i>${platform} · ${machine} · ${ip}
+                    <i class="fas fa-desktop me-1"></i>${platform} · ${machine} · ${ip} · #${Number(monitor.id)}
                 </div>
             </div>`;
     }).join('');
@@ -1912,6 +1871,8 @@ function loadScreenshots(page = 1) {
     if (selectedMonitors.length > 0) {
         params.append('monitors', selectedMonitors.join(','));
     }
+    if(window.headerStartDate)params.append('start_date',window.headerStartDate);
+    if(window.headerEndDate)params.append('end_date',window.headerEndDate);
     
     $.ajax({
         url: "<?php echo BASE_URL; ?>view/api_screenshots?" + params.toString(),
