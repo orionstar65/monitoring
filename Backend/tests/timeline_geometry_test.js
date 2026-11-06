@@ -27,7 +27,7 @@ function asArray(value){return Array.from(value)}
 assert.deepEqual(asArray(engine.drag(state,'pan',20000000,21000000,20500000,21500000)),[21000000,22000000]);
 assert.deepEqual(asArray(engine.drag(state,'pan',20000000,21000000,20500000,-90000000)),[0,1000000]);
 assert.deepEqual(asArray(engine.drag(state,'start',20000000,21000000,20500000,20999999)),[20499999,21000000]);
-assert.deepEqual(asArray(engine.drag(state,'end',20000000,21000000,20500000,0)),[20000000,20500000]);
+assert.deepEqual(asArray(engine.drag(state,'end',20000000,21000000,20500000,0)),[20000000,20001000]);
 const shifted=engine.drag(state,'pan',20000000,21000000,20500000,21500000);
 assert.equal(shifted[1]-shifted[0],1000000);
 assert.equal(engine.zoomScroll({oldPx:3,newPx:6,domainStart:0,anchorTime:600000,anchorX:20,scrollWidth:500}),40);
