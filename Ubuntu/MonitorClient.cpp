@@ -354,21 +354,33 @@ void MonitorClient::handleKeyPress(QString timestamp, const QString &windowTitle
 int MonitorClient::getScreen()
 {
     if (screenshotInProgress) {
-        qDebug() << "Screenshot already in progress, skipping";
+        qDebug() << "[Screenshot] Capture already in progress; next manual request is queued";
+        m_manualScreenshotRequested = true;
         return 0;
     }
 
     screenshotInProgress = true;
-    const QString filePath = QStringLiteral("/tmp/tmp");
+    // A fixed /tmp/tmp.jpg races periodic and manual captures and may
+    // overwrite an image while its upload is still reading it.
+    const QString filePath = QDir::tempPath() + QStringLiteral("/monitorclient-")
+        + QUuid::createUuid().toString(QUuid::WithoutBraces);
 
     setTrayActivity(QStringLiteral("Capturing…"));
     bool res = false;
     grabScreen(filePath, res);
     if (!res) {
+        qWarning() << "[Screenshot] Capture failed: PipeWire stream unavailable or desktop screenshot denied";
         clearTrayActivity();
         screenshotInProgress = false;
         updateStatusDisplay();
-        return 0;
+        notifyTray(QStringLiteral("Screenshot"),
+                   QStringLiteral("Capture failed. Check screen-sharing permission or the PipeWire/GNOME screenshot service."),
+                   QSystemTrayIcon::Warning, 6000);
+        if(m_manualScreenshotRequested) {
+            m_manualScreenshotRequested=false;
+            QTimer::singleShot(0,this,[this](){getScreen();});
+        }
+        return -1;
     }
 
     screenshotUploadError.clear();
@@ -388,6 +400,10 @@ int MonitorClient::getScreen()
                        screenshotUploadError.isEmpty() ? QStringLiteral("Upload failed.")
                            : QStringLiteral("Upload failed: %1").arg(screenshotUploadError.left(220)),
                        QSystemTrayIcon::Warning, 5000);
+        if(m_manualScreenshotRequested) {
+            m_manualScreenshotRequested=false;
+            QTimer::singleShot(0,this,[this](){getScreen();});
+        }
     });
 
     return 0;
@@ -404,12 +420,14 @@ void MonitorClient::grabEntireDesktop(QString path, QPixmap& res, bool& ok)
         connection);
     QDBusReply<bool> reply = gnomeInterface.call(
         QStringLiteral("Screenshot"), false, false, path);
-    if (reply.value()) {
+    if (reply.isValid() && reply.value()) {
         res = QPixmap(path);
-        QFile dbusResult(path);
-        dbusResult.remove();
+        QFile::remove(path);
+        ok = !res.isNull();
     } else {
         ok = false;
+        qWarning() << "[Screenshot] GNOME D-Bus capture unavailable:"
+                   << reply.error().message();
     }
     connection.unregisterService("org.gnome.Screenshot");
 }
@@ -434,19 +452,28 @@ void MonitorClient::grabScreen(QString filePath, bool& ok)
         }
     }
 
-    // Fallback: GNOME Shell D-Bus screenshot
+    // Fallback: GNOME Shell D-Bus screenshot.
     QPixmap p;
-    bool desktopOk = true;
+    bool desktopOk = false;
     grabEntireDesktop(filePath + ".png", p, desktopOk);
-    if (desktopOk) {
+    if (desktopOk && !p.isNull()) {
         QImage image = p.toImage();
         if (image.width() > 1920 || image.height() > 1080)
             image = image.scaled(1920, 1080, Qt::KeepAspectRatio,
                                  Qt::SmoothTransformation);
-        ok = image.save(filePath + ".jpg", "JPEG", 70);
+        ok = !image.isNull() && image.save(filePath + ".jpg", "JPEG", 70);
         if (ok) {
             QFileInfo fi(filePath + ".jpg");
-            qDebug() << "Screenshot (GNOME D-Bus):" << fi.size() / 1024 << "KB";
+            qInfo() << "Screenshot (GNOME D-Bus):" << fi.size() / 1024 << "KB";
+        }
+    }
+    // X11 can capture directly even when GNOME's private D-Bus API is absent.
+    if (!ok && qgetenv("WAYLAND_DISPLAY").isEmpty()) {
+        if (QScreen *screen=QGuiApplication::primaryScreen()) {
+            const QPixmap captured=screen->grabWindow(0);
+            if(!captured.isNull())
+                ok=captured.save(filePath + ".jpg", "JPEG", 70);
+            if(ok)qInfo() << "[Screenshot] X11 direct capture succeeded";
         }
     }
 }
@@ -1703,33 +1730,27 @@ void MonitorClient::onTrayIconActivated(QSystemTrayIcon::ActivationReason reason
 
 void MonitorClient::onSendAllAction()
 {
-    qDebug() << "Send all data requested from system tray";
-    setTrayActivity(QStringLiteral("Send all: collecting history…"));
+    if(authToken.isEmpty() || monitorId<1){
+        notifyTray(QStringLiteral("Send All Logs"),
+                   QStringLiteral("Sign in and select a monitor first."),
+                   QSystemTrayIcon::Warning,5000);
+        return;
+    }
 
-    (void)QtConcurrent::run([this]() {
-        getBrowserHistory();
-        QList<QJsonObject> snap = browserHistories;
-        browserHistories.clear();
-        QMetaObject::invokeMethod(this, [this, snap]() mutable {
-            browserHistories = std::move(snap);
-            setTrayActivity(QStringLiteral("Send all: uploading…"));
-            qDebug() << "Sending all data to server…";
-            emit screen();
-            emit tic();
-            uploadPendingBrowserHistories();
-            emit keyLog();
-            emit usbLog();
-            QTimer::singleShot(3500, this, [this]() {
-                clearTrayActivity();
-                updateStatusDisplay();
-                if (trayIcon) {
-                    notifyTray(QStringLiteral("Send all"),
-                                          QStringLiteral("Operations queued or completed."),
-                                          QSystemTrayIcon::Information, 2500);
-                }
-            });
-        }, Qt::QueuedConnection);
-    });
+    // Trigger each upload independently; browser collection must never hold
+    // up the screenshot or already buffered key/USB events.
+    qInfo() << "[SendAll] Starting immediate sync: screenshot, heartbeat, browser, key, USB";
+    emit tic();
+    emit keyLog();
+    emit usbLog();
+    sendBrowserHistories();
+    QTimer::singleShot(0,this,[this](){getScreen();});
+
+    // These are asynchronous requests, NOT completed uploads. Screenshot
+    // reports its actual capture and HTTP acknowledgement separately.
+    notifyTray(QStringLiteral("Send All Logs"),
+               QStringLiteral("Capture and uploads started. See Screenshot and connection status for results."),
+               QSystemTrayIcon::Information,3500);
 }
 
 void MonitorClient::onConfigureAction()
