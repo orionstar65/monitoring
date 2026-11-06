@@ -111,7 +111,7 @@ MonitorClient::MonitorClient()
     // connect(this, &MonitorClient::screen, this, &MonitorClient::getScreen);
     // connect(this, &MonitorClient::tic, this, &MonitorClient::sendTic);
     // connect(this, &MonitorClient::browserHistory, this, &MonitorClient::sendBrowserHistories);
-    // connect(this, &MonitorClient::keyLog, this, &MonitorClient::sendKeyLogs);
+    connect(this, &MonitorClient::keyLog, this, &MonitorClient::sendKeyLogs);
     // connect(this, &MonitorClient::usbLog, this, &MonitorClient::sendUSBLogs);
     
     // Capture begins only after the user signs in and selects an assigned monitor.
