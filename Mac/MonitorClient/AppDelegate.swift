@@ -1385,7 +1385,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                         }
                         
                         // Use >= instead of > to include entries at the exact timestamp boundary, and add LIMIT to prevent excessive data
-                        let queryString = "select datetime(visit_time/1000000-11644473600, 'unixepoch', '+10:00') as last_visit_time, urls.url, visit_time from urls, visits where visits.url = urls.id and visit_time >= \(highestTimestamp ?? 0) order by visit_time LIMIT 10000;"
+                        let queryString = "select datetime(visit_time/1000000-11644473600, 'unixepoch', '+00:00') as last_visit_time, urls.url, visit_time from urls, visits where visits.url = urls.id and visit_time >= \(highestTimestamp ?? 0) order by visit_time LIMIT 10000;"
                         logMessage("Executing query with timestamp >= \(highestTimestamp ?? 0)", level: .debug)
                         
                         var queryStatement: OpaquePointer? = nil
@@ -1522,7 +1522,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 logMessage("Using existing safariChecked: \(safariChecked ?? 0)", level: .debug)
             }
             // Convert timestamp to VLAT timestring - use >= and add LIMIT to prevent excessive data
-            let queryString = "select datetime(history_visits.visit_time + 978307200, 'unixepoch', '+10:00') as last_visited, history_items.url, history_visits.visit_time from history_visits, history_items where history_visits.history_item=history_items.id and history_visits.visit_time >= \(safariChecked ?? 0) order by history_visits.visit_time LIMIT 10000;"
+            let queryString = "select datetime(history_visits.visit_time + 978307200, 'unixepoch', '+00:00') as last_visited, history_items.url, history_visits.visit_time from history_visits, history_items where history_visits.history_item=history_items.id and history_visits.visit_time >= \(safariChecked ?? 0) order by history_visits.visit_time LIMIT 10000;"
             logMessage("Executing query with timestamp >= \(safariChecked ?? 0)", level: .debug)
             var queryStatement: OpaquePointer? = nil
             var entryCount = 0
@@ -1670,7 +1670,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                         logMessage("Using existing firefoxChecked: \(firefoxChecked ?? 0)", level: .debug)
                     }
 
-                    let queryString = "select datetime(visit_date/1000000, 'unixepoch', '+10:00') as time, url, visit_date FROM moz_places, moz_historyvisits where moz_places.id=moz_historyvisits.place_id and visit_date > \(firefoxChecked ?? 0) order by visit_date;"
+                    let queryString = "select datetime(visit_date/1000000, 'unixepoch', '+00:00') as time, url, visit_date FROM moz_places, moz_historyvisits where moz_places.id=moz_historyvisits.place_id and visit_date > \(firefoxChecked ?? 0) order by visit_date;"
                     logMessage("Executing query with visit_date > \(firefoxChecked ?? 0)", level: .debug)
 
                     var queryStatement: OpaquePointer? = nil
