@@ -777,22 +777,22 @@ class View extends Base {
         $log_type = isset($_GET['log_type']) ? $_GET['log_type'] : 'browser_history';
         $offset = ($page - 1) * $per_page;
         
-        // Get date filter parameters
-        $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : null;
-        $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : null;
-        
-        // Build WHERE conditions
+        try {
+            [$utcStart,$utcEnd]=monitorUtcBounds($_GET);
+        } catch (InvalidArgumentException $error) {
+            http_response_code(400);
+            $this->json(['error'=>$error->getMessage()]);
+            return;
+        }
         $where_conditions = ["monitor_ip_id = :monitor_id"];
         $params = ['monitor_id' => $monitor['id']];
-        
-        if ($start_date) {
+        if ($utcStart !== null) {
             $where_conditions[] = "visit_date >= :start_date";
-            $params['start_date'] = $start_date . ' 00:00:00';
+            $params['start_date'] = $utcStart;
         }
-        
-        if ($end_date) {
-            $where_conditions[] = "visit_date <= :end_date";
-            $params['end_date'] = $end_date . ' 23:59:59';
+        if ($utcEnd !== null) {
+            $where_conditions[] = "visit_date < :end_date";
+            $params['end_date'] = $utcEnd;
         }
         
         $where_clause = implode(' AND ', $where_conditions);
