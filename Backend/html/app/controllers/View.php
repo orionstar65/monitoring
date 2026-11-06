@@ -66,10 +66,14 @@ class View extends Base {
             : $this->db->fetchAll(
                 'SELECT u.id,u.user_no,u.name,
                     (SELECT COUNT(*) FROM tbl_monitor_ips t WHERE t.owner_user_id=u.id) AS device_count
-                 FROM users u JOIN admin_user_assignments a ON a.managed_user_id=u.id
-                 WHERE a.admin_user_id=:admin AND u.role=:role
+                 FROM users u
+                 WHERE u.id=:self_id OR (u.role=:role AND EXISTS (
+                     SELECT 1 FROM admin_user_assignments a
+                     WHERE a.managed_user_id=u.id AND a.admin_user_id=:admin
+                 ))
                  ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id',
-                ['admin'=>(int)$this->user['id'],'role'=>ROLE_USER]);
+                ['self_id'=>(int)$this->user['id'],
+                 'admin'=>(int)$this->user['id'],'role'=>ROLE_USER]);
         $targets=$this->isAdmin()&&!empty($monitor['owner_user_id'])?$this->db->fetchAll(
             'SELECT id,ip_address,last_seen_ip,platform,type FROM tbl_monitor_ips
              WHERE owner_user_id=:owner AND id<>:id ORDER BY id',
