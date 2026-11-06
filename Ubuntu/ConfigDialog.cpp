@@ -46,7 +46,7 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     auto *page=new QWidget(scroll);
     auto *content=new QVBoxLayout(page);
     content->setContentsMargins(2,0,2,2);
-    content->setSpacing(10);
+    content->setSpacing(12);
     content->setAlignment(Qt::AlignTop);
     scroll->setWidget(page);
     outer->addWidget(scroll);
@@ -62,12 +62,6 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     brand->addWidget(name);brand->addWidget(new QLabel("v1.5"));
     header->addLayout(brand);header->addStretch();
     content->addLayout(header);
-    auto divider=[&](){
-        auto *line=new QFrame(page);
-        line->setFrameShape(QFrame::HLine);
-        content->addWidget(line);
-    };
-    divider();
 
     auto *serverGroup=new QGroupBox("Server Settings",page);
     auto *serverForm=new QFormLayout(serverGroup);
@@ -94,8 +88,6 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     connectionStatusLabel=new QLabel("● Not tested",serverGroup);
     serverForm->addRow(testButton,connectionStatusLabel);
     content->addWidget(serverGroup);
-    divider();
-
     auto *userGroup=new QWidget(page);
     auto *userForm=new QFormLayout(userGroup);
     userSelector=new QComboBox(userGroup);
@@ -111,8 +103,6 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     userForm->addRow("",assignmentStatusLabel);
     userGroup->setVisible(false); // Password sign-in replaces user directory selection.
     content->addWidget(userGroup);
-    divider();
-
     monitorGroup=new QGroupBox("Monitor Settings",page);
     auto *monitorForm=new QFormLayout(monitorGroup);
     monitorSelector=new QComboBox(monitorGroup);
@@ -159,8 +149,6 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     monitorForm->addRow("IP address",monitorIPLabel);
     monitorForm->addRow("Remark",remarkStack);
     content->addWidget(monitorGroup);
-    divider();
-
     notificationsCheck=new QCheckBox("Show status notifications",page);
     content->addWidget(notificationsCheck);
     auto *toolsRow=new QHBoxLayout();
