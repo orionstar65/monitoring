@@ -101,8 +101,13 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
     // metadata, and portal searches all use UTC, regardless of server timezone.
     // Legacy offset-less values are treated as UTC for compatibility.
     $captureTime=monitorCaptureTimeUTC((string)$ctime);
-    if($captureTime===null)
-        return failScreenshotUpload('Invalid screenshot timestamp (use ISO-8601 with timezone)',400);
+    if($captureTime===null) {
+        // A malformed clock value must never discard an otherwise valid
+        // screenshot. Capture is normally uploaded immediately; record the
+        // server's receipt time in UTC, and log that the client needs updating.
+        error_log('Screenshot upload: invalid client capture timestamp from monitor #'.$monitor_id.'; using server UTC receipt time');
+        $captureTime=new DateTimeImmutable('now',new DateTimeZone('UTC'));
+    }
     $capture_datetime=$captureTime->format('Y-m-d H:i:s');
     $date_dir=$captureTime->format('Y-m-d');
     $screens_date_path = $monitor_paths['screens'] . $date_dir . '/';
