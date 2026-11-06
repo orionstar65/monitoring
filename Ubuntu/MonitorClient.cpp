@@ -508,7 +508,8 @@ void MonitorClient::sendScreensAsync(const QString &filePath, std::function<void
     QHttpPart ctimePart;
     ctimePart.setHeader(QNetworkRequest::ContentDispositionHeader,
                         QVariant(QStringLiteral("form-data; name=\"ctime\"")));
-    ctimePart.setBody(QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")).toUtf8());
+    // ISO-8601 includes the machine's UTC offset; the backend stores UTC.
+    ctimePart.setBody(QDateTime::currentDateTime().toString(Qt::ISODate).toUtf8());
     multiPart->append(ctimePart);
 
     QHttpPart imagePart;
