@@ -14,7 +14,101 @@ import IOKit.usb
 import os.log
 import UserNotifications
 import Security
+import CryptoKit
 import ScreenCaptureKit
+
+// Self-hosted update manifest served by python3 -m http.server.
+// HTTP is intended for a trusted LAN; SHA-256 detects corruption but does not
+// authenticate the server. Use HTTPS for untrusted networks.
+private struct MonitorRelease {
+    let version: String
+    let file: String
+    let sha256: String
+    let size: Int64
+    let url: URL
+}
+private enum MonitorUpdates {
+    static var platform: String {
+        #if arch(arm64)
+        return "macos-arm64"
+        #else
+        return "macos-x64"
+        #endif
+    }
+    static func baseURL(_ raw: String) -> URL? {
+        guard var c=URLComponents(string:raw.trimmingCharacters(in:.whitespacesAndNewlines)),
+              ["http","https"].contains(c.scheme?.lowercased() ?? ""),
+              c.host != nil, c.user == nil, c.password == nil,
+              c.query == nil, c.fragment == nil else { return nil }
+        if !c.path.hasSuffix("/") { c.path += "/" }
+        return c.url
+    }
+    static func newer(_ remote: String, than installed: String) -> Bool {
+        func numbers(_ value: String) -> [Int]? {
+            let parts=value.split(separator:".")
+            guard parts.count >= 2 && parts.count <= 3 else { return nil }
+            let values=parts.compactMap { Int($0) }
+            guard values.count == parts.count && values.allSatisfy({$0 >= 0}) else { return nil }
+            return values + Array(repeating:0,count:3-values.count)
+        }
+        guard let lhs=numbers(remote),let rhs=numbers(installed) else {return false}
+        return lhs.lexicographicallyPrecedes(rhs) == false && lhs != rhs
+    }
+    static func release(_ data: Data, base: URL, installed: String) throws -> MonitorRelease? {
+        guard data.count <= 256*1024,
+              let root=try JSONSerialization.jsonObject(with:data) as? [String:Any],
+              root["schema"] as? Int == 1,
+              let entries=root["platforms"] as? [String:Any],
+              let item=entries[platform] as? [String:Any],
+              let version=item["version"] as? String,
+              let name=item["file"] as? String,
+              let digest=item["sha256"] as? String,
+              let size=(item["size"] as? NSNumber)?.int64Value else {
+            throw NSError(domain:"MonitorUpdates",code:1,
+                          userInfo:[NSLocalizedDescriptionKey:"Invalid update manifest"])
+        }
+        guard newer(version,than:installed) else {return nil}
+        let expected="MonitorClient-\(version)-\(platform).pkg"
+        guard name == expected,size>0,size<=512*1024*1024,
+              digest.range(of:"^[a-fA-F0-9]{64}$",options:.regularExpression) != nil,
+              let remote=URL(string:name,relativeTo:base)?.absoluteURL,
+              remote.host == base.host && remote.port == base.port && remote.scheme == base.scheme else {
+            throw NSError(domain:"MonitorUpdates",code:2,
+                          userInfo:[NSLocalizedDescriptionKey:"Invalid update package metadata"])
+        }
+        return MonitorRelease(version:version,file:name,sha256:digest.lowercased(),size:size,url:remote)
+    }
+    static func verifyAndCache(_ source: URL, entry: MonitorRelease) throws -> URL {
+        let location=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask)[0]
+            .appendingPathComponent("MonitorClient/updates",isDirectory:true)
+        try FileManager.default.createDirectory(at:location,withIntermediateDirectories:true)
+        let temp=location.appendingPathComponent(entry.file+".download")
+        let output=location.appendingPathComponent(entry.file)
+        try? FileManager.default.removeItem(at:temp)
+        try FileManager.default.copyItem(at:source,to:temp)
+        let stream=try FileHandle(forReadingFrom:temp)
+        defer {stream.closeFile()}
+        var digest=SHA256()
+        var total:Int64=0
+        while true {
+            let data=stream.readData(ofLength:1024*1024)
+            if data.isEmpty {break}
+            total+=Int64(data.count)
+            if total>entry.size {throw NSError(domain:"MonitorUpdates",code:3,
+                userInfo:[NSLocalizedDescriptionKey:"Update exceeds advertised size"])}
+            digest.update(data:data)
+        }
+        let computed=digest.finalize().map{String(format:"%02x",$0)}.joined()
+        guard total==entry.size,computed==entry.sha256 else {
+            try? FileManager.default.removeItem(at:temp)
+            throw NSError(domain:"MonitorUpdates",code:4,
+                userInfo:[NSLocalizedDescriptionKey:"Update SHA-256 verification failed"])
+        }
+        try? FileManager.default.removeItem(at:output)
+        try FileManager.default.moveItem(at:temp,to:output)
+        return output
+    }
+}
 
 let CHECKER_IDENTIFIER = "com.airentech.MonitorClient"
 
@@ -2840,6 +2934,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                                      target: nil, action: nil)
         notifications.state = self.notificationsEnabled ? .on : .off
         stack.addArrangedSubview(notifications)
+        let updatePane = section("Updates")
+        let updateServer = entry("http://192.168.2.241:8765",
+            value:storage.string(forKey:"update-server-url") ?? "")
+        updatePane.addArrangedSubview(line("Update server",updateServer))
+        let checkUpdate = action("Check new version","check-update")
+        let installUpdate = action("Update","install-update")
+        installUpdate.isEnabled=false
+        let updateButtons=NSStackView(views:[checkUpdate,installUpdate])
+        updateButtons.orientation = .horizontal
+        updateButtons.spacing=8
+        updatePane.addArrangedSubview(line("",updateButtons))
+        let currentVersion=Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? APP_VERSION
+        let updateMessage=text("Installed: \(currentVersion)")
+        updateMessage.lineBreakMode = .byWordWrapping
+        updateMessage.maximumNumberOfLines=3
+        updatePane.addArrangedSubview(line("",updateMessage))
+        stack.addArrangedSubview(updatePane)
+        var pendingRelease:MonitorRelease?=nil
+        func invalidateUpdate(){
+            pendingRelease=nil
+            installUpdate.isEnabled=false
+        }
+        updateServer.delegate = nil
         let lockSettings = action("Lock Settings", "lock")
         let close = action("Close", "close")
         let sendAllButton = action("Send All Logs", "send-all")
@@ -2858,7 +2975,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let coordinator = UnifiedWindowActions()
         coordinator.window = window
         window.delegate = coordinator
-        for button in [test, unpair, edit, save, lockSettings, close, sendAllButton, refreshConfigButton, grantPermissionsButton] {
+        for button in [test, unpair, edit, save, lockSettings, close, sendAllButton, refreshConfigButton, grantPermissionsButton, checkUpdate, installUpdate] {
             button.target = coordinator
             button.action = #selector(UnifiedWindowActions.activate(_:))
         }
@@ -3096,6 +3213,75 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         coordinator.handler = { [weak self] command in
             guard let self = self else { return }
             switch command {
+            case "check-update":
+                invalidateUpdate()
+                guard let base=MonitorUpdates.baseURL(updateServer.stringValue),
+                      let manifest=URL(string:"manifest.json",relativeTo:base)?.absoluteURL else {
+                    updateMessage.stringValue="Enter an HTTP or HTTPS update server URL."
+                    return
+                }
+                self.storage.set(updateServer.stringValue.trimmingCharacters(in:.whitespacesAndNewlines),
+                                 forKey:"update-server-url")
+                checkUpdate.isEnabled=false
+                updateMessage.stringValue="Checking \(MonitorUpdates.platform)…"
+                URLSession.shared.dataTask(with:manifest){data,response,error in
+                    DispatchQueue.main.async {
+                        checkUpdate.isEnabled=true
+                        guard let data=data,error == nil,
+                              (response as? HTTPURLResponse)?.statusCode == 200 else {
+                            updateMessage.stringValue="Update check failed: \(error?.localizedDescription ?? "HTTP error")"
+                            return
+                        }
+                        do {
+                            pendingRelease=try MonitorUpdates.release(data,base:base,installed:currentVersion)
+                            if let entry=pendingRelease {
+                                updateMessage.stringValue="Available: \(entry.version) · installed \(currentVersion)"
+                                installUpdate.isEnabled=true
+                            }else {updateMessage.stringValue="Up to date (\(currentVersion))"}
+                        }catch {updateMessage.stringValue=error.localizedDescription}
+                    }
+                }.resume()
+            case "install-update":
+                guard let entry=pendingRelease,
+                      let base=MonitorUpdates.baseURL(updateServer.stringValue),
+                      base.host==entry.url.host && base.port==entry.url.port &&
+                      base.scheme==entry.url.scheme else {
+                    invalidateUpdate()
+                    updateMessage.stringValue="Update server changed. Check again."
+                    return
+                }
+                installUpdate.isEnabled=false
+                updateMessage.stringValue="Downloading \(entry.version)…"
+                URLSession.shared.downloadTask(with:entry.url){location,response,error in
+                    guard let location=location,error == nil,
+                          (response as? HTTPURLResponse)?.statusCode == 200 else {
+                        DispatchQueue.main.async {
+                            updateMessage.stringValue="Download failed: \(error?.localizedDescription ?? "HTTP error")"
+                            installUpdate.isEnabled=true
+                        }
+                        return
+                    }
+                    do {
+                        let saved=try MonitorUpdates.verifyAndCache(location,entry:entry)
+                        DispatchQueue.main.async {
+                            let process=Process()
+                            process.executableURL=URL(fileURLWithPath:"/usr/bin/open")
+                            process.arguments=["-a","Installer",saved.path]
+                            do {
+                                try process.run()
+                                updateMessage.stringValue="Installer opened. Follow the macOS prompts."
+                                // The installer replaces /Applications/MonitorClient.app;
+                                // the running process must quit to load its new bundle.
+                                NSApp.terminate(nil)
+                            }catch {updateMessage.stringValue=error.localizedDescription}
+                        }
+                    }catch {
+                        DispatchQueue.main.async {
+                            updateMessage.stringValue=error.localizedDescription
+                            installUpdate.isEnabled=true
+                        }
+                    }
+                }.resume()
             case "notifications":
                 let enabled=notifications.state == .on
                 self.notificationsEnabled=enabled
