@@ -53,6 +53,19 @@ $checks=[
     monitorCaptureTimeUTC('2026-02-30T10:30:00Z')===null,
  'Legacy timestamp interpretation is independent of PHP default timezone'=>
     $legacy?->format('Y-m-d H:i:s')==='2026-11-07 01:00:00',
+ 'Qt ISODate with T separator but no timezone is accepted for older clients'=>
+    monitorCaptureTimeUTC('2026-11-06T19:00:00')?->format('Y-m-d H:i:s')===
+    '2026-11-06 19:00:00',
+ 'Fractional ISO timestamps with offsets are normalized to UTC'=>
+    monitorCaptureTimeUTC('2026-11-06T19:00:00.123-06:00')?->format('Y-m-d H:i:s')===
+    '2026-11-07 01:00:00',
+ 'Qt millisecond UTC timestamps are accepted'=>
+    monitorCaptureTimeUTC('2026-11-07T01:00:00.123Z')?->getTimestamp()===
+    monitorCaptureTimeUTC('2026-11-07T01:00:00Z')?->getTimestamp(),
+ 'Invalid client timestamp falls back to UTC receipt time for screenshot only'=>
+    str_contains($upload,"new DateTimeImmutable('now',new DateTimeZone('UTC'))") &&
+    str_contains($upload,'invalid client capture timestamp from monitor') &&
+    !str_contains($upload,"failScreenshotUpload('Invalid screenshot timestamp"),
  'Chicago November 6 local calendar resolves to UTC Nov 6 06:00 through Nov 7 06:00'=>
     $utcBounds===['2026-11-06 06:00:00','2026-11-07 06:00:00'],
  'Backward-compatible date-only bounds are UTC and end exclusive'=>
@@ -88,7 +101,7 @@ $checks=[
     str_contains($logs,'key_date < :end_date') &&
     str_contains($logs,'device_date < :end_date'),
  'All three desktop clients send offset-aware screenshot capture timestamps'=>
-    str_contains($ubuntu,'ctimePart.setBody(QDateTime::currentDateTime().toString(Qt::ISODate)') &&
+    str_contains($ubuntu,'ctimePart.setBody(QDateTime::currentDateTimeUtc().toString(Qt::ISODate)') &&
     str_contains($mac,"formatter.dateFormat = \"yyyy-MM-dd'T'HH:mm:ssXXXXX\"") &&
     str_contains($windows,'formData += getWireDateTimeString()'),
  'Screenshot cleanup preview and deletion share the same UTC half-open bounds'=>
