@@ -636,7 +636,10 @@ class View extends Base {
     /**
      * Log Management Page - Similar to real-time monitoring but for logs only
      */
-    public function logs() {
+    public function logs($monitorId = null) {
+        // Keep old deep links working while consolidating the UI.
+        $id=filter_var($monitorId,FILTER_VALIDATE_INT);
+        $this->redirect('view?tab=browser'.($id?'&monitor_id='.(int)$id:''));
         // Get monitors from database
         $monitors = $this->db->fetchAll(
             "SELECT m.*,owner.name AS username,owner.user_no AS user_no FROM tbl_monitor_ips m LEFT JOIN users owner ON owner.id=m.owner_user_id ORDER BY (owner.id IS NULL), CAST(owner.user_no AS UNSIGNED), owner.name, COALESCE(m.type,''), COALESCE(m.platform,''), INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)), COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address), m.id"
