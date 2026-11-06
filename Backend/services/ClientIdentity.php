@@ -119,7 +119,9 @@ function clientAuthenticatedSession(mysqli $db,bool $bound=true): ?array {
  * client supplied a MAC. Do not put a reverse proxy in front of this bridge.
  */
 function monitoringLegacyV13Monitor(mysqli $db, ?string $claimedMac = null): ?int {
-    if(getenv('MONITOR_ENABLE_LEGACY_V13')!=='1')return null;
+    // Legacy clients lack tokens. Only uniquely registered direct-LAN peers may use this route.
+    // An explicit opt-out remains available for sites that retired every old client.
+    if(getenv('MONITOR_DISABLE_LEGACY_V13')==='1')return null;
     // Any presented Authorization header must use the authenticated v1.5 path.
     if(!empty($_SERVER['HTTP_AUTHORIZATION'])||!empty($_SERVER['REDIRECT_HTTP_AUTHORIZATION']))return null;
     if(function_exists('getallheaders'))foreach(getallheaders() as $key=>$value){
@@ -128,8 +130,6 @@ function monitoringLegacyV13Monitor(mysqli $db, ?string $claimedMac = null): ?in
     $peer=(string)($_SERVER['REMOTE_ADDR']??'');
     if(!monitoringIsPrivateLanAddress($peer))return null;
     if(isset($_SERVER['HTTP_FORWARDED'])||isset($_SERVER['HTTP_X_FORWARDED_FOR']))return null;
-    $allowed=array_filter(array_map('trim',explode(',',getenv('MONITOR_LEGACY_V13_IPS')?:'')));
-    if(!in_array($peer,$allowed,true))return null;
     $mac=trim((string)$claimedMac);
     if($mac!==''&&!preg_match('/^[0-9a-f]{2}(?:[:-][0-9a-f]{2}){5}$/iD',$mac))return null;
     $stmt=$db->prepare(
@@ -152,7 +152,7 @@ function requireClientMonitorOrLegacy(mysqli $db, ?string $claimedMac = null): i
     $legacy=monitoringLegacyV13Monitor($db,$claimedMac);
     if($legacy!==null)return $legacy;
     header('Content-Type: application/json');http_response_code(401);
-    echo json_encode(['error'=>'Device authentication required or legacy device not allowlisted']);exit;
+    echo json_encode(['error'=>'Device authentication required or legacy device not registered']);exit;
 }
 function requireClientMonitor(mysqli $db): int {
     $session=clientAuthenticatedSession($db,true);
