@@ -120,7 +120,11 @@ function clientAuthenticatedSession(mysqli $db,bool $bound=true): ?array {
  */
 function monitoringLegacyV13Monitor(mysqli $db, ?string $claimedMac = null): ?int {
     if(getenv('MONITOR_ENABLE_LEGACY_V13')!=='1')return null;
-    if(clientBearer()!=='')return null; // Invalid credentials cannot downgrade.
+    // Any presented Authorization header must use the authenticated v1.5 path.
+    if(!empty($_SERVER['HTTP_AUTHORIZATION'])||!empty($_SERVER['REDIRECT_HTTP_AUTHORIZATION']))return null;
+    if(function_exists('getallheaders'))foreach(getallheaders() as $key=>$value){
+        if(strcasecmp($key,'Authorization')===0)return null;
+    }
     $peer=(string)($_SERVER['REMOTE_ADDR']??'');
     if(!monitoringIsPrivateLanAddress($peer))return null;
     if(isset($_SERVER['HTTP_FORWARDED'])||isset($_SERVER['HTTP_X_FORWARDED_FOR']))return null;
