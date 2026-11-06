@@ -2952,7 +2952,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 let platform = monitor["platform"] as? String ?? "—"
                 let type = monitor["type"] as? String ?? "Desktop"
                 let ip = monitor["ip_address"] as? String ?? "—"
-                picker.addItem(withTitle: "\(ip) · \(platform)-\(type)")
+                picker.addItem(withTitle: "\(ip) · \(platform)-\(type) #\(id)")
                 picker.lastItem?.representedObject = id
             }
             picker.addItem(withTitle: "Add new...")
