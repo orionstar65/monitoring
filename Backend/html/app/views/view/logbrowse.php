@@ -1164,6 +1164,9 @@ function keyRangeHitMode(state,time,ruler){
     const selectedPixels=(state.rangeEnd-state.rangeStart)/perPixel;
     const edgeTolerance=Math.min(14,Math.max(2,selectedPixels*.3))*perPixel;
     const fromDistance=Math.abs(time-state.rangeStart),toDistance=Math.abs(time-state.rangeEnd);
+    const duration=state.rangeEnd-state.rangeStart;
+    // Reserve the center third for panning even when selection is very narrow.
+    if(time>state.rangeStart&&time<state.rangeEnd&&fromDistance>duration*.3&&toDistance>duration*.3)return 'pan';
     if(fromDistance<=edgeTolerance||toDistance<=edgeTolerance)
         return fromDistance<=toDistance?'start':'end';
     if(time>state.rangeStart&&time<state.rangeEnd)return 'pan';
