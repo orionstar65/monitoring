@@ -39,7 +39,7 @@
 #include <QStackedWidget>
 
 ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
-    setWindowTitle("MonitorClient v1.5 — Settings");
+    setWindowTitle(QString("MonitorClient v%1 — Settings").arg(MONITORAPP_VERSION));
     setMinimumSize(500,420);
     resize(560,640);
     setModal(true);
