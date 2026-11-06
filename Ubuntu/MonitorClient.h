@@ -204,6 +204,7 @@ private:
     QAction *configRefreshAction;
     bool serverConnected;
     QString lastError;
+    QString screenshotUploadError;
     QString clientName;
     
     // Status tracking
