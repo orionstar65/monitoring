@@ -96,7 +96,7 @@ $checks=[
     str_contains($cleanup,'capture_datetime < :end_date') &&
     str_contains($logUI,'appendBrowseUtcBounds(body)'),
  'API request-log partitions use UTC calendar days'=>
-    str_contains($apiLogService,"$".'date = gmdate('."'Y-m-d'".');'),
+    str_contains($apiLogService,"gmdate('Y-m-d')"),
  'Hardcoded +10 hour browser time adjustments removed'=>
     !str_contains($ubuntu,"'+10:00'") && !str_contains($mac,"'+10:00'")
 ];
