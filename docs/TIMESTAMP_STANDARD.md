@@ -30,4 +30,6 @@ DST varies the length of a calendar day: March 8, 2026 has 23 hours in Chicago, 
 - Offset-less timestamps from legacy v1.3/v1.5 clients have no recoverable timezone. Interpret them as UTC for compatibility going forward. Some historical rows may have been recorded as local wall time; they cannot be reliably converted without identifying the original client timezone and period.
 - **Do not** rename existing screenshot folders, move files, or rewrite historical DATETIME rows automatically. File paths in `screenshot_metadata` are authoritative.
 - Deploy the backend and portal before updating clients. The new backend accepts both legacy `YYYY-MM-DD HH:MM:SS` and offset-aware ISO-8601 screenshot uploads. Updated clients include offsets.
+- Screenshot cleanup preview and deletion use the same viewer-local UTC interval, so an image in the next UTC date folder is not accidentally excluded or deleted in the wrong day.
+- Daily API request-log partition names use UTC dates (not the server's PHP timezone).
 - The API contract is implemented in `Backend/services/TelemetryTime.php`. To verify the edge cases, run `php Backend/tests/telemetry_timezone_contract.php` from the repository root.
