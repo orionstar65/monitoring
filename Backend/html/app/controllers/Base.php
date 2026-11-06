@@ -99,6 +99,9 @@ class Base {
     protected function canAccessUser(int $id): bool {
         if($this->isAdmin())return true;
         if(!$this->isScopedAdmin()||$id<1)return false;
+        // Admins can always view their own account data, independently of
+        // which ordinary users the Super Admin assigns to them.
+        if($id===(int)$this->user['id'])return true;
         // Query on every authorization decision so revoked assignments apply
         // without requiring delegated admins to log out.
         return (bool)$this->db->fetch(
@@ -114,11 +117,17 @@ class Base {
         if($this->isAdmin())return true;
         if(!$this->isScopedAdmin()||$id<1)return false;
         return (bool)$this->db->fetch(
-            'SELECT 1 FROM tbl_monitor_ips m JOIN admin_user_assignments a
-             ON a.managed_user_id=m.owner_user_id JOIN users u ON u.id=a.managed_user_id
-             WHERE m.id=:monitor AND a.admin_user_id=:admin
-             AND u.role=:role LIMIT 1',
-            ['monitor'=>$id,'admin'=>(int)$this->user['id'],'role'=>ROLE_USER]);
+            'SELECT 1 FROM tbl_monitor_ips m
+             WHERE m.id=:monitor AND (
+                 m.owner_user_id=:self_id OR EXISTS (
+                     SELECT 1 FROM admin_user_assignments a
+                     JOIN users u ON u.id=a.managed_user_id
+                     WHERE a.managed_user_id=m.owner_user_id
+                       AND a.admin_user_id=:admin AND u.role=:role
+                 )
+             ) LIMIT 1',
+            ['monitor'=>$id,'self_id'=>(int)$this->user['id'],
+             'admin'=>(int)$this->user['id'],'role'=>ROLE_USER]);
     }
     protected function requireMonitorAccess(int $id): void {
         if(!$this->canAccessMonitor($id)){http_response_code(403);exit('Monitor not assigned to this administrator');}
@@ -129,12 +138,13 @@ class Base {
         if(!$this->isScopedAdmin())return ['1=0',[]];
         if(!preg_match('/^[a-z][a-z0-9_]*$/i',$alias))throw new InvalidArgumentException('Invalid SQL alias');
         return [
-            "{$alias}.owner_user_id IN (
+            "({$alias}.owner_user_id=:scope_self_id OR {$alias}.owner_user_id IN (
                 SELECT a.managed_user_id FROM admin_user_assignments a
                 JOIN users scope_user ON scope_user.id=a.managed_user_id
                 WHERE a.admin_user_id=:scope_admin_id AND scope_user.role=:scope_role
-            )",
-            ['scope_admin_id'=>(int)$this->user['id'],'scope_role'=>ROLE_USER]
+            ))",
+            ['scope_self_id'=>(int)$this->user['id'],
+             'scope_admin_id'=>(int)$this->user['id'],'scope_role'=>ROLE_USER]
         ];
     }
     
