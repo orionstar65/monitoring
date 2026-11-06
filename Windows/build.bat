@@ -195,12 +195,19 @@ if exist "MonitorClient.exe" (
     echo Location: %CD%\MonitorClient.exe
     echo.
     
-    :: Copy executable to parent directory
-    copy MonitorClient.exe ..\MonitorClient.exe >nul 2>&1
-    if exist "..\MonitorClient.exe" (
-        echo Executable copied to: ..\MonitorClient.exe
+    :: Fail loudly if an older running copy prevents replacement.
+    :: Checking only file existence can report success with a stale EXE.
+    copy /Y MonitorClient.exe ..\MonitorClient.exe >nul
+    if errorlevel 1 (
         echo.
+        echo ERROR: Could not replace ..\MonitorClient.exe.
+        echo Quit the running MonitorClient from the Windows tray and rebuild.
+        echo The updated executable is still available under build\MonitorClient.exe.
+        pause
+        exit /b 1
     )
+    echo Executable copied to: ..\MonitorClient.exe
+    echo.
     
     :: Copy required DLL files
     echo Copying required DLL files...
