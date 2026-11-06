@@ -84,18 +84,72 @@ class Databasemanagement extends Base {
             $this->json(['success'=>true,'done'=>true,'deleted'=>0,'next_table'=>$index]);
         }
         $table=$tables[$index];
-        $cutoff=(new DateTimeImmutable('now'))->sub(new DateInterval('P'.$months.'M'))
-            ->format('Y-m-d H:i:s');
-        // Only explicitly allowlisted history tables. Delete in manageable
-        // batches so large databases do not hit web request timeouts.
+        $cutoff=(string)$this->db->fetch(
+            'SELECT DATE_FORMAT(DATE_SUB(NOW(),INTERVAL :months MONTH),'.
+            "'%Y-%m-%d %H:%i:%s' AS cutoff",['months'=>$months]
+        )['cutoff'];
+        // Select and lock a bounded batch so monthly storage summaries can
+        // be decremented accurately in the same transaction as row deletion.
+        // Screenshot metadata is intentionally excluded; it must be deleted
+        // together with physical files by the existing screenshot cleanup.
+        $spec=[
+            'browser_history_logs'=>['date'=>'visit_date','type'=>'browser_history',
+                'bytes'=>"OCTET_LENGTH(COALESCE(url,''))+OCTET_LENGTH(COALESCE(title,''))"],
+            'key_logs'=>['date'=>'key_date','type'=>'key_logs',
+                'bytes'=>"OCTET_LENGTH(COALESCE(application,''))+OCTET_LENGTH(COALESCE(key_pressed,''))"],
+            'usb_device_logs'=>['date'=>'device_date','type'=>'usb_logs',
+                'bytes'=>"OCTET_LENGTH(COALESCE(device_name,''))+OCTET_LENGTH(COALESCE(device_path,''))+OCTET_LENGTH(COALESCE(device_type,''))"]
+        ][$table];
+        $pdo=$this->db->getConnection();
         try{
-            $statement=$this->db->query(
-                'DELETE FROM '.$this->quoteIdentifier($table).
-                ' WHERE created_at < :cutoff ORDER BY created_at ASC LIMIT '.self::BATCH_SIZE,
+            $pdo->beginTransaction();
+            $rows=$this->db->fetchAll(
+                'SELECT id,monitor_ip_id,DATE_FORMAT('.$this->quoteIdentifier($spec['date']).
+                ','.("'".'%Y-%m'."'").') AS month_year,('.$spec['bytes'].') AS payload_size '.
+                'FROM '.$this->quoteIdentifier($table).
+                ' WHERE created_at < :cutoff ORDER BY created_at ASC,id ASC LIMIT '.
+                self::BATCH_SIZE.' FOR UPDATE',
                 ['cutoff'=>$cutoff]
             );
-            $deleted=$statement->rowCount();
+            $deleted=count($rows);
+            if($rows){
+                $ids=array_map('intval',array_column($rows,'id'));
+                $placeholders=implode(',',array_fill(0,count($ids),'?'));
+                $affected=$this->db->query(
+                    'DELETE FROM '.$this->quoteIdentifier($table).' WHERE id IN ('.$placeholders.')',
+                    $ids
+                )->rowCount();
+                if($affected!==$deleted)
+                    throw new RuntimeException('Concurrent cleanup modified the selected batch');
+                $grouped=[];
+                foreach($rows as $row){
+                    $groupKey=$row['monitor_ip_id'].'|'.$row['month_year'];
+                    if(!isset($grouped[$groupKey]))
+                        $grouped[$groupKey]=[
+                            'id'=>(int)$row['monitor_ip_id'],
+                            'month'=>$row['month_year'],
+                            'count'=>0,'bytes'=>0
+                        ];
+                    $grouped[$groupKey]['count']++;
+                    $grouped[$groupKey]['bytes']+=(int)$row['payload_size'];
+                }
+                foreach($grouped as $group){
+                    $this->db->query(
+                        'UPDATE storage_statistics
+                         SET record_count=GREATEST(0,record_count-:amount),
+                             total_size=GREATEST(0,total_size-:bytes),
+                             last_updated=CURRENT_TIMESTAMP
+                         WHERE monitor_ip_id=:id AND data_type=:type AND month_year=:month',
+                        [
+                            'amount'=>$group['count'],'bytes'=>$group['bytes'],
+                            'id'=>$group['id'],'type'=>$spec['type'],'month'=>$group['month']
+                        ]
+                    );
+                }
+            }
+            $pdo->commit();
         }catch(Throwable $error){
+            if($pdo->inTransaction())$pdo->rollBack();
             error_log('DB cleanup failure '.$table.': '.$error->getMessage());
             http_response_code(500);
             $this->json(['success'=>false,'error'=>'Could not clean '.$table]);
