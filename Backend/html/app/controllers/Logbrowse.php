@@ -81,8 +81,7 @@ class Logbrowse extends Base {
         
         // Get total count
         $count_sql = "SELECT COUNT(*) as total 
-                      FROM browser_history_logs b 
-                      JOIN tbl_monitor_ips m ON b.monitor_ip_id = m.id LEFT JOIN users owner ON owner.id=m.owner_user_id 
+                      FROM browser_history_logs b
                       {$where_clause}";
         
         $total_result = $this->db->query($count_sql, $params)->fetch();
@@ -98,7 +97,7 @@ class Logbrowse extends Base {
                      FROM browser_history_logs b 
                      JOIN tbl_monitor_ips m ON b.monitor_ip_id = m.id LEFT JOIN users owner ON owner.id=m.owner_user_id 
                      {$where_clause}
-                     ORDER BY b.visit_date DESC 
+                     ORDER BY b.visit_date DESC,b.id DESC
                      LIMIT :limit OFFSET :offset";
         
         $params['limit'] = $per_page;
@@ -155,8 +154,7 @@ class Logbrowse extends Base {
         
         // Get total count
         $count_sql = "SELECT COUNT(*) as total 
-                      FROM key_logs k 
-                      JOIN tbl_monitor_ips m ON k.monitor_ip_id = m.id LEFT JOIN users owner ON owner.id=m.owner_user_id 
+                      FROM key_logs k
                       {$where_clause}";
         
         $total_result = $this->db->query($count_sql, $params)->fetch();
@@ -172,7 +170,7 @@ class Logbrowse extends Base {
                      FROM key_logs k 
                      JOIN tbl_monitor_ips m ON k.monitor_ip_id = m.id LEFT JOIN users owner ON owner.id=m.owner_user_id 
                      {$where_clause}
-                     ORDER BY k.key_date DESC 
+                     ORDER BY k.key_date DESC,k.id DESC
                      LIMIT :limit OFFSET :offset";
         
         $params['limit'] = $per_page;
@@ -302,8 +300,7 @@ class Logbrowse extends Base {
         
         // Get total count
         $count_sql = "SELECT COUNT(*) as total 
-                      FROM usb_device_logs u 
-                      JOIN tbl_monitor_ips m ON u.monitor_ip_id = m.id LEFT JOIN users owner ON owner.id=m.owner_user_id 
+                      FROM usb_device_logs u
                       {$where_clause}";
         
         $total_result = $this->db->query($count_sql, $params)->fetch();
@@ -319,7 +316,7 @@ class Logbrowse extends Base {
                      FROM usb_device_logs u 
                      JOIN tbl_monitor_ips m ON u.monitor_ip_id = m.id LEFT JOIN users owner ON owner.id=m.owner_user_id 
                      {$where_clause}
-                     ORDER BY u.device_date DESC 
+                     ORDER BY u.device_date DESC,u.id DESC
                      LIMIT :limit OFFSET :offset";
         
         $params['limit'] = $per_page;
