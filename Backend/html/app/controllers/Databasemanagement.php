@@ -248,6 +248,8 @@ class Databasemanagement extends Base {
         }
         $_SESSION['monitor_backup_at']=time();
         session_write_close();
+        // Even if a browser aborts this download, remove the temporary dump.
+        register_shutdown_function(static function() use ($file){@unlink($file);});
         $name='monitoring-db-'.gmdate('Ymd-His').'.sql.gz';
         header('Content-Type: application/gzip');
         header('Content-Disposition: attachment; filename="'.$name.'"');
@@ -305,6 +307,11 @@ class Databasemanagement extends Base {
                 'mysql','--defaults-extra-file='.$credentials,
                 '--default-character-set=utf8mb4',DB_NAME
             ],$sql,null);
+            // Base::redirect() calls exit, which may bypass the finally block.
+            // Never leave a SQL dump or a MySQL password file on disk.
+            @unlink($sql);
+            @unlink($credentials);
+            $credentials=null;
             unset($_SESSION['monitor_backup_at']);
             $_SESSION['success_message']='Database restored. Sign in again to reload current account data.';
             // A restored users table can invalidate this session.
