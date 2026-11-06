@@ -29,6 +29,7 @@ if (-not (Test-Path $exe)) { throw "Missing $exe" }
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Path $stage | Out-Null
 Copy-Item $exe $stage
+Copy-Item (Join-Path $project 'update-helper.ps1') $stage
 $dlls = @('libgcc_s_seh-1.dll','libstdc++-6.dll','libwinpthread-1.dll','libsqlite3-0.dll','libjsoncpp-26.dll')
 foreach ($dll in $dlls) {
     $candidateA = Join-Path $build $dll
