@@ -11,10 +11,24 @@ class Monitors extends Base {
     }
     
     public function index() {
-        $monitors = $this->isAdmin()
-          ? $this->db->fetchAll("SELECT m.*,u.name AS owner_name,u.user_no AS owner_user_no FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id ORDER BY (u.id IS NULL), CAST(u.user_no AS UNSIGNED), u.name, COALESCE(m.type,''), COALESCE(m.platform,''), INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)), COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address), m.id")
-          : $this->db->fetchAll("SELECT m.*,u.name AS owner_name,u.user_no AS owner_user_no FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id WHERE m.owner_user_id=:uid ORDER BY (u.id IS NULL), CAST(u.user_no AS UNSIGNED), u.name, COALESCE(m.type,''), COALESCE(m.platform,''), INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)), COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address), m.id", ['uid'=>$this->user['id']]);
-        
+        [$scope,$params]=$this->monitorScope('m');
+        if($this->isManager()){
+            $monitors=$this->db->fetchAll(
+                "SELECT m.*,u.name AS owner_name,u.user_no AS owner_user_no
+                 FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id
+                 WHERE {$scope}
+                 ORDER BY CAST(u.user_no AS UNSIGNED),u.name,m.type,m.platform,m.id",
+                $params
+            );
+        }else{
+            $monitors=$this->db->fetchAll(
+                "SELECT m.*,u.name AS owner_name,u.user_no AS owner_user_no
+                 FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id
+                 WHERE m.owner_user_id=:uid ORDER BY m.type,m.platform,m.id",
+                ['uid'=>(int)$this->user['id']]
+            );
+        }
+
         // Add dynamic status calculation for each monitor
         foreach ($monitors as &$monitor) {
             // Use StatusService's calculateClientStatus() for consistent status calculation
@@ -117,7 +131,9 @@ class Monitors extends Base {
     }
     
     public function edit($id) {
-        $this->requireAdmin();
+        $this->requireManager();
+        $id=(int)$id;
+        $this->requireMonitorAccess($id);
         
         $monitor = $this->db->fetch(
             "SELECT m.*,u.name AS owner_name,u.user_no AS owner_user_no FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id WHERE m.id=:id",
@@ -134,6 +150,11 @@ class Monitors extends Base {
             $slack_id = trim($_POST['slack_id'] ?? '');
             $platform = trim($_POST['platform'] ?? '');
             $owner_user_id = filter_var($_POST['owner_user_id']??null,FILTER_VALIDATE_INT)?:null;
+            // Delegated admins may edit monitor metadata but cannot transfer
+            // ownership outside the assigned user (or to another assigned user).
+            if($this->isScopedAdmin()&&(int)$owner_user_id!==(int)$monitor['owner_user_id']){
+                http_response_code(403);exit('Monitor reassignment requires Super Admin');
+            }
             $settings_locked = isset($_POST['settings_locked']) ? 1 : 0;
             if($owner_user_id && !$this->db->fetch('SELECT id FROM users WHERE id=:id',['id'=>$owner_user_id])) $error='Unknown account';
             // Validate type
@@ -170,9 +191,17 @@ class Monitors extends Base {
             }
         }
         
-        $accounts=$this->db->fetchAll("SELECT u.id,u.name,u.user_no,
-            (SELECT COUNT(*) FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id) AS device_count
-            FROM users u ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id");
+        $accounts=$this->isAdmin()
+            ? $this->db->fetchAll("SELECT u.id,u.name,u.user_no,
+                 (SELECT COUNT(*) FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id) AS device_count
+                 FROM users u ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id")
+            : $this->db->fetchAll(
+                "SELECT u.id,u.name,u.user_no,
+                   (SELECT COUNT(*) FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id) AS device_count
+                 FROM users u JOIN admin_user_assignments a ON a.managed_user_id=u.id
+                 WHERE a.admin_user_id=:manager AND u.role=:role
+                 ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id",
+                ['manager'=>(int)$this->user['id'],'role'=>ROLE_USER]);
         $monitor['status_info']=$this->statusService->calculateClientStatus($monitor['last_monitor_tic']??null);
         $this->view('monitors/edit', ['monitor'=>$monitor,'accounts'=>$accounts,'error'=>$error??null]);
     }
