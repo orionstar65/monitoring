@@ -1237,6 +1237,7 @@ std::string httpPostFile(const std::string& url, const std::string& filePath) {
     urlComp.dwSchemeLength = -1;
     urlComp.dwHostNameLength = -1;
     urlComp.dwUrlPathLength = -1;
+    urlComp.dwExtraInfoLength = -1;
     
     if (!InternetCrackUrlA(url.c_str(), 0, 0, &urlComp)) {
         InternetCloseHandle(hInternet);
@@ -1245,6 +1246,8 @@ std::string httpPostFile(const std::string& url, const std::string& filePath) {
     
     std::string hostName(urlComp.lpszHostName, urlComp.dwHostNameLength);
     std::string urlPath(urlComp.lpszUrlPath, urlComp.dwUrlPathLength);
+    if(urlComp.dwExtraInfoLength)
+        urlPath.append(urlComp.lpszExtraInfo,urlComp.dwExtraInfoLength);
     
     // Connect to host
     HINTERNET hConnect = InternetConnectA(hInternet, hostName.c_str(), 
