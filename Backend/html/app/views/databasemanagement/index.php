@@ -204,7 +204,7 @@ ob_start();
                     <span>I have downloaded a fresh backup and understand that restore is destructive.</span>
                 </label>
                 <p class="db-meta mt-2">You must have generated a backup in this session within the last two hours.
-                    Only the exact backup downloaded in this session can be restored. The maximum upload size also depends on your PHP configuration.</p>
+                    First download a fresh safety backup in this session. You can then restore any authenticated MonitorClient backup, including an older one. The maximum upload size also depends on your PHP configuration.</p>
             </div>
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
