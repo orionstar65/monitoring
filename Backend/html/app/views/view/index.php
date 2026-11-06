@@ -1217,19 +1217,24 @@ ob_start();
     
     <!-- Right Main Content - Status Overview + Screenshots -->
     <div class="main-content" style="margin-left: 0 !important;">
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 px-3 py-3 border-bottom" id="liveSummary">
-            <div class="d-flex flex-wrap gap-2 align-items-center">
-                <span class="badge text-bg-light border"><i class="fas fa-desktop me-1"></i><span id="total-monitors">0</span> Devices</span>
-                <span class="badge text-bg-success"><span id="online-monitors">0</span> Online</span>
-                <span class="badge text-bg-warning"><span id="inactive-monitors">0</span> Idle</span>
-                <span class="badge text-bg-secondary"><span id="offline-monitors">0</span> Offline</span>
-                <span class="small text-muted" id="lastLiveRefresh" aria-live="polite">Not updated</span>
+        <header id="liveSummary" class="monitoring-overview">
+            <div class="monitoring-overview-heading">
+                <small>MONITORING OVERVIEW</small>
+                <h2>Live monitoring</h2>
             </div>
-            <div class="d-flex align-items-center gap-2">
-
-                <button type="button" class="btn btn-sm btn-outline-primary" id="refreshLiveNow"><i class="fas fa-sync-alt me-1"></i>Refresh</button>
+            <div class="monitoring-device-summary" aria-label="Device connection status">
+                <div class="monitoring-device-item"><strong id="total-monitors">0</strong><span>Devices</span></div>
+                <div class="monitoring-device-item online"><strong id="online-monitors">0</strong><span>Online</span></div>
+                <div class="monitoring-device-item idle"><strong id="inactive-monitors">0</strong><span>Idle</span></div>
+                <div class="monitoring-device-item offline"><strong id="offline-monitors">0</strong><span>Offline</span></div>
             </div>
-        </div>
+            <div class="monitoring-overview-actions">
+                <small id="lastLiveRefresh" aria-live="polite">Not updated</small>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="refreshLiveNow">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh
+                </button>
+            </div>
+        </header>
 
         <div class="monitoring-filter-bar" id="monitoringActionBar">
             <label for="unifiedDatePreset" class="monitoring-preset-label">Date range
