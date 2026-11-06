@@ -87,6 +87,10 @@ if(MINGW)
     )
 endif()
 
+# Settings uses the bundled PowerShell update helper in development and releases.
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/update-helper.ps1
+               ${CMAKE_CURRENT_BINARY_DIR}/update-helper.ps1 COPYONLY)
+
 # Install Windows executable
 install(TARGETS MonitorClient
     RUNTIME DESTINATION bin
