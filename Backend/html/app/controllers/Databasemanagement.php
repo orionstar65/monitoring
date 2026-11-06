@@ -70,6 +70,12 @@ class Databasemanagement extends Base {
         ]);
     }
 
+    /**
+     * One DELETE per eligible table, not thousands of browser-driven batches.
+     * The grouped storage_statistics adjustment and delete run atomically.
+     * Large purges may still take time or hold row locks: keep the created_at
+     * index from the retention migration and schedule large runs off-hours.
+     */
     public function cleanup_batch(): void {
         $this->requirePost();
         $months=filter_var($_POST['months']??null,FILTER_VALIDATE_INT);
@@ -78,21 +84,17 @@ class Databasemanagement extends Base {
            ($_POST['confirm']??'')!=='DELETE OLD LOGS'){
             http_response_code(400);
             $this->json(['success'=>false,'error'=>'Invalid retention request or confirmation']);
+            return;
         }
         $tables=$this->availableCleanupTables();
         if($index>=count($tables)){
-            $this->json(['success'=>true,'done'=>true,'deleted'=>0,'next_table'=>$index]);
+            $this->json(['success'=>true,'done'=>true,'deleted'=>0,'next_table'=>$index,
+                         'tables_total'=>count($tables)]);
+            return;
         }
         $table=$tables[$index];
-        $cutoffRow=$this->db->fetch(
-            "SELECT DATE_FORMAT(DATE_SUB(NOW(),INTERVAL :months MONTH), '%Y-%m-%d %H:%i:%s') AS cutoff",
-            ['months'=>$months]
-        );
-        $cutoff=(string)$cutoffRow['cutoff'];
-        // Select and lock a bounded batch so monthly storage summaries can
-        // be decremented accurately in the same transaction as row deletion.
-        // Screenshot metadata is intentionally excluded; it must be deleted
-        // together with physical files by the existing screenshot cleanup.
+        // Only the allowlisted event tables are purged. Screenshot metadata
+        // must always be deleted with its physical files by Screenshot cleanup.
         $spec=[
             'browser_history_logs'=>['date'=>'visit_date','type'=>'browser_history',
                 'bytes'=>"OCTET_LENGTH(COALESCE(url,''))+OCTET_LENGTH(COALESCE(title,''))"],
@@ -101,65 +103,57 @@ class Databasemanagement extends Base {
             'usb_device_logs'=>['date'=>'device_date','type'=>'usb_logs',
                 'bytes'=>"OCTET_LENGTH(COALESCE(device_name,''))+OCTET_LENGTH(COALESCE(device_path,''))+OCTET_LENGTH(COALESCE(device_type,''))"]
         ][$table];
+        $cutoffRow=$this->db->fetch(
+            "SELECT DATE_FORMAT(DATE_SUB(NOW(),INTERVAL :months MONTH), '%Y-%m-%d %H:%i:%s') AS cutoff",
+            ['months'=>$months]
+        );
+        $cutoff=(string)($cutoffRow['cutoff']??'');
+        if($cutoff===''){
+            http_response_code(500);
+            $this->json(['success'=>false,'error'=>'Could not determine retention cutoff']);
+            return;
+        }
+        $tableSQL=$this->quoteIdentifier($table);
+        $dateSQL=$this->quoteIdentifier($spec['date']);
         $pdo=$this->db->getConnection();
         try{
+            // Retention and its monthly summary must commit or roll back together.
             $pdo->beginTransaction();
-            $rows=$this->db->fetchAll(
-                'SELECT id,monitor_ip_id,DATE_FORMAT('.$this->quoteIdentifier($spec['date']).
-                ", '%Y-%m') AS month_year,(".$spec['bytes'].') AS payload_size '.
-                'FROM '.$this->quoteIdentifier($table).
-                ' WHERE created_at < :cutoff ORDER BY created_at ASC,id ASC LIMIT '.
-                self::BATCH_SIZE.' FOR UPDATE',
-                ['cutoff'=>$cutoff]
+            $this->db->query(
+                'UPDATE storage_statistics s
+                 INNER JOIN (
+                     SELECT monitor_ip_id,DATE_FORMAT('.$dateSQL.", '%Y-%m') AS month_year,
+                            COUNT(*) AS removed_count,
+                            COALESCE(SUM(".$spec['bytes']."),0) AS removed_bytes
+                     FROM ".$tableSQL.'
+                     WHERE created_at < :cutoff
+                     GROUP BY monitor_ip_id,DATE_FORMAT('.$dateSQL.", '%Y-%m')
+                 ) removed
+                 ON removed.monitor_ip_id=s.monitor_ip_id
+                   AND removed.month_year=s.month_year
+                 SET s.record_count=GREATEST(0,s.record_count-removed.removed_count),
+                     s.total_size=GREATEST(0,s.total_size-removed.removed_bytes),
+                     s.last_updated=CURRENT_TIMESTAMP
+                 WHERE s.data_type=:data_type",
+                ['cutoff'=>$cutoff,'data_type'=>$spec['type']]
             );
-            $deleted=count($rows);
-            if($rows){
-                $ids=array_map('intval',array_column($rows,'id'));
-                $placeholders=implode(',',array_fill(0,count($ids),'?'));
-                $affected=$this->db->query(
-                    'DELETE FROM '.$this->quoteIdentifier($table).' WHERE id IN ('.$placeholders.')',
-                    $ids
-                )->rowCount();
-                if($affected!==$deleted)
-                    throw new RuntimeException('Concurrent cleanup modified the selected batch');
-                $grouped=[];
-                foreach($rows as $row){
-                    $groupKey=$row['monitor_ip_id'].'|'.$row['month_year'];
-                    if(!isset($grouped[$groupKey]))
-                        $grouped[$groupKey]=[
-                            'id'=>(int)$row['monitor_ip_id'],
-                            'month'=>$row['month_year'],
-                            'count'=>0,'bytes'=>0
-                        ];
-                    $grouped[$groupKey]['count']++;
-                    $grouped[$groupKey]['bytes']+=(int)$row['payload_size'];
-                }
-                foreach($grouped as $group){
-                    $this->db->query(
-                        'UPDATE storage_statistics
-                         SET record_count=GREATEST(0,record_count-:amount),
-                             total_size=GREATEST(0,total_size-:bytes),
-                             last_updated=CURRENT_TIMESTAMP
-                         WHERE monitor_ip_id=:id AND data_type=:type AND month_year=:month',
-                        [
-                            'amount'=>$group['count'],'bytes'=>$group['bytes'],
-                            'id'=>$group['id'],'type'=>$spec['type'],'month'=>$group['month']
-                        ]
-                    );
-                }
-            }
+            $deleted=$this->db->query(
+                'DELETE FROM '.$tableSQL.' WHERE created_at < :cutoff',
+                ['cutoff'=>$cutoff]
+            )->rowCount();
             $pdo->commit();
         }catch(Throwable $error){
             if($pdo->inTransaction())$pdo->rollBack();
-            error_log('DB cleanup failure '.$table.': '.$error->getMessage());
+            error_log('DB retention cleanup failure '.$table.': '.$error->getMessage());
             http_response_code(500);
-            $this->json(['success'=>false,'error'=>'Could not clean '.$table]);
+            $this->json(['success'=>false,'error'=>'Could not clean '.$table.'. Check server logs.']);
+            return;
         }
-        $next=$deleted<self::BATCH_SIZE ? $index+1 : $index;
+        $next=$index+1;
         $this->json([
-            'success'=>true,'done'=>$next>=count($tables),'deleted'=>$deleted,
-            'table'=>$table,'next_table'=>$next,'cutoff'=>$cutoff,
-            'tables_total'=>count($tables)
+            'success'=>true,'done'=>$next>=count($tables),
+            'deleted'=>$deleted,'table'=>$table,
+            'next_table'=>$next,'cutoff'=>$cutoff,'tables_total'=>count($tables)
         ]);
     }
 
