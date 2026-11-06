@@ -2901,7 +2901,7 @@ document.addEventListener('wheel',event=>{
         historyScheduleVisibleShots();
     }else historyZoom(event.deltaY<0?1.22:1/1.22,event.clientX);
 },{passive:false});
-$(document).on('scroll','#historyTimelineViewport',historyScheduleVisibleShots);
+$('#historyTimelineViewport').on('scroll',historyScheduleVisibleShots);
 $(document).on('click','#historyPrevRange,#historyNextRange',function(){
     const state=historyState;if(!state)return;
     const direction=this.id==='historyNextRange'?1:-1;
