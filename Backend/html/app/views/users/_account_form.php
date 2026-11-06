@@ -45,12 +45,14 @@ $role=$_POST['role']??($current['role']??ROLE_USER);
                         <?php endif; ?>
                         <div class="form-text">Admin sees assigned users and their monitors. Super Admin manages all accounts and destructive actions.</div>
                     </div>
+                    <?php if($superAdmin): ?>
                     <div class="col-md-6">
                         <label for="password" class="form-label"><?= $isEditing?'New password (optional)':'Password' ?><?= $isEditing?'':' *' ?></label>
                         <input type="password" id="password" name="password" class="form-control"
                             minlength="6" maxlength="1024" autocomplete="new-password" <?= $isEditing?'':'required' ?>>
                         <div class="form-text"><?= $isEditing?'Leave empty to keep the existing password.':'Minimum six characters.' ?></div>
                     </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
