@@ -198,10 +198,14 @@ class Monitors extends Base {
             : $this->db->fetchAll(
                 "SELECT u.id,u.name,u.user_no,
                    (SELECT COUNT(*) FROM tbl_monitor_ips m WHERE m.owner_user_id=u.id) AS device_count
-                 FROM users u JOIN admin_user_assignments a ON a.managed_user_id=u.id
-                 WHERE a.admin_user_id=:manager AND u.role=:role
+                 FROM users u
+                 WHERE u.id=:self_id OR (u.role=:role AND EXISTS (
+                     SELECT 1 FROM admin_user_assignments a
+                     WHERE a.managed_user_id=u.id AND a.admin_user_id=:manager
+                 ))
                  ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id",
-                ['manager'=>(int)$this->user['id'],'role'=>ROLE_USER]);
+                ['self_id'=>(int)$this->user['id'],
+                 'manager'=>(int)$this->user['id'],'role'=>ROLE_USER]);
         $monitor['status_info']=$this->statusService->calculateClientStatus($monitor['last_monitor_tic']??null);
         $this->view('monitors/edit', ['monitor'=>$monitor,'accounts'=>$accounts,'error'=>$error??null]);
     }
