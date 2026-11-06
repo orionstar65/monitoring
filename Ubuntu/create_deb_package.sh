@@ -30,7 +30,14 @@ print_error() {
 
 # Configuration
 PACKAGE_NAME="monitorclient"
-PACKAGE_VERSION="1.31"
+# Prompt by default; accept --version for scripted releases.
+PACKAGE_VERSION=""
+if [[ "${1:-}" == "--version" ]]; then PACKAGE_VERSION="${2:-}"; else
+    read -r -p "Package version (MAJOR.MINOR.PATCH, e.g. 1.5.1): " PACKAGE_VERSION
+fi
+if [[ ! "$PACKAGE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    print_error "Version must be MAJOR.MINOR.PATCH"; exit 2
+fi
 PACKAGE_ARCH="amd64"
 PACKAGE_MAINTAINER="MonitorClient Team"
 PACKAGE_DESCRIPTION="System monitoring client for Ubuntu"
@@ -55,8 +62,8 @@ rm -rf build package
 print_status "Building MonitorClient..."
 mkdir -p build
 cd build
-cmake ..
-make -j$(nproc)
+cmake .. -DCMAKE_BUILD_TYPE=Release -DMONITORCLIENT_VERSION="$PACKAGE_VERSION"
+cmake --build . -j"$(nproc)"
 cd ..
 
 print_success "MonitorClient built successfully!"
@@ -186,8 +193,8 @@ EOF
 chmod +x "${PACKAGE_DIR}/opt/monitorclient/uninstall.sh"
 
 # Create README
-cat > "${PACKAGE_DIR}/opt/monitorclient/README.txt" << 'EOF'
-Ubuntu MonitorClient v1.31
+cat > "${PACKAGE_DIR}/opt/monitorclient/README.txt" << EOF
+Ubuntu MonitorClient v${PACKAGE_VERSION}
 =========================
 
 Installation completed successfully!
@@ -340,3 +347,11 @@ echo ""
 echo "To uninstall:"
 echo "sudo dpkg -r ${PACKAGE_NAME}"
 echo "" 
+# The updater expects this exact OS/version filename. Keep the .deb
+# contents and dpkg's internal package name unchanged.
+UPDATE_PACKAGE="MonitorClient-${PACKAGE_VERSION}-ubuntu-amd64.deb"
+cp "${PACKAGE_NAME}_${PACKAGE_VERSION}_${PACKAGE_ARCH}.deb" "$UPDATE_PACKAGE"
+python3 "$SCRIPT_DIR/../scripts/publish_update.py" \
+  --platform ubuntu-amd64 --version "$PACKAGE_VERSION" \
+  --package "$UPDATE_PACKAGE" --output "$SCRIPT_DIR/../release-updates"
+echo "Update package published: ../release-updates/$UPDATE_PACKAGE"
