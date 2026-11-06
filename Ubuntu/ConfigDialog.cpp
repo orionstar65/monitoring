@@ -41,32 +41,30 @@
 
 ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     setWindowTitle(QString("MonitorClient v%1 — Settings").arg(MONITORAPP_VERSION));
-    setMinimumSize(520,375);
-    resize(590,475);
+    setMinimumSize(500,340);
+    resize(540,380);
     setModal(true);
     auto *outer=new QVBoxLayout(this);
-    outer->setContentsMargins(16,12,16,12);
-    outer->setSpacing(8);
-    auto *scroll=new QScrollArea(this);
-    scroll->setWidgetResizable(true);
-    scroll->setFrameShape(QFrame::NoFrame);
-    scroll->setAlignment(Qt::AlignTop);
-    auto *page=new QWidget(scroll);
+    // Direct tab layout avoids nesting a scroll area around already
+    // single-page settings, which introduced excessive blank space.
+    outer->setContentsMargins(12,8,12,9);
+    outer->setSpacing(5);
+    auto *page=new QWidget(this);
     auto *content=new QVBoxLayout(page);
-    content->setContentsMargins(2,0,2,2);
-    content->setSpacing(9);
-    content->setAlignment(Qt::AlignTop);
-    scroll->setWidget(page);
-    outer->addWidget(scroll);
+    content->setContentsMargins(0,0,0,0);
+    content->setSpacing(5);
+    outer->addWidget(page,1);
     auto *header=new QHBoxLayout();
     auto *icon=new QLabel(page);
     QIcon appIcon=QApplication::windowIcon();
     if(appIcon.isNull())appIcon=QIcon::fromTheme("accessories-text-editor");
-    icon->setPixmap(appIcon.pixmap(42,42));
+    icon->setPixmap(appIcon.pixmap(28,28));
+    header->setSpacing(8);
     header->addWidget(icon);
     auto *brand=new QVBoxLayout();
     auto *name=new QLabel("MonitorClient");
-    QFont font=name->font();font.setBold(true);font.setPointSize(15);name->setFont(font);
+    QFont font=name->font();font.setBold(true);font.setPointSize(12);name->setFont(font);
+    brand->setSpacing(0);
     brand->addWidget(name);brand->addWidget(new QLabel(QStringLiteral("v%1").arg(MONITORAPP_VERSION)));
     header->addLayout(brand);header->addStretch();
     content->addLayout(header);
@@ -76,8 +74,8 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     auto createPage=[&](const QString &title) {
         auto *tab=new QWidget(tabs);
         auto *layout=new QVBoxLayout(tab);
-        layout->setContentsMargins(12,14,12,10);
-        layout->setSpacing(12);
+        layout->setContentsMargins(8,7,8,6);
+        layout->setSpacing(6);
         layout->setAlignment(Qt::AlignTop);
         tabs->addTab(tab,title);
         return std::make_pair(tab,layout);
@@ -98,6 +96,10 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
 
     auto *serverGroup=new QGroupBox("Server connection & sign-in",accountPage);
     auto *serverForm=new QFormLayout(serverGroup);
+    serverForm->setContentsMargins(9,8,9,8);
+    serverForm->setVerticalSpacing(5);
+    serverForm->setHorizontalSpacing(10);
+    serverForm->setLabelAlignment(Qt::AlignLeft|Qt::AlignVCenter);
     serverIPEdit=new QLineEdit(serverGroup);
     serverPortEdit=new QSpinBox(serverGroup);
     serverPortEdit->setRange(1,65535);
@@ -123,6 +125,8 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     accountPageLayout->addWidget(serverGroup);
     auto *userGroup=new QWidget(accountPage);
     auto *userForm=new QFormLayout(userGroup);
+    userForm->setContentsMargins(0,0,0,0);
+    userForm->setVerticalSpacing(5);
     userSelector=new QComboBox(userGroup);
     userSelector->setMinimumWidth(350);
     userSelector->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
@@ -138,10 +142,16 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     accountPageLayout->addWidget(userGroup);
     monitorGroup=new QGroupBox("Selected monitor",monitorPage);
     auto *monitorForm=new QFormLayout(monitorGroup);
+    monitorForm->setContentsMargins(9,8,9,8);
+    monitorForm->setVerticalSpacing(5);
+    monitorForm->setHorizontalSpacing(10);
+    monitorForm->setLabelAlignment(Qt::AlignLeft|Qt::AlignVCenter);
     monitorSelector=new QComboBox(monitorGroup);
     osRadios=new QButtonGroup(monitorGroup);
     auto *osRow=new QWidget(monitorGroup);
-    auto *osLayout=new QHBoxLayout(osRow);osLayout->setContentsMargins(0,0,0,0);
+    auto *osLayout=new QHBoxLayout(osRow);
+    osLayout->setContentsMargins(0,0,0,0);
+    osLayout->setSpacing(12);
     for(const auto &value:QStringList{"Windows","Mac","Ubuntu"}){
         auto *radio=new QRadioButton(value,osRow);
         osRadios->addButton(radio);
@@ -150,7 +160,9 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     }
     machineRadios=new QButtonGroup(monitorGroup);
     auto *machineRow=new QWidget(monitorGroup);
-    auto *machineLayout=new QHBoxLayout(machineRow);machineLayout->setContentsMargins(0,0,0,0);
+    auto *machineLayout=new QHBoxLayout(machineRow);
+    machineLayout->setContentsMargins(0,0,0,0);
+    machineLayout->setSpacing(12);
     for(const auto &value:QStringList{"Laptop","Desktop"}){
         auto *radio=new QRadioButton(value,machineRow);
         machineRadios->addButton(radio);
@@ -174,6 +186,7 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     auto *selectionRow=new QWidget(monitorGroup);
     auto *selectionLayout=new QHBoxLayout(selectionRow);
     selectionLayout->setContentsMargins(0,0,0,0);
+    selectionLayout->setSpacing(7);
     selectionLayout->addWidget(monitorSelector,1);
     selectionLayout->addWidget(editButton);
     monitorForm->addRow("Monitor",selectionRow);
@@ -184,18 +197,25 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     monitorPageLayout->addWidget(monitorGroup);
     auto *notificationsGroup=new QGroupBox("Notifications",preferencesPage);
     auto *notificationsLayout=new QVBoxLayout(notificationsGroup);
+    notificationsLayout->setContentsMargins(9,8,9,8);
     notificationsCheck=new QCheckBox("Show status notifications",notificationsGroup);
     notificationsLayout->addWidget(notificationsCheck);
     preferencesPageLayout->addWidget(notificationsGroup);
     auto *maintenanceGroup=new QGroupBox("Maintenance",preferencesPage);
     auto *maintenanceLayout=new QVBoxLayout(maintenanceGroup);
+    maintenanceLayout->setContentsMargins(9,8,9,8);
     auto *updatesGroup=new QGroupBox("Client updates",updatesPage);
     auto *updateForm=new QFormLayout(updatesGroup);
+    updateForm->setContentsMargins(9,8,9,8);
+    updateForm->setVerticalSpacing(5);
+    updateForm->setHorizontalSpacing(10);
+    updateForm->setLabelAlignment(Qt::AlignLeft|Qt::AlignVCenter);
     updateServerInput=new QLineEdit(updatesGroup);
     updateServerInput->setPlaceholderText("http://192.168.2.241:8765");
     updateServerInput->setToolTip("URL serving manifest.json and versioned packages via python -m http.server");
     updateForm->addRow("Update server",updateServerInput);
     auto *updateActions=new QHBoxLayout();
+    updateActions->setSpacing(7);
     checkUpdateButton=new QPushButton("Check new version",updatesGroup);
     installUpdateButton=new QPushButton("Update",updatesGroup);
     installUpdateButton->setEnabled(false);
@@ -215,6 +235,7 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
         installUpdateButton->setEnabled(false);
     });
     auto *toolsRow=new QHBoxLayout();
+    toolsRow->setSpacing(7);
     sendAllButton=new QPushButton("Send All Logs",maintenanceGroup);
     refreshConfigButton=new QPushButton("Refresh Configuration",maintenanceGroup);
     toolsRow->addWidget(sendAllButton);
@@ -224,6 +245,7 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     connect(sendAllButton,&QPushButton::clicked,this,[this](){emit sendAllRequested();});
     connect(refreshConfigButton,&QPushButton::clicked,this,[this](){emit refreshConfigurationRequested();});
     auto *buttons=new QHBoxLayout();
+    buttons->setSpacing(7);
     saveButton=new QPushButton("Save",this);
     lockSettingsButton=new QPushButton("Lock Settings",this);
     auto *closeButton=new QPushButton("Close",this);
