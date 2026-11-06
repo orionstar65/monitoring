@@ -246,7 +246,16 @@ class Databasemanagement extends Base {
             http_response_code(503);
             exit('Backup could not be generated. Verify mysqldump and PHP temporary storage.');
         }
+        // Bind the restore permission to the exact archive delivered, not
+        // merely the fact that this browser generated some backup recently.
+        $checksum=hash_file('sha256',$file);
+        if(!is_string($checksum)){
+            @unlink($file);
+            http_response_code(503);
+            exit('Backup verification failed. Try downloading again.');
+        }
         $_SESSION['monitor_backup_at']=time();
+        $_SESSION['monitor_backup_sha256']=$checksum;
         session_write_close();
         // Even if a browser aborts this download, remove the temporary dump.
         register_shutdown_function(static function() use ($file){@unlink($file);});
@@ -276,6 +285,14 @@ class Databasemanagement extends Base {
            !str_ends_with(strtolower((string)($upload['name']??'')),'.sql.gz')){
             http_response_code(400);
             exit('Upload a valid .sql.gz backup (check PHP upload size limits).');
+        }
+        $expectedChecksum=(string)($_SESSION['monitor_backup_sha256']??'');
+        $uploadedChecksum=hash_file('sha256',(string)$upload['tmp_name']);
+        if(!preg_match('/^[a-f0-9]{64}$/D',$expectedChecksum) ||
+           !is_string($uploadedChecksum) ||
+           !hash_equals($expectedChecksum,$uploadedChecksum)){
+            http_response_code(400);
+            exit('Backup does not match the archive downloaded in this session. Download a new backup and retry.');
         }
         set_time_limit(0);
         $sql=$this->tempPath('monitor-restore-');
@@ -312,11 +329,11 @@ class Databasemanagement extends Base {
             @unlink($sql);
             @unlink($credentials);
             $credentials=null;
-            unset($_SESSION['monitor_backup_at']);
-            $_SESSION['success_message']='Database restored. Sign in again to reload current account data.';
             // A restored users table can invalidate this session.
             session_unset();
             session_regenerate_id(true);
+            $_SESSION['csrf_token']=bin2hex(random_bytes(32));
+            $_SESSION['success_message']='Database restored. Sign in again to reload current account data.';
             $this->redirect('auth/login');
         }catch(Throwable $error){
             error_log('Database restore failure: '.$error->getMessage());
