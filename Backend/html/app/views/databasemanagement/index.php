@@ -204,7 +204,7 @@ ob_start();
                     <span>I have downloaded a fresh backup and understand that restore is destructive.</span>
                 </label>
                 <p class="db-meta mt-2">You must have generated a backup in this session within the last two hours.
-                    The maximum upload size also depends on your PHP configuration.</p>
+                    Only the exact backup downloaded in this session can be restored. The maximum upload size also depends on your PHP configuration.</p>
             </div>
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -224,8 +224,13 @@ ob_start();
     if(!month||!form)return;
     const updateDescription=()=>{
         const count=Math.max(1,Math.min(120,Number(month.value)||3));
-        const cutoff=new Date();
-        cutoff.setMonth(cutoff.getMonth()-count);
+        // Date.setMonth() overflows on the 29th–31st (for example,
+        // March 31 minus one month becomes early March). Clamp the day
+        // to match MySQL DATE_SUB(... INTERVAL n MONTH) semantics.
+        const today=new Date();
+        const cutoff=new Date(today.getFullYear(),today.getMonth()-count,1);
+        const lastDay=new Date(cutoff.getFullYear(),cutoff.getMonth()+1,0).getDate();
+        cutoff.setDate(Math.min(today.getDate(),lastDay));
         description.textContent='Records received before '+
             cutoff.toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'})+
             ' (more than '+count+' month'+(count===1?'':'s')+' old) will be permanently deleted from eligible history tables. More recent records are retained.';
