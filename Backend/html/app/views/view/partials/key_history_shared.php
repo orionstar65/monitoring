@@ -46,11 +46,9 @@
 function monitorTranscriptKeyRows(keys,escapeHtml) {
     const applicationName = entry => String(entry?.application || '').trim() || 'Unknown app';
     const lines=[{time:keys[0]?.key_date||'',app:applicationName(keys[0]),tokens:[]}];
-    const extras=[];
     let current=lines[0];
     const addBadge=(raw,time)=>{
         current.tokens.push({kind:'badge',raw,time});
-        extras.push({raw,time});
     };
     for(const entry of keys) {
         const raw=String(entry.key_pressed??'');
@@ -109,9 +107,11 @@ function monitorTranscriptKeyRows(keys,escapeHtml) {
             <div class="key-transcript-app" title="${escapeHtml(line.app)}">${escapeHtml(line.app)}</div>
             <div class="key-transcript-content">${content||'<span class="text-muted"> </span>'}</div>`;
     }).join('');
-    const specials=extras.map(item=>`<span class="badge bg-light text-dark border" title="${escapeHtml(item.time)}">${escapeHtml(item.raw)}</span>`).join('');
-    return '<div class="key-transcript" role="table" aria-label="Keyboard events with timestamps">'+transcript+'</div>'
-        +(specials?'<div class="small text-muted mt-3 mb-1">Other key events</div><div class="key-remaining">'+specials+'</div>':'');
+    // Special keys are already rendered in their chronological transcript rows.
+    // Never print the same events a second time in a separate badge collection.
+    // Repeated source rows still remain visible, since autorepeat/duplicate uploads
+    // cannot be distinguished safely without inspecting original database IDs.
+    return '<div class="key-transcript" role="table" aria-label="Keyboard events with timestamps">'+transcript+'</div>';
 }
 
 
