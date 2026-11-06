@@ -1,10 +1,21 @@
 <?php
 require_once BASEPATH . 'app/controllers/Base.php';
 require_once BASEPATH . 'app/services/StatusService.php';
+require_once dirname(BASEPATH).'/services/TelemetryTime.php';
 
 class Logbrowse extends Base {
     private $statusService;
-    
+
+    private function utcRange(): array {
+        try {
+            return monitorUtcBounds($_GET);
+        } catch (InvalidArgumentException $error) {
+            http_response_code(400);
+            $this->json(['success'=>false,'error'=>$error->getMessage()]);
+            exit;
+        }
+    }
+
     public function __construct() {
         parent::__construct();
         $this->statusService = StatusService::getInstance();
@@ -64,6 +75,7 @@ class Logbrowse extends Base {
         $per_page = isset($_GET['per_page']) ? max(1, min(100, intval($_GET['per_page']))) : 20;
         $device_id = isset($_GET['device_id']) ? intval($_GET['device_id']) : null;
         $this->requireScopedLogDevice($device_id);
+        [$utcStart,$utcEnd]=$this->utcRange();
         $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : null;
         $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : null;
         
@@ -78,14 +90,14 @@ class Logbrowse extends Base {
             $params['device_id'] = $device_id;
         }
         
-        if ($start_date) {
+        if ($utcStart !== null) {
             $where_conditions[] = "b.visit_date >= :start_date";
-            $params['start_date'] = $start_date . ' 00:00:00';
+            $params['start_date'] = $utcStart;
         }
         
-        if ($end_date) {
-            $where_conditions[] = "b.visit_date <= :end_date";
-            $params['end_date'] = $end_date . ' 23:59:59';
+        if ($utcEnd !== null) {
+            $where_conditions[] = "b.visit_date < :end_date";
+            $params['end_date'] = $utcEnd;
         }
         
         $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
@@ -138,6 +150,7 @@ class Logbrowse extends Base {
         $per_page = isset($_GET['per_page']) ? max(1, min(100, intval($_GET['per_page']))) : 20;
         $device_id = isset($_GET['device_id']) ? intval($_GET['device_id']) : null;
         $this->requireScopedLogDevice($device_id);
+        [$utcStart,$utcEnd]=$this->utcRange();
         $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : null;
         $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : null;
         
@@ -152,14 +165,14 @@ class Logbrowse extends Base {
             $params['device_id'] = $device_id;
         }
         
-        if ($start_date) {
+        if ($utcStart !== null) {
             $where_conditions[] = "k.key_date >= :start_date";
-            $params['start_date'] = $start_date . ' 00:00:00';
+            $params['start_date'] = $utcStart;
         }
         
-        if ($end_date) {
-            $where_conditions[] = "k.key_date <= :end_date";
-            $params['end_date'] = $end_date . ' 23:59:59';
+        if ($utcEnd !== null) {
+            $where_conditions[] = "k.key_date < :end_date";
+            $params['end_date'] = $utcEnd;
         }
         
         $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
@@ -220,10 +233,14 @@ class Logbrowse extends Base {
         if($days<0||$days>31) {
             http_response_code(400);$this->json(['success'=>false,'error'=>'Timeline supports up to 32 calendar days']);
         }
+        [$utcStart,$utcEnd]=$this->utcRange();
+        $utcStart=$utcStart??$from.' 00:00:00';
+        $utcEnd=$utcEnd??(new DateTimeImmutable($to,new DateTimeZone('UTC')))
+            ->modify('+1 day')->format('Y-m-d H:i:s');
         $bucketMinutes=$days<=1?1:($days<=7?5:15);
         $bucketSeconds=$bucketMinutes*60;
-        $where='k.key_date>=:start_date AND k.key_date<=:end_date';
-        $params=['start_date'=>$from.' 00:00:00','end_date'=>$to.' 23:59:59'];
+        $where='k.key_date>=:start_date AND k.key_date<:end_date';
+        $params=['start_date'=>$utcStart,'end_date'=>$utcEnd];
         if($deviceId){$where.=' AND k.monitor_ip_id=:device_id';$params['device_id']=$deviceId;}
         // Bucket before transfer: never send an unbounded stream of key events.
         $rows=$this->db->fetchAll(
@@ -233,7 +250,7 @@ class Logbrowse extends Base {
              JOIN tbl_monitor_ips m ON m.id=k.monitor_ip_id
              LEFT JOIN users u ON u.id=m.owner_user_id
              WHERE {$where}
-             GROUP BY FLOOR(UNIX_TIMESTAMP(k.key_date)/{$bucketSeconds}),
+             GROUP BY FLOOR(TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',k.key_date)/{$bucketSeconds}),
                       k.monitor_ip_id,u.user_no,u.name,m.ip_address,m.platform,m.type
              ORDER BY date ASC LIMIT 3001",$params
         );
@@ -252,8 +269,8 @@ class Logbrowse extends Base {
         $from=(string)($_GET['from']??'');
         $to=(string)($_GET['to']??'');
         $format='!Y-m-d H:i:s';
-        $start=DateTimeImmutable::createFromFormat($format,$from);
-        $end=DateTimeImmutable::createFromFormat($format,$to);
+        $start=DateTimeImmutable::createFromFormat($format,$from,new DateTimeZone('UTC'));
+        $end=DateTimeImmutable::createFromFormat($format,$to,new DateTimeZone('UTC'));
         if(!$monitorId || !$start || !$end ||
            $start->format('Y-m-d H:i:s')!==$from ||
            $end->format('Y-m-d H:i:s')!==$to || $end <= $start) {
@@ -287,6 +304,7 @@ class Logbrowse extends Base {
         $per_page = isset($_GET['per_page']) ? max(1, min(100, intval($_GET['per_page']))) : 20;
         $device_id = isset($_GET['device_id']) ? intval($_GET['device_id']) : null;
         $this->requireScopedLogDevice($device_id);
+        [$utcStart,$utcEnd]=$this->utcRange();
         $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : null;
         $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : null;
         
@@ -301,14 +319,14 @@ class Logbrowse extends Base {
             $params['device_id'] = $device_id;
         }
         
-        if ($start_date) {
+        if ($utcStart !== null) {
             $where_conditions[] = "u.device_date >= :start_date";
-            $params['start_date'] = $start_date . ' 00:00:00';
+            $params['start_date'] = $utcStart;
         }
         
-        if ($end_date) {
-            $where_conditions[] = "u.device_date <= :end_date";
-            $params['end_date'] = $end_date . ' 23:59:59';
+        if ($utcEnd !== null) {
+            $where_conditions[] = "u.device_date < :end_date";
+            $params['end_date'] = $utcEnd;
         }
         
         $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
@@ -359,6 +377,7 @@ class Logbrowse extends Base {
     public function api_stats() {
         $device_id = isset($_GET['device_id']) ? intval($_GET['device_id']) : null;
         $this->requireScopedLogDevice($device_id);
+        [$utcStart,$utcEnd]=$this->utcRange();
         $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : null;
         $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : null;
         
@@ -374,14 +393,14 @@ class Logbrowse extends Base {
             $params['device_id'] = $device_id;
         }
         
-        if ($start_date) {
+        if ($utcStart !== null) {
             $where_conditions[] = "visit_date >= :start_date";
-            $params['start_date'] = $start_date . ' 00:00:00';
+            $params['start_date'] = $utcStart;
         }
         
-        if ($end_date) {
-            $where_conditions[] = "visit_date <= :end_date";
-            $params['end_date'] = $end_date . ' 23:59:59';
+        if ($utcEnd !== null) {
+            $where_conditions[] = "visit_date < :end_date";
+            $params['end_date'] = $utcEnd;
         }
         
         $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
@@ -400,13 +419,13 @@ class Logbrowse extends Base {
             $key_where_conditions[] = "monitor_ip_id = :device_id";
             $key_params['device_id'] = $device_id;
         }
-        if ($start_date) {
+        if ($utcStart !== null) {
             $key_where_conditions[] = "key_date >= :start_date";
-            $key_params['start_date'] = $start_date . ' 00:00:00';
+            $key_params['start_date'] = $utcStart;
         }
-        if ($end_date) {
-            $key_where_conditions[] = "key_date <= :end_date";
-            $key_params['end_date'] = $end_date . ' 23:59:59';
+        if ($utcEnd !== null) {
+            $key_where_conditions[] = "key_date < :end_date";
+            $key_params['end_date'] = $utcEnd;
         }
         $key_where_clause = !empty($key_where_conditions) ? 'WHERE ' . implode(' AND ', $key_where_conditions) : '';
         $key_count = $this->db->query("SELECT COUNT(*) as total FROM key_logs {$key_where_clause}", $key_params)->fetch()['total'];
@@ -422,13 +441,13 @@ class Logbrowse extends Base {
             $usb_where_conditions[] = "monitor_ip_id = :device_id";
             $usb_params['device_id'] = $device_id;
         }
-        if ($start_date) {
+        if ($utcStart !== null) {
             $usb_where_conditions[] = "device_date >= :start_date";
-            $usb_params['start_date'] = $start_date . ' 00:00:00';
+            $usb_params['start_date'] = $utcStart;
         }
-        if ($end_date) {
-            $usb_where_conditions[] = "device_date <= :end_date";
-            $usb_params['end_date'] = $end_date . ' 23:59:59';
+        if ($utcEnd !== null) {
+            $usb_where_conditions[] = "device_date < :end_date";
+            $usb_params['end_date'] = $utcEnd;
         }
         $usb_where_clause = !empty($usb_where_conditions) ? 'WHERE ' . implode(' AND ', $usb_where_conditions) : '';
         $usb_count = $this->db->query("SELECT COUNT(*) as total FROM usb_device_logs {$usb_where_clause}", $usb_params)->fetch()['total'];
@@ -442,8 +461,8 @@ class Logbrowse extends Base {
             $shotParams['viewer_id']=(int)$this->user['id'];
         }
         if($device_id){$shotWhere[]='monitor_ip_id=:device_id';$shotParams['device_id']=$device_id;}
-        if($start_date){$shotWhere[]='capture_datetime>=:start_date';$shotParams['start_date']=$start_date.' 00:00:00';}
-        if($end_date){$shotWhere[]='capture_datetime<=:end_date';$shotParams['end_date']=$end_date.' 23:59:59';}
+        if($utcStart!==null){$shotWhere[]='capture_datetime>=:start_date';$shotParams['start_date']=$utcStart;}
+        if($utcEnd!==null){$shotWhere[]='capture_datetime<:end_date';$shotParams['end_date']=$utcEnd;}
         $shotClause=$shotWhere?' WHERE '.implode(' AND ',$shotWhere):'';
         $screenshotCount=(int)$this->db->query('SELECT COUNT(*) AS total FROM screenshot_metadata'.$shotClause,$shotParams)->fetch()['total'];
 
