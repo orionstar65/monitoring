@@ -213,6 +213,7 @@ private:
     bool browserHistoryEnabled;
     bool usbMonitoringEnabled;
     bool screenshotInProgress;
+    bool m_manualScreenshotRequested = false;
     
     // Last sent times
     QDateTime lastKeySentTime;
