@@ -30,7 +30,11 @@ ob_start();
   <td data-order="<?= $escape($user['created_at']) ?>"><?= $escape($user['created_at']) ?></td>
   <td data-order="<?= $escape($user['last_activity']??'') ?>"><?= $user['last_activity'] ? $escape($user['last_activity']) : '<span class="text-muted">Never</span>' ?></td>
   <td class="text-nowrap">
-    <a href="<?= BASE_URL ?>users/edit/<?= (int)$user['id'] ?>" class="btn btn-sm btn-light" aria-label="Edit user" title="Edit"><i class="fas fa-pen"></i></a>
+    <?php if(($_SESSION['role']??'')===ROLE_SCOPED_ADMIN && (int)$user['id']===(int)($_SESSION['user_id']??0)): ?>
+      <span class="badge bg-secondary">Your account</span>
+    <?php else: ?>
+      <a href="<?= BASE_URL ?>users/edit/<?= (int)$user['id'] ?>" class="btn btn-sm btn-light" aria-label="Edit user" title="Edit"><i class="fas fa-pen"></i></a>
+    <?php endif; ?>
     <?php if(($_SESSION['role']??'')===ROLE_SUPER_ADMIN && (int)$user['id']!==(int)$_SESSION['user_id']): ?>
     <button type="button" class="btn btn-sm btn-light text-warning reset-user"
       data-id="<?= (int)$user['id'] ?>" data-name="<?= $escape($user['name']) ?>"
