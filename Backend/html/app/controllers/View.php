@@ -41,6 +41,43 @@ class View extends Base {
     
     // logs_detail method removed - use database-based logs() method instead
     
+
+    /** Bounded monitor-specific screenshot history for the interactive viewer. */
+    public function api_screenshot_timeline() {
+        $id=filter_var($_GET['monitor_id']??null,FILTER_VALIDATE_INT);
+        $from=(string)($_GET['from']??'');
+        $to=(string)($_GET['to']??'');
+        $start=DateTimeImmutable::createFromFormat('!Y-m-d H:i:s',$from,new DateTimeZone('UTC'));
+        $end=DateTimeImmutable::createFromFormat('!Y-m-d H:i:s',$to,new DateTimeZone('UTC'));
+        if(!$id||!$start||!$end||$start->format('Y-m-d H:i:s')!==$from
+            ||$end->format('Y-m-d H:i:s')!==$to||$end<=$start
+            ||$end->getTimestamp()-$start->getTimestamp()>86400){
+            http_response_code(400);$this->json(['success'=>false,'error'=>'Invalid monitor or range (maximum 24 hours)']);return;
+        }
+        $monitor=$this->db->fetch('SELECT m.id,m.ip_address,u.name AS username FROM tbl_monitor_ips m LEFT JOIN users u ON u.id=m.owner_user_id WHERE m.id=:id',['id'=>$id]);
+        if(!$monitor){http_response_code(404);$this->json(['success'=>false,'error'=>'Monitor not found']);return;}
+        // Sample uniformly by time bucket and cap the transfer; full images load only when selected.
+        $seconds=max(1,(int)ceil(($end->getTimestamp()-$start->getTimestamp())/120));
+        $rows=$this->db->fetchAll(
+            "SELECT s.* FROM screenshot_metadata s
+             INNER JOIN (SELECT MIN(id) AS chosen FROM screenshot_metadata
+               WHERE monitor_ip_id=:id AND capture_datetime>=:from AND capture_datetime<=:to
+               GROUP BY FLOOR(UNIX_TIMESTAMP(capture_datetime)/{$seconds})
+               ORDER BY chosen LIMIT 121) samples ON samples.chosen=s.id
+             ORDER BY s.capture_datetime ASC,s.id ASC",
+            ['id'=>$id,'from'=>$from,'to'=>$to]
+        );
+        $rows=array_slice($rows,0,120);
+        $shots=[];
+        foreach($rows as $shot){
+            $shots[]=['global_id'=>$this->generateScreenshotId($id,$shot['file_path']),
+                'thumbnail'=>$this->getRelativePath($this->preferredScreenshotPath($shot)),
+                'screenshot'=>$this->getRelativePath($shot['file_path']),
+                'modified_time'=>(new DateTimeImmutable($shot['capture_datetime'],new DateTimeZone('UTC')))->getTimestamp()];
+        }
+        $this->json(['success'=>true,'screenshots'=>$shots,'monitor'=>$monitor,'sampled'=>true]);
+    }
+
     public function api_screenshots() {
         // Get pagination parameters
         $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
