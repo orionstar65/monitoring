@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Ubuntu MonitorClient Distribution Script
-# Version: 1.31
+# Version: prompted at release time
 
 set -e
 
@@ -30,7 +30,16 @@ print_error() {
 
 # Configuration
 PACKAGE_NAME="monitorclient"
-PACKAGE_VERSION="1.31"
+PACKAGE_VERSION=""
+if [[ "${1:-}" == "--version" ]]; then
+    PACKAGE_VERSION="${2:-}"
+else
+    read -r -p "Source release version (MAJOR.MINOR.PATCH, e.g. 1.5.1): " PACKAGE_VERSION
+fi
+if [[ ! "$PACKAGE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    print_error "Version must be MAJOR.MINOR.PATCH"
+    exit 2
+fi
 PACKAGE_ARCH="amd64"
 DIST_DIR="dist"
 
@@ -64,7 +73,7 @@ cp create_deb_package.sh "$DIST_DIR/"
 
 # Create README for distribution
 cat > "$DIST_DIR/README.md" << 'EOF'
-# Ubuntu MonitorClient v1.31
+# Ubuntu MonitorClient v${PACKAGE_VERSION}
 
 A comprehensive system monitoring client for Ubuntu that provides screenshot monitoring, USB device monitoring, system information gathering, and network communication to a backend server.
 
@@ -90,7 +99,7 @@ chmod +x install.sh
 ```bash
 chmod +x create_deb_package.sh
 ./create_deb_package.sh
-sudo dpkg -i monitorclient_1.31_amd64.deb
+sudo dpkg -i monitorclient_${PACKAGE_VERSION}_amd64.deb
 sudo apt-get install -f  # Install dependencies if needed
 ```
 
