@@ -81,8 +81,15 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     passwordInput=new QLineEdit(serverGroup);
     passwordInput->setEchoMode(QLineEdit::Password);
     passwordInput->setPlaceholderText("Password");
-    serverForm->addRow("User No",userNoInput);
-    serverForm->addRow("Password",passwordInput);
+    userNoFieldLabel=new QLabel("User No",serverGroup);
+    passwordFieldLabel=new QLabel("Password",serverGroup);
+    serverForm->addRow(userNoFieldLabel,userNoInput);
+    serverForm->addRow(passwordFieldLabel,passwordInput);
+    accountFieldLabel=new QLabel("Signed-in user",serverGroup);
+    accountInfoLabel=new QLabel("—",serverGroup);
+    accountInfoLabel->setWordWrap(true);
+    accountInfoLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    serverForm->addRow(accountFieldLabel,accountInfoLabel);
     testButton=new QPushButton("Sign In",serverGroup);
     connectionStatusLabel=new QLabel("● Not tested",serverGroup);
     serverForm->addRow(testButton,connectionStatusLabel);
@@ -182,6 +189,14 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     connect(lockSettingsButton,&QPushButton::clicked,this,&ConfigDialog::onLockSettingsClicked);
     connect(closeButton,&QPushButton::clicked,this,&ConfigDialog::reject);
     loadSettings();
+    // Apply immediately: a disabled toggle must suppress system tray
+    // notifications without waiting for a separate Save click.
+    connect(notificationsCheck,&QCheckBox::toggled,this,[this](bool enabled){
+        QDir().mkpath(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)+"/monitorclient");
+        QSettings settings(settingsPath(),QSettings::IniFormat);
+        settings.setValue("Notifications/enabled",enabled);
+        settings.sync();
+    });
     loadRememberedSession();
     refreshMonitors();
     updateUI();
@@ -267,7 +282,9 @@ void ConfigDialog::onSignInClicked(){
         return;
     }
     authToken=token;monitorId=result.value("monitor_id").toInt();
-    activeUserNo=number;assignmentLocked=false;settingsLocked=false;
+    activeUserNo=number;
+    activeUserName=result.value("user").toObject().value("name").toString();
+    assignmentLocked=false;settingsLocked=false;
     rememberToken(token);
     // Sign In commits the authenticated server connection, but must not
     // silently apply draft notification or monitor settings. Those need Save.
@@ -329,7 +346,9 @@ void ConfigDialog::loadRememberedSession(){
         return;
     }
     monitorId=state.value("monitor_id").toInt();
-    activeUserNo=state.value("user").toObject().value("user_no").toString();
+    const QJsonObject account=state.value("user").toObject();
+    activeUserNo=account.value("user_no").toString();
+    activeUserName=account.value("name").toString();
     assignmentLocked=state.value("assignment_locked").toBool();
     connectionStatusLabel->setText("Signed in as "+activeUserNo);
     // An authenticated session may exist before a monitor is selected.
@@ -350,7 +369,7 @@ bool ConfigDialog::saveServerIfChanged(){
             serverPortEdit->setValue(draftPort);
         }
         clearStoredToken(oldHost,oldPort);
-        authToken.clear();monitorId=0;assignmentLocked=false;activeUserNo.clear();
+        authToken.clear();monitorId=0;assignmentLocked=false;activeUserNo.clear();activeUserName.clear();
         emit sessionStateChanged();
     }
     saveSettings();
@@ -389,13 +408,15 @@ void ConfigDialog::refreshMonitors(){
     if(authToken.isEmpty()){updateMonitorList({});return;}
     const auto result=authRequest({{"action","restore"}},true);
     if(!result.value("success").toBool()){
-        authToken.clear();monitorId=0;assignmentLocked=false;activeUserNo.clear();
+        authToken.clear();monitorId=0;assignmentLocked=false;activeUserNo.clear();activeUserName.clear();
         updateMonitorList({});updateUI();return;
     }
     monitorId=result.value("monitor_id").toInt();
     assignmentLocked=result.value("assignment_locked").toBool();
     settingsLocked=false;
-    activeUserNo=result.value("user").toObject().value("user_no").toString();
+    const QJsonObject account=result.value("user").toObject();
+    activeUserNo=account.value("user_no").toString();
+    activeUserName=account.value("name").toString();
     if(userNoInput)userNoInput->setText(activeUserNo);
     updateMonitorList(result.value("monitors").toArray());
 }
@@ -499,6 +520,12 @@ void ConfigDialog::updateUI(){
     testButton->setVisible(!enrolled);
     userNoInput->setVisible(!enrolled);
     passwordInput->setVisible(!enrolled);
+    userNoFieldLabel->setVisible(!enrolled);
+    passwordFieldLabel->setVisible(!enrolled);
+    accountFieldLabel->setVisible(enrolled);
+    accountInfoLabel->setVisible(enrolled);
+    if(enrolled)accountInfoLabel->setText(QStringLiteral("User No: %1\nFull name: %2")
+        .arg(activeUserNo,activeUserName.isEmpty()?QStringLiteral("—"):activeUserName));
     logoutButton->setVisible(enrolled);
     logoutButton->setEnabled(enrolled);
     sendAllButton->setEnabled(enrolled&&monitorId>0);
@@ -608,7 +635,7 @@ void ConfigDialog::onLogoutClicked(){
         serverPortEdit->setValue(draftPort);
     }
     clearStoredToken(oldHost,oldPort);
-    authToken.clear();monitorId=0;assignmentLocked=false;activeUserNo.clear();pendingUserNo.clear();logoutPerformed=true;
+    authToken.clear();monitorId=0;assignmentLocked=false;activeUserNo.clear();activeUserName.clear();pendingUserNo.clear();logoutPerformed=true;
     connectionStatusLabel->setText("Signed out");
     updateMonitorList({});updateUI();
     emit sessionStateChanged();
