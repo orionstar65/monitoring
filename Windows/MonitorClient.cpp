@@ -222,7 +222,7 @@ HWND hMainWindow = NULL;
 
 // Connection status tracking
 struct ConnectionStatus {
-    bool serverConnected = false;
+    std::atomic<bool> serverConnected{false};
     bool previousServerConnected = false; // Track previous state for notifications
     std::string lastScreenshotStatus = "Never";
     std::string lastTicStatus = "Never";
@@ -2096,42 +2096,6 @@ static void changeMonitorFields(HWND dlg) {
     }
 }
 
-static bool testServerAddress(const std::string& host,const std::string& port) {
-    // Reachability only: GET without credentials; respect TLS verification.
-    const std::string address=(port=="8924"?"http://":"https://")+host+":"+port+"/html/auth/login";
-    URL_COMPONENTSW parts{};
-    parts.dwStructSize=sizeof(parts);
-    parts.dwHostNameLength=1;
-    parts.dwUrlPathLength=1;
-    const std::wstring wide=utf8ToWide(address);
-    if(!InternetCrackUrlW(wide.c_str(),0,0,&parts))return false;
-    const std::wstring hostname(parts.lpszHostName,parts.dwHostNameLength);
-    std::wstring path(parts.lpszUrlPath,parts.dwUrlPathLength);
-    HINTERNET internet=InternetOpenW(L"MonitorClient v1.4",INTERNET_OPEN_TYPE_PRECONFIG,nullptr,nullptr,0);
-    if(!internet)return false;
-    DWORD timeout=6000;
-    InternetSetOptionW(internet,INTERNET_OPTION_CONNECT_TIMEOUT,&timeout,sizeof(timeout));
-    InternetSetOptionW(internet,INTERNET_OPTION_SEND_TIMEOUT,&timeout,sizeof(timeout));
-    InternetSetOptionW(internet,INTERNET_OPTION_RECEIVE_TIMEOUT,&timeout,sizeof(timeout));
-    HINTERNET connection=InternetConnectW(internet,hostname.c_str(),parts.nPort,nullptr,nullptr,INTERNET_SERVICE_HTTP,0,0);
-    bool ok=false;
-    if(connection){
-        HINTERNET request=HttpOpenRequestW(connection,L"GET",path.c_str(),nullptr,nullptr,nullptr,
-             INTERNET_FLAG_RELOAD|INTERNET_FLAG_NO_CACHE_WRITE|
-             (parts.nScheme==INTERNET_SCHEME_HTTPS?INTERNET_FLAG_SECURE:0),0);
-        if(request){
-            if(HttpSendRequestW(request,nullptr,0,nullptr,0)){
-                DWORD code=0,bytes=sizeof(code);
-                if(HttpQueryInfoW(request,HTTP_QUERY_STATUS_CODE|HTTP_QUERY_FLAG_NUMBER,
-                       &code,&bytes,nullptr))ok=(code>=200&&code<400);
-            }
-            InternetCloseHandle(request);
-        }
-        InternetCloseHandle(connection);
-    }
-    InternetCloseHandle(internet);
-    return ok;
-}
 static bool applyUnifiedServer(HWND dlg) {
     const std::string host=editText(dlg,SETTINGS_IP),port=editText(dlg,SETTINGS_PORT);
     if(host.empty()||host.find_first_of(" /\\\r\n\t")!=std::string::npos ||
@@ -2211,34 +2175,6 @@ static void sortMonitorOptions(Json::Value& monitors){
     });
     monitors=Json::arrayValue;
     for(const auto& item:entries)monitors.append(item);
-}
-static void loadUserDirectory(HWND dlg) {
-    const HWND selector=GetDlgItem(dlg,SETTINGS_USER_NO);
-    settingsDirectoryError.clear();
-    SendMessageW(selector,CB_RESETCONTENT,0,0);
-    SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)L"Select a user…");
-    Json::Value req;req["action"]="directory";
-    const Json::Value response=callClientAuth(req);
-    if(!response.get("success",false).asBool()){
-        settingsDirectoryError=response.get("error",
-            "Unable to load users. Check the server address, TLS and enrollment configuration.").asString();
-        SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)L"User list unavailable — check server");
-        SendMessageW(selector,CB_SETCURSEL,0,0);
-        return;
-    }
-    const Json::Value entries=response.get("users",Json::arrayValue);
-    for(const auto& entry:entries){
-        const std::string no=entry.get("user_no","").asString();
-        if(no.empty())continue;
-        const int count=entry.get("device_count",0).asInt();
-        const std::string label=no+": "+entry.get("full_name","").asString()+
-            " ("+std::to_string(count)+" Devices)";
-        const std::wstring wide=utf8ToWide(label);
-        SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)wide.c_str());
-    }
-    if(SendMessageW(selector,CB_GETCOUNT,0,0)<=1)
-        settingsDirectoryError="No users available.";
-    selectDirectoryUser(dlg,settingsPendingUserNo.empty()?signedInUsername:settingsPendingUserNo);
 }
 static void refreshUnifiedMonitors(HWND dlg) {
     settingsMonitors=Json::arrayValue;
@@ -3168,9 +3104,11 @@ void manualConfigRefresh() {
 
 static HICON greenTrayIcon=nullptr;
 static HICON redTrayIcon=nullptr;
+static UINT trayTaskbarCreatedMessage=0;
 // Setup system tray
 void setupSystemTray() {
-    // Register window class for the tray icon
+    // Restore the one status icon if Windows Explorer restarts.
+    trayTaskbarCreatedMessage=RegisterWindowMessageA("TaskbarCreated");
     WNDCLASSEXA wcex;
     ZeroMemory(&wcex, sizeof(WNDCLASSEXA));
     wcex.cbSize = sizeof(WNDCLASSEXA);
@@ -3212,8 +3150,14 @@ void setupSystemTray() {
     nid.uID = 1; // Unique ID for this icon
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = WM_TRAYICON;
-    nid.hIcon = LoadIconA(NULL, (LPCSTR)IDI_APPLICATION);
-    strcpy_s(nid.szTip, "Monitor Client");
+    greenTrayIcon=buildStatusIcon(RGB(22,185,80));
+    redTrayIcon=buildStatusIcon(RGB(227,45,45));
+    const bool active=connectionStatus.serverConnected.load() &&
+                      selectedMonitorId.load()>0 && !getClientToken().empty();
+    nid.hIcon=active?greenTrayIcon:redTrayIcon;
+    if(!nid.hIcon)nid.hIcon=LoadIconA(nullptr,(LPCSTR)IDI_APPLICATION);
+    std::snprintf(nid.szTip,sizeof(nid.szTip),"MonitorClient %s - %s",
+        APP_VERSION.c_str(),active?"Connected":"Offline / monitor not selected");
 
     if (!Shell_NotifyIconA(NIM_ADD, &nid)) {
         // Failed to add tray icon
@@ -3236,6 +3180,7 @@ void cleanupSystemTray() {
     if(greenTrayIcon && greenTrayIcon!=LoadIconA(nullptr,(LPCSTR)IDI_APPLICATION))DestroyIcon(greenTrayIcon);
     if(redTrayIcon && redTrayIcon!=LoadIconA(nullptr,(LPCSTR)IDI_APPLICATION))DestroyIcon(redTrayIcon);
     greenTrayIcon=redTrayIcon=nullptr;
+    trayTaskbarCreatedMessage=0;
     if (hTrayMenu) {
         DestroyMenu(hTrayMenu);
         hTrayMenu = NULL;
@@ -3248,6 +3193,12 @@ void cleanupSystemTray() {
 
 // Window procedure for the main window
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if(trayTaskbarCreatedMessage!=0 && uMsg==trayTaskbarCreatedMessage) {
+        NOTIFYICONDATAA restore=nid;
+        restore.uFlags=NIF_ICON|NIF_MESSAGE|NIF_TIP;
+        if(Shell_NotifyIconA(NIM_ADD,&restore))updateTrayIcon();
+        return 0;
+    }
     switch (uMsg) {
         case WM_TRAYICON:
             if (lParam == WM_RBUTTONUP) {
@@ -3284,13 +3235,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 case ID_TRAY_SETTINGS:
                     showMonitorSettings();
                     break;
-                case ID_TRAY_NOTIFICATIONS:
+                case ID_TRAY_NOTIFICATIONS: {
                     const bool enabled=!notificationsEnabled.load();
                     notificationsEnabled.store(enabled);
                     saveClientSetting("Client","notifications",enabled?"1":"0");
                     if(!enabled)clearPendingTrayNotification();
                     updateTrayMenu();
                     break;
+                }
                 case ID_TRAY_CONFIG_REFRESH:
                     std::thread([](){
                         manualConfigRefresh();
@@ -3307,43 +3259,84 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
 
 
-// Build a colored status dot over the system tray icon.
+// Render a dedicated, high-contrast green/red status dot at the native
+// small-icon size. A tiny overlay on IDI_APPLICATION was nearly invisible
+// after Windows scaled the generic 32px icon to the taskbar's 16px slot.
 static HICON buildStatusIcon(COLORREF dot) {
-    HICON base=LoadIconA(nullptr,(LPCSTR)IDI_APPLICATION);
-    ICONINFO info={};
-    if(!GetIconInfo(base,&info))return base;
-    HBITMAP color=(HBITMAP)CopyImage(info.hbmColor,IMAGE_BITMAP,32,32,LR_CREATEDIBSECTION);
-    if(!color){
-        DeleteObject(info.hbmColor);DeleteObject(info.hbmMask);
-        return base;
+    const int width=std::max(16,GetSystemMetrics(SM_CXSMICON));
+    const int height=std::max(16,GetSystemMetrics(SM_CYSMICON));
+    BITMAPINFO bitmap{};
+    bitmap.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+    bitmap.bmiHeader.biWidth=width;
+    bitmap.bmiHeader.biHeight=-height; // Top-down BGRA DIB.
+    bitmap.bmiHeader.biPlanes=1;
+    bitmap.bmiHeader.biBitCount=32;
+    bitmap.bmiHeader.biCompression=BI_RGB;
+    void* pixels=nullptr;
+    HDC display=GetDC(nullptr);
+    if(!display)return nullptr;
+    HBITMAP color=CreateDIBSection(display,&bitmap,DIB_RGB_COLORS,&pixels,nullptr,0);
+    ReleaseDC(nullptr,display);
+    if(!color || !pixels) {
+        if(color)DeleteObject(color);
+        return nullptr;
     }
-    HDC screen=GetDC(nullptr),dc=CreateCompatibleDC(screen),mask=CreateCompatibleDC(screen);
-    HBITMAP old=(HBITMAP)SelectObject(dc,color);
-    HBITMAP oldMask=(HBITMAP)SelectObject(mask,info.hbmMask);
-    PatBlt(mask,19,19,13,13,BLACKNESS);
-    HBRUSH brush=CreateSolidBrush(dot);
-    HPEN pen=CreatePen(PS_SOLID,2,RGB(255,255,255));
-    HGDIOBJ oldBrush=SelectObject(dc,brush),oldPen=SelectObject(dc,pen);
-    Ellipse(dc,19,19,32,32);
-    SelectObject(dc,oldBrush);SelectObject(dc,oldPen);
-    SelectObject(dc,old);SelectObject(mask,oldMask);
-    DeleteObject(brush);DeleteObject(pen);
-    DeleteDC(dc);DeleteDC(mask);ReleaseDC(nullptr,screen);
-    ICONINFO result=info;result.hbmColor=color;
-    HICON icon=CreateIconIndirect(&result);
-    DeleteObject(color);DeleteObject(info.hbmColor);DeleteObject(info.hbmMask);
-    return icon?icon:base;
+
+    // A monochrome AND mask plus an ARGB color bitmap works on older and
+    // newer versions of Windows without shipping a separate icon resource.
+    const int stride=((width+15)/16)*2;
+    std::vector<BYTE> maskBits(static_cast<size_t>(stride)*height,0xFF);
+    auto* rgba=static_cast<DWORD*>(pixels);
+    const double cx=(width-1)/2.0,cy=(height-1)/2.0;
+    const double radius=std::min(width,height)/2.0-1.0;
+    const double outer2=radius*radius;
+    const double inner2=(radius-1.3)*(radius-1.3);
+    for(int y=0;y<height;++y) {
+        for(int x=0;x<width;++x) {
+            const double dx=x-cx,dy=y-cy,d2=dx*dx+dy*dy;
+            if(d2>outer2) {
+                rgba[y*width+x]=0;
+                continue;
+            }
+            maskBits[static_cast<size_t>(y)*stride+x/8]&=
+                static_cast<BYTE>(~(0x80u>>(x%8)));
+            const COLORREF pixel=d2>inner2?RGB(255,255,255):dot;
+            rgba[y*width+x]=0xFF000000u |
+                (static_cast<DWORD>(GetRValue(pixel))<<16) |
+                (static_cast<DWORD>(GetGValue(pixel))<<8) |
+                static_cast<DWORD>(GetBValue(pixel));
+        }
+    }
+    HBITMAP mask=CreateBitmap(width,height,1,1,maskBits.data());
+    if(!mask) {
+        DeleteObject(color);
+        return nullptr;
+    }
+    ICONINFO info{};
+    info.fIcon=TRUE;
+    info.hbmColor=color;
+    info.hbmMask=mask;
+    HICON result=CreateIconIndirect(&info);
+    DeleteObject(mask);
+    DeleteObject(color);
+    return result;
 }
 void updateTrayIcon() {
-    const bool active=connectionStatus.serverConnected && selectedMonitorId.load()>0
-                      && !getClientToken().empty();
-    if(!greenTrayIcon)greenTrayIcon=buildStatusIcon(RGB(22,185,80));
-    if(!redTrayIcon)redTrayIcon=buildStatusIcon(RGB(227,45,45));
-    nid.uFlags=NIF_ICON|NIF_MESSAGE|NIF_TIP;
-    nid.hIcon=active?greenTrayIcon:redTrayIcon;
-    strcpy_s(nid.szTip,active?"MonitorClient v1.5 - Active":
-         "MonitorClient v1.5 - Offline / select a User No or monitor");
-    Shell_NotifyIconA(NIM_MODIFY,&nid);
+    // Exactly one notification-area icon: its color changes when the
+    // authenticated monitor's connection becomes active or disconnected.
+    const bool active=connectionStatus.serverConnected.load() &&
+                      selectedMonitorId.load()>0 && !getClientToken().empty();
+    if(!nid.hWnd || !IsWindow(nid.hWnd))return;
+    NOTIFYICONDATAA change{};
+    change.cbSize=sizeof(change);
+    change.hWnd=nid.hWnd;
+    change.uID=nid.uID;
+    change.uFlags=NIF_ICON|NIF_TIP;
+    change.hIcon=active?greenTrayIcon:redTrayIcon;
+    if(!change.hIcon)change.hIcon=LoadIconA(nullptr,(LPCSTR)IDI_APPLICATION);
+    std::snprintf(change.szTip,sizeof(change.szTip),"MonitorClient %s - %s",
+        APP_VERSION.c_str(),active?"Connected":"Offline / monitor not selected");
+    Shell_NotifyIconA(NIM_MODIFY,&change);
 }
 
 // Show connection error notification
