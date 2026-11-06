@@ -135,9 +135,9 @@ function monitoringLegacyV13Monitor(mysqli $db, ?string $claimedMac = null): ?in
     $stmt=$db->prepare(
         'SELECT m.id,m.mac_address FROM tbl_monitor_ips m
          JOIN users u ON u.id=m.owner_user_id
-         WHERE m.ip_address=? LIMIT 3'
+         WHERE (m.ip_address=? OR m.last_seen_ip=?) LIMIT 3'
     );
-    $stmt->bind_param('s',$peer);$stmt->execute();
+    $stmt->bind_param('ss',$peer,$peer);$stmt->execute();
     $rows=$stmt->get_result()->fetch_all(MYSQLI_ASSOC);$stmt->close();
     // IP-only screenshot uploads are permitted solely for unique IP mappings.
     if(count($rows)!==1)return null;
