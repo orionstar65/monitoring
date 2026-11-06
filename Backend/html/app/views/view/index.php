@@ -676,6 +676,12 @@ ob_start();
 .history-timeline-image time{font-size:.57rem}
 @media(max-width:850px){.history-viewer{grid-template-columns:1fr}.history-toolbar-summary{min-width:60px}}
 
+/* One-line sidebar search with contextual icon-only clear selection control. */
+.sidebar-panel .sidebar-header{padding:7px 8px}
+.monitor-search-row{display:flex;align-items:center;gap:5px;min-width:0}
+.monitor-search-row .form-control{flex:1;min-width:0;border-radius:6px}
+.monitor-search-row .btn{flex:none;min-width:29px;height:29px;padding:4px 6px}
+.monitor-search-row [hidden]{display:none!important}
 /* Log Modal Styles */
 .log-sub-modal .modal-dialog {
     max-width: 90%;
@@ -1170,16 +1176,13 @@ ob_start();
     <!-- Left Sidebar - Monitor List -->
     <div class="sidebar-panel">
         <div class="sidebar-header">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <div class="form-check">
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="selectAllMonitors">
-                        <i class="fas fa-globe me-1"></i>
-                        Show All Devices
-                    </button>
-                </div>
-            </div>
-            <div class="filter-container">
-                                 <input type="text" class="form-control" id="monitorFilter" placeholder="Filter by username, type, or IP...">
+            <div class="monitor-search-row">
+                <label class="visually-hidden" for="monitorFilter">Search monitors</label>
+                <input type="search" class="form-control form-control-sm" id="monitorFilter" placeholder="Search user, machine or IP" autocomplete="off">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="selectAllMonitors"
+                    aria-label="Clear monitor selection and show all devices" title="Show all devices" hidden>
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
         </div>
         <div class="sidebar-content" id="monitorList">
@@ -1780,17 +1783,9 @@ function filterMonitors() {
 }
 
 function updateSelectAllCheckbox() {
-    const selectedCount = selectedMonitors.length;
-    
-    if (selectedCount === 0) {
-        $('#selectAllMonitors').removeClass('btn-primary').addClass('btn-outline-primary');
-        $('#selectAllMonitors').html('<i class="fas fa-globe me-1"></i>Show All Devices');
-    } else {
-        $('#selectAllMonitors').removeClass('btn-outline-primary').addClass('btn-primary');
-        $('#selectAllMonitors').html('<i class="fas fa-check me-1"></i>All Devices Selected');
-    }
+    const selected=selectedMonitors.length>0;
+    $('#selectAllMonitors').prop('hidden',!selected).attr('aria-hidden',String(!selected));
 }
-
 function loadMonitors() {
     $.ajax({
         url: "<?php echo BASE_URL; ?>view/api_live_status",
