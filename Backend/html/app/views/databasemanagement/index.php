@@ -125,6 +125,7 @@ ob_start();
                         </button>
                         <span class="small" id="dbCleanupProgress" role="status" aria-live="polite"></span>
                     </div>
+                    <div id="dbCleanupResults" class="small mt-3" aria-live="polite" hidden></div>
                 </div>
             </div>
         </div>
@@ -247,10 +248,33 @@ ob_start();
             error.textContent='Choose 1–120 months.';return;
         }
         button.disabled=true;error.textContent='';
-        let total=0,index=0,batches=0;
+        const results=document.getElementById('dbCleanupResults');
+        if(results){results.replaceChildren();results.hidden=true;}
+        const perTable=[];
+        let index=0;
+        const showResults=()=>{
+            if(!results)return;
+            const title=document.createElement('strong');
+            title.textContent='Database cleanup results';
+            const list=document.createElement('ul');
+            list.className='mb-0 mt-1 ps-3';
+            for(const result of perTable){
+                const item=document.createElement('li');
+                item.textContent=result.table+' — '+result.deleted.toLocaleString()+' rows removed';
+                list.appendChild(item);
+            }
+            const total=perTable.reduce((sum,item)=>sum+item.deleted,0);
+            const summary=document.createElement('div');
+            summary.className='fw-semibold mt-2';
+            summary.textContent='Total: '+total.toLocaleString()+' rows removed';
+            results.replaceChildren(title,list,summary);
+            results.hidden=false;
+        };
         try{
-            // One bounded DELETE per request. No large client-side row fetches.
-            while(batches++<100000){
+            // One request (and one database DELETE) per allowlisted table.
+            // The progress display changes when a table finishes, not per row.
+            for(let number=0;number<3;number++){
+                progress.textContent='Cleaning table '+(number+1)+'…';
                 const payload=new URLSearchParams({
                     months:String(retention),table_index:String(index),confirm:'DELETE OLD LOGS',
                     csrf_token:document.querySelector('meta[name="csrf-token"]')?.content||''
@@ -260,20 +284,23 @@ ob_start();
                 });
                 const data=await response.json();
                 if(!response.ok||!data.success)throw Error(data.error||'Cleanup failed');
-                total+=Number(data.deleted)||0;
-                index=Number(data.next_table)||0;
-                progress.textContent='Deleted '+total.toLocaleString()+' rows · '+(data.table||'Completed');
+                if(data.table){
+                    perTable.push({table:String(data.table),deleted:Number(data.deleted)||0});
+                }
+                index=Number(data.next_table);
                 if(data.done){
                     bootstrap.Modal.getInstance(document.getElementById('dbCleanupModal'))?.hide();
-                    progress.textContent='Cleanup completed: '+total.toLocaleString()+' rows removed. Refresh table statistics.';
+                    progress.textContent='Cleanup completed. Results by table:';
+                    showResults();
                     button.disabled=false;
                     return;
                 }
             }
-            throw Error('Stopped after maximum cleanup batches. Run cleanup again if needed.');
+            throw Error('Cleanup did not complete all eligible tables.');
         }catch(exc){
             error.textContent=exc.message;
-            progress.textContent='Cleanup stopped after '+total.toLocaleString()+' removed rows.';
+            progress.textContent='Cleanup stopped; check the completed-table results below.';
+            if(perTable.length)showResults();
             button.disabled=false;
         }
     });
