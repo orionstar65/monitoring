@@ -43,7 +43,7 @@ $checks=[
     str_contains($ubuntu,'Screenshot (GNOME D-Bus):'),
  'macOS manual sends trigger screenshot and all event uploads now'=>
     str_contains($mac,'captureAndPostScreenshot(manual:true)') &&
-    str_contains($mac,'sendTicEvent();'.PHP_EOL.'        sendKeyLogs();'.PHP_EOL.'        sendUSBLogs();'.PHP_EOL.'        sendBrowserHistories()'),
+    str_contains($mac,'sendTicEvent()'.PHP_EOL.'        sendKeyLogs()'.PHP_EOL.'        sendUSBLogs()'.PHP_EOL.'        sendBrowserHistories()'),
  'macOS screenshot file is unique and result requires stored backend filename'=>
     str_contains($mac,'NSTemporaryDirectory() + "monitorclient-" + UUID().uuidString + ".jpg"') &&
     str_contains($mac,'let success=code==200 && (reply?["status"] as? String)=="success"') &&
