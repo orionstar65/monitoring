@@ -2783,8 +2783,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        let width: CGFloat = 510
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 650),
+        let width: CGFloat = 520
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 480),
             styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "MonitorClient · Settings"
         window.titleVisibility = .hidden
@@ -2797,7 +2797,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             window.orderOut(nil)
         }
 
-        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: width, height: 650))
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: width, height: 480))
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
@@ -2808,15 +2808,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .centerX
-        stack.spacing = 10
+        stack.spacing = 8
         stack.translatesAutoresizingMaskIntoConstraints = false
         document.addSubview(stack)
         NSLayoutConstraint.activate([
             document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
             stack.topAnchor.constraint(equalTo: document.topAnchor, constant: 8),
-            stack.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 20),
-            stack.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -20),
-            document.bottomAnchor.constraint(equalTo: stack.bottomAnchor, constant: 12)
+            stack.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 16),
+            stack.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -16),
+            document.bottomAnchor.constraint(equalTo: stack.bottomAnchor, constant: 10)
         ])
         func text(_ value: String, bold: Bool = false) -> NSTextField {
             let field = NSTextField(labelWithString: value)
@@ -2827,7 +2827,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let field = NSTextField()
             field.placeholderString = placeholder
             field.stringValue = value
-            field.widthAnchor.constraint(equalToConstant: 330).isActive = true
+            field.widthAnchor.constraint(equalToConstant: 312).isActive = true
             return field
         }
         func section(_ title: String) -> NSStackView {
@@ -2835,7 +2835,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             pane.orientation = .vertical
             pane.alignment = .leading
             pane.spacing = 8
-            pane.widthAnchor.constraint(equalToConstant: 450).isActive = true
+            pane.widthAnchor.constraint(equalToConstant: 432).isActive = true
             pane.addArrangedSubview(text(title, bold: true))
             return pane
         }
@@ -2875,7 +2875,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let userNoField = entry("User No", value: "")
         let passwordField = NSSecureTextField()
         passwordField.placeholderString = "Password"
-        passwordField.widthAnchor.constraint(equalToConstant: 330).isActive = true
+        passwordField.widthAnchor.constraint(equalToConstant: 312).isActive = true
         let userNoRow = line("User No", userNoField)
         let passwordRow = line("Password", passwordField)
         server.addArrangedSubview(userNoRow)
@@ -2883,7 +2883,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let signedInSummary=text("—")
         signedInSummary.lineBreakMode = .byWordWrapping
         signedInSummary.maximumNumberOfLines = 3
-        signedInSummary.widthAnchor.constraint(equalToConstant:330).isActive = true
+        signedInSummary.widthAnchor.constraint(equalToConstant:312).isActive = true
         let signedInRow=line("Signed-in user",signedInSummary)
         server.addArrangedSubview(signedInRow)
         let test = action("Sign In", "test")
@@ -2893,14 +2893,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         checkRow.spacing = 10
         server.addArrangedSubview(line("Account", checkRow))
         // Sign Out is placed below after its control is constructed.
-        stack.addArrangedSubview(server)
+        // Added to the Account & Server tab below.
         let userPane = NSStackView()
         userPane.orientation = .vertical
         userPane.alignment = .leading
         userPane.spacing = 8
-        userPane.widthAnchor.constraint(equalToConstant: 450).isActive = true
+        userPane.widthAnchor.constraint(equalToConstant: 432).isActive = true
         let users = NSPopUpButton()
-        users.widthAnchor.constraint(equalToConstant: 330).isActive = true
+        users.widthAnchor.constraint(equalToConstant: 312).isActive = true
         let userRow = line("User:", users)
         userPane.addArrangedSubview(userRow)
         let unpair = action("Sign Out", "disconnect")
@@ -2910,17 +2910,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         directoryStatus.textColor = .systemRed
         directoryStatus.lineBreakMode = .byWordWrapping
         directoryStatus.maximumNumberOfLines = 3
-        directoryStatus.widthAnchor.constraint(equalToConstant: 440).isActive = true
+        directoryStatus.widthAnchor.constraint(equalToConstant: 430).isActive = true
         directoryStatus.isHidden = true
         userPane.addArrangedSubview(directoryStatus)
         let notice = text("")
         notice.textColor = .secondaryLabelColor
         notice.lineBreakMode = .byWordWrapping
         notice.maximumNumberOfLines = 3
-        notice.widthAnchor.constraint(equalToConstant: 440).isActive = true
+        notice.widthAnchor.constraint(equalToConstant: 430).isActive = true
         userPane.addArrangedSubview(notice)
         userPane.isHidden = true // Legacy directory controls are intentionally not shown.
-        stack.addArrangedSubview(userPane)
+        // Legacy user-picker controls remain hidden, not added to a tab.
 
         let monitorPane = section("Monitor Settings")
         let picker = NSPopUpButton()
@@ -2967,12 +2967,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let save = action("Save", "save")
         let saveRow = line("", save)
         monitorPane.addArrangedSubview(saveRow)
-        stack.addArrangedSubview(monitorPane)
+        // Added to the Monitor tab below.
         let notifications = NSButton(checkboxWithTitle: "Show status notifications",
                                      target: nil, action: nil)
         notifications.state = self.notificationsEnabled ? .on : .off
-        stack.addArrangedSubview(notifications)
-        let updatePane = section("Updates")
+        let notificationsPane = section("Notifications")
+        notificationsPane.addArrangedSubview(notifications)
+        let updatePane = section("Client updates")
         let updateServer = entry("http://192.168.2.241:8765",
             value:storage.string(forKey:"update-server-url") ?? "")
         updatePane.addArrangedSubview(line("Update server",updateServer))
@@ -2988,7 +2989,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         updateMessage.lineBreakMode = .byWordWrapping
         updateMessage.maximumNumberOfLines=3
         updatePane.addArrangedSubview(line("",updateMessage))
-        stack.addArrangedSubview(updatePane)
+        // Added to the Updates tab below.
         var pendingRelease:MonitorRelease?=nil
         func invalidateUpdate(){
             pendingRelease=nil
@@ -3003,8 +3004,42 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let toolsRow = NSStackView(views: [sendAllButton, refreshConfigButton, grantPermissionsButton])
         toolsRow.orientation = .horizontal
         toolsRow.spacing = 6
-        stack.addArrangedSubview(toolsRow)
-        let footer = NSStackView(views: [lockSettings, close])
+        let maintenancePane = section("Maintenance")
+        maintenancePane.addArrangedSubview(toolsRow)
+        let monitorEmpty = text("Sign in to configure a monitor.")
+        monitorEmpty.textColor = .secondaryLabelColor
+        let monitorEmptyPane = section("Monitor")
+        monitorEmptyPane.addArrangedSubview(monitorEmpty)
+        monitorPane.addArrangedSubview(line("",lockSettings))
+        let tabs = NSTabView()
+        tabs.translatesAutoresizingMaskIntoConstraints = false
+        tabs.widthAnchor.constraint(equalToConstant: 476).isActive = true
+        tabs.heightAnchor.constraint(equalToConstant: 322).isActive = true
+        func addSettingsTab(_ label: String, content views: [NSView]) {
+            let item = NSTabViewItem(identifier: label)
+            item.label = label
+            let page = NSView()
+            let pageStack = NSStackView(views: views)
+            pageStack.orientation = .vertical
+            pageStack.alignment = .leading
+            pageStack.spacing = 12
+            pageStack.translatesAutoresizingMaskIntoConstraints = false
+            page.addSubview(pageStack)
+            NSLayoutConstraint.activate([
+                pageStack.topAnchor.constraint(equalTo: page.topAnchor, constant: 13),
+                pageStack.leadingAnchor.constraint(equalTo: page.leadingAnchor, constant: 10),
+                pageStack.trailingAnchor.constraint(lessThanOrEqualTo: page.trailingAnchor, constant: -10),
+                pageStack.bottomAnchor.constraint(lessThanOrEqualTo: page.bottomAnchor, constant: -8)
+            ])
+            item.view = page
+            tabs.addTabViewItem(item)
+        }
+        addSettingsTab("Account & Server", content: [server])
+        addSettingsTab("Monitor", content: [monitorPane,monitorEmptyPane])
+        addSettingsTab("Preferences", content: [notificationsPane,maintenancePane])
+        addSettingsTab("Updates", content: [updatePane])
+        stack.addArrangedSubview(tabs)
+        let footer = NSStackView(views: [close])
         footer.orientation = .horizontal
         footer.spacing = 8
         footer.alignment = .centerY
@@ -3133,6 +3168,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let enrolled = !self.clientToken.isEmpty
             let isLocked = enrolled && (locked || monitorSettingsLocked)
             monitorPane.isHidden = !enrolled && pendingUserNo == nil
+            monitorEmptyPane.isHidden = !monitorPane.isHidden
             unpair.isHidden = !enrolled
             unpair.isEnabled = enrolled
             sendAllButton.isEnabled = enrolled && self.selectedMonitorId > 0
@@ -3143,8 +3179,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             signedInRow.isHidden = !enrolled
             if enrolled {
                 let no=self.storage.string(forKey:"user_no") ?? "—"
-                let name=self.storage.string(forKey:"signed-in-name") ?? "—"
-                signedInSummary.stringValue="User No: \(no)\nFull name: \(name.isEmpty ? "—" : name)"
+                signedInSummary.stringValue="User No: \(no)"
             }
             test.isHidden = enrolled
             signOutRow.isHidden = !enrolled
@@ -3234,9 +3269,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             for record in records {
                 let number = String(describing: record["user_no"] ?? "")
                 guard !number.isEmpty else { continue }
-                let name = record["full_name"] as? String ?? ""
                 let count = record["device_count"] as? Int ?? 0
-                users.addItem(withTitle: "\(number): \(name) (\(count) Devices)")
+                users.addItem(withTitle: "User No \(number) · \(count) devices")
                 users.lastItem?.representedObject = number
             }
             if let item = users.itemArray.first(where: {
