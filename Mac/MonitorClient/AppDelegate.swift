@@ -208,7 +208,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private var selectedMonitorId: Int = 0
     private var notificationsEnabled: Bool {
         get { storage.object(forKey: "notifications-enabled") as? Bool ?? true }
-        set { storage.set(newValue, forKey: "notifications-enabled") }
+        set {
+            storage.set(newValue, forKey: "notifications-enabled")
+            if !newValue {
+                let center = UNUserNotificationCenter.current()
+                center.removeAllPendingNotificationRequests()
+                center.removeAllDeliveredNotifications()
+            }
+        }
     }
     private let keychainService = "com.airentech.monitorclient.v15.device"
     private func sessionAccount() -> String {
@@ -289,6 +296,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 options: []
             )
         ])
+        guard notificationsEnabled else { return }
         center.requestAuthorization(options: [.alert, .sound]) { _, error in
             if let error = error {
                 NSLog("MonitorClient: notification permission error: %@", error.localizedDescription)
@@ -310,8 +318,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
         selectedMonitorId = result["monitor_id"] as? Int ?? 0
         isServerConnected = true
-        if let no = (result["user"] as? [String: Any])?["user_no"] {
-            storage.set(String(describing: no), forKey: "user_no")
+        if let account=result["user"] as? [String: Any] {
+            if let no=account["user_no"] { storage.set(String(describing:no),forKey:"user_no") }
+            storage.set(account["name"] as? String ?? "",forKey:"signed-in-name")
         }
         if selectedMonitorId > 0 { startKeyboardMonitoring() }
         else { showClientNotification("Monitor setup required", "Choose an assigned monitor in Settings.") }
@@ -2747,6 +2756,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let passwordRow = line("Password", passwordField)
         server.addArrangedSubview(userNoRow)
         server.addArrangedSubview(passwordRow)
+        let signedInSummary=text("—")
+        signedInSummary.lineBreakMode = .byWordWrapping
+        signedInSummary.maximumNumberOfLines = 3
+        signedInSummary.widthAnchor.constraint(equalToConstant:330).isActive = true
+        let signedInRow=line("Signed-in user",signedInSummary)
+        server.addArrangedSubview(signedInRow)
         let test = action("Sign In", "test")
         let status = text("Not tested")
         status.textColor = .secondaryLabelColor
@@ -2858,6 +2873,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             button.target = coordinator
             button.action = #selector(UnifiedWindowActions.activate(_:))
         }
+        notifications.identifier=NSUserInterfaceItemIdentifier("notifications")
+        notifications.target=coordinator
+        notifications.action=#selector(UnifiedWindowActions.activate(_:))
         for radio in osRadios {
             radio.identifier = NSUserInterfaceItemIdentifier("os:" + radio.title)
             radio.target = coordinator
@@ -2944,6 +2962,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 users.select(item)
             }
             self.storage.set(currentNo, forKey: "user_no")
+            self.storage.set((restored?["user"] as? [String: Any])?["name"] as? String ?? "",
+                             forKey:"signed-in-name")
             self.selectedMonitorId = restored?["monitor_id"] as? Int ?? 0
             locked = restored?["assignment_locked"] as? Bool ?? false
             picker.removeAllItems()
@@ -2976,6 +2996,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             users.isEnabled = false
             userNoRow.isHidden = enrolled
             passwordRow.isHidden = enrolled
+            signedInRow.isHidden = !enrolled
+            if enrolled {
+                let no=self.storage.string(forKey:"user_no") ?? "—"
+                let name=self.storage.string(forKey:"signed-in-name") ?? "—"
+                signedInSummary.stringValue="User No: \(no)\nFull name: \(name.isEmpty ? "—" : name)"
+            }
             test.isHidden = enrolled
             signOutRow.isHidden = !enrolled
             picker.isEnabled = !isLocked
@@ -3081,6 +3107,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         coordinator.handler = { [weak self] command in
             guard let self = self else { return }
             switch command {
+            case "notifications":
+                let enabled=notifications.state == .on
+                self.notificationsEnabled=enabled
+                if enabled { self.configureNotifications() }
             case let value where value.hasPrefix("os:"):
                 chooseRadio(osRadios, value: String(value.dropFirst(3)))
             case let value where value.hasPrefix("machine:"):
@@ -3107,6 +3137,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 self.clientToken = token
                 self.keychainSaveToken(token)
                 self.storage.set(number,forKey:"user_no")
+                self.storage.set((response?["user"] as? [String: Any])?["name"] as? String ?? "",
+                                 forKey:"signed-in-name")
                 self.selectedMonitorId = response?["monitor_id"] as? Int ?? 0
                 self.isServerConnected = true
                 status.stringValue = "Signed in"
@@ -3204,6 +3236,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 self.clientToken = ""
                 self.selectedMonitorId = 0
                 self.isServerConnected = false
+                self.storage.removeObject(forKey:"user_no")
+                self.storage.removeObject(forKey:"signed-in-name")
                 pendingUserNo = nil
                 refreshMonitors()
                 updateState()
