@@ -1,0 +1,64 @@
+<?php
+// Run: php Backend/tests/unified_monitoring_workspace_contract.php
+// Source-level regression checks. Run UI interactions in a browser before deployment.
+$root=dirname(__DIR__,2);
+$read=static function(string $p) use($root):string {
+    $s=file_get_contents($root.'/'.$p);
+    if($s===false)throw new RuntimeException('Missing '.$p);
+    return $s;
+};
+$live=$read('Backend/html/app/views/view/index.php');
+$browse=$read('Backend/html/app/views/view/logbrowse.php');
+$shared=$read('Backend/html/app/views/view/partials/key_history_shared.php');
+$view=$read('Backend/html/app/controllers/View.php');
+$merge=$read('Backend/html/app/controllers/Merge.php');
+$db=$read('Backend/html/app/services/DatabaseService.php');
+$monitor=$read('Backend/html/app/controllers/Monitors.php');
+$layout=$read('Backend/html/app/views/layouts/main.php');
+$checks=[
+ 'Tabbed workspace includes Screenshots, Keyboard, Browser, USB, Settings'=>str_contains($live,'data-monitor-tab="screenshots"')
+     &&str_contains($live,'data-monitor-tab="key"')&&str_contains($live,'data-monitor-tab="browser"')
+     &&str_contains($live,'data-monitor-tab="usb"')&&str_contains($live,'data-monitor-tab="settings"'),
+ 'Tabs reuse original log browse functionality'=>str_contains($live,"include __DIR__.'/logbrowse.php'")
+     &&str_contains($browse,'window.unifiedLogs')&&str_contains($browse,'monitorTranscriptKeyRows(keys,escapeHtml)'),
+ 'Single left monitor selector has no radios'=>!str_contains($live,'class="monitor-radio"')
+     &&str_contains($live,'data-monitor-id')&&str_contains($live,'role="button"'),
+ 'Left monitor list ordered by User No and username'=>str_contains($live,'window.sortMonitorOptions(monitors)')
+     &&str_contains($live,'const title=number+\': \'+label;'),
+ 'Left monitor list scrolls and status badges are compact'=>str_contains($live,'.sidebar-panel .sidebar-content{overflow-y:auto')
+     &&str_contains($live,'.sidebar-panel .monitor-item-status .live-status-badge{font-size:.62rem'),
+ 'One monitor selection controls all log tabs'=>str_contains($live,'window.unifiedLogs?.selectMonitor(id||\'\')')
+     &&str_contains($live,'unifiedSelectTab(tab,persist=true)'),
+ 'Date/action bar preserves screenshot cleanup'=>str_contains($live,'id="unifiedRemoveScreenshots"')
+     &&str_contains($browse,'cleanup/api_delete_screenshots')&&str_contains($browse,'unifiedCleanupProgress'),
+ 'Monitoring stats reflect selected monitor'=>str_contains($live,'selectedMonitors.length?allMonitors.filter')
+     &&str_contains($live,'id="totalLogs"'),
+ 'Settings panel reuses existing edit route and lock setting'=>str_contains($live,'monitors/edit/')
+     &&str_contains($live,'name="settings_locked"')&&str_contains($monitor,'return_to'),
+ 'Settings API provides same-user merge candidates'=>str_contains($view,'function api_monitor_settings()')
+     &&str_contains($view,'WHERE owner_user_id=:owner AND id<>:id'),
+ 'Merge endpoint enforces same owner'=>str_contains($merge,'COUNT(DISTINCT owner_user_id)')
+     &&str_contains($merge,'Merge requires two different monitors assigned to the same user'),
+ 'Merge upsert disambiguates statistics values'=>str_contains($db,'storage_statistics.record_count')
+     &&str_contains($db,'storage_statistics.total_size'),
+ 'CCTV range component supports seek/pan/resize'=>str_contains($shared,"return 'seek'")
+     &&str_contains($shared,"mode==='pan'")&&str_contains($shared,"mode==='start'")&&str_contains($shared,"mode==='end'"),
+ 'Playhead, zoom buttons, wheel zoom, thumbnails available'=>str_contains($live,'function historySeek(')
+     &&str_contains($live,'id="historyZoomIn"')&&str_contains($live,"document.addEventListener('wheel'")
+     &&str_contains($live,'historyLoadVisibleShots'),
+ 'Keylog uses same CCTV geometry'=>str_contains($browse,'MonitorCctvRange.drag')
+     &&str_contains($browse,'MonitorCctvRange.hit')&&str_contains($browse,'zoomKeyRuler'),
+ 'Log management old route redirects to unified view'=>str_contains($view,"redirect('view?tab=browser'"),
+ 'Admin sidebar has only unified monitoring entry'=>!str_contains($layout,'<span>Log Browse</span>')
+     &&!str_contains($layout,'<span>Merge Logs</span>'),
+ 'Desktop device labels show #id'=>str_contains($read('Windows/MonitorClient.cpp'),'std::to_string(id)')
+     &&str_contains($read('Mac/MonitorClient/AppDelegate.swift'),'#\\(id)')
+     &&str_contains($read('Ubuntu/ConfigDialog.cpp'),'#%4'),
+];
+$failures=0;
+foreach($checks as $name=>$pass){
+    echo ($pass?'PASS':'FAIL').': '.$name.PHP_EOL;
+    if(!$pass)$failures++;
+}
+echo count($checks).' source contracts, '.$failures.' failures'.PHP_EOL;
+exit($failures?1:0);
