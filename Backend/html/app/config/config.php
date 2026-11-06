@@ -28,7 +28,10 @@ define('BACKEND_CONFIG_PATH', '../config.inc.php');
 define('BACKEND_INCLUDES_PATH', '../includes/');
 
 // User roles
-define('ROLE_ADMIN', 'admin');
+define('ROLE_SUPER_ADMIN', 'super-admin');
+// Existing privileged checks retain super-admin semantics.
+define('ROLE_ADMIN', ROLE_SUPER_ADMIN);
+define('ROLE_SCOPED_ADMIN', 'admin');
 define('ROLE_USER', 'user');
 
 // Include backend configuration for IP-based paths
