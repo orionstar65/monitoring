@@ -27,9 +27,9 @@ DST varies the length of a calendar day: March 8, 2026 has 23 hours in Chicago, 
 
 ## Legacy and rollout
 
-- Offset-less timestamps from legacy v1.3/v1.5 clients have no recoverable timezone. Interpret them as UTC for compatibility going forward. Some historical rows may have been recorded as local wall time; they cannot be reliably converted without identifying the original client timezone and period.
+- Offset-less timestamps from legacy v1.3/v1.5 clients have no recoverable timezone. Accept both `YYYY-MM-DD HH:MM:SS` and Qt's `YYYY-MM-DDTHH:MM:SS` without an offset, interpreting them as UTC for compatibility. Some historical rows may have been recorded as local wall time; they cannot be reliably converted without identifying the original client timezone and period.
 - **Do not** rename existing screenshot folders, move files, or rewrite historical DATETIME rows automatically. File paths in `screenshot_metadata` are authoritative.
-- Deploy the backend and portal before updating clients. The new backend accepts both legacy `YYYY-MM-DD HH:MM:SS` and offset-aware ISO-8601 screenshot uploads. Updated clients include offsets.
+- Deploy the backend and portal before updating clients. The backend accepts legacy datetime strings with either space or `T`, plus offset-aware ISO-8601 timestamps (including fractional seconds). Updated Ubuntu clients emit UTC with `Z`; Windows/macOS include explicit offsets. If a screenshot has an invalid client timestamp, the backend stores it using the UTC server-receipt time and emits a warning rather than rejecting the image. This receipt-time fallback applies to screenshot uploads only.
 - Screenshot cleanup preview and deletion use the same viewer-local UTC interval, so an image in the next UTC date folder is not accidentally excluded or deleted in the wrong day.
 - Daily API request-log partition names use UTC dates (not the server's PHP timezone).
 - The API contract is implemented in `Backend/services/TelemetryTime.php`. To verify the edge cases, run `php Backend/tests/telemetry_timezone_contract.php` from the repository root.
