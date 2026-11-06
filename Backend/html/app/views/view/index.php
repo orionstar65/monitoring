@@ -608,6 +608,11 @@ ob_start();
 @media(max-width:600px){.dashboard-container{flex-direction:column}.sidebar-panel{width:100%;max-width:none;max-height:38vh}.history-bottom .key-ruler-selected{display:none}}
 .monitoring-filter-bar{display:flex;flex-wrap:wrap;align-items:end;gap:6px;padding:7px 10px;border-bottom:1px solid var(--bs-border-color)}
 .monitoring-filter-bar label{font-size:.7rem;min-width:125px;margin:0}.monitoring-filter-bar input{font-size:.78rem;padding:3px 5px}
+.monitoring-custom-range{display:flex;align-items:end;gap:6px;flex-wrap:wrap}
+.monitoring-custom-range[hidden]{display:none!important}
+.monitoring-custom-range label,.monitoring-preset-label{display:block}
+.monitoring-preset-label select{min-width:135px;max-width:160px}
+#unifiedDateDescription{align-self:center;font-variant-numeric:tabular-nums}
 .monitoring-statistics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;padding:6px 10px;border-bottom:1px solid var(--bs-border-color)}
 .monitoring-statistics>div{border:1px solid var(--bs-border-color);border-radius:5px;padding:4px 8px;min-width:0;display:flex;gap:7px;align-items:baseline}
 .monitoring-statistics span{font-weight:700;font-size:1.15rem;font-variant-numeric:tabular-nums}.monitoring-statistics small{font-size:.7rem;color:var(--bs-secondary-color)}
@@ -1158,10 +1163,26 @@ ob_start();
         </div>
 
         <div class="monitoring-filter-bar" id="monitoringActionBar">
-            <label>From <input type="date" id="unifiedStartDate" class="form-control form-control-sm"></label>
-            <label>To <input type="date" id="unifiedEndDate" class="form-control form-control-sm"></label>
-            <button type="button" class="btn btn-sm btn-primary" id="unifiedApplyFilters">Filter</button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="unifiedClearFilters">Clear</button>
+            <label for="unifiedDatePreset" class="monitoring-preset-label">Date range
+                <select id="unifiedDatePreset" class="form-select form-select-sm" aria-label="Log and screenshot date range">
+                    <option value="today" selected>Today</option>
+                    <option value="yesterday">Yesterday</option>
+                    <option value="this_week">This week</option>
+                    <option value="last_week">Last week</option>
+                    <option value="this_month">This month</option>
+                    <option value="last_month">Last month</option>
+                    <option value="last_7_days">Last 7 days</option>
+                    <option value="last_30_days">Last 30 days</option>
+                    <option value="custom">Custom</option>
+                </select>
+            </label>
+            <div id="unifiedCustomRange" class="monitoring-custom-range" hidden>
+                <label for="unifiedStartDate">From <input type="date" id="unifiedStartDate" class="form-control form-control-sm"></label>
+                <label for="unifiedEndDate">To <input type="date" id="unifiedEndDate" class="form-control form-control-sm"></label>
+                <button type="button" class="btn btn-sm btn-primary" id="unifiedApplyFilters">Apply</button>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="unifiedClearFilters" title="Reset date range to today">Reset</button>
+            <small class="text-muted" id="unifiedDateDescription" aria-live="polite"></small>
             <?php if(($_SESSION['role']??'')===ROLE_ADMIN): ?>
             <button type="button" class="btn btn-sm btn-outline-danger" id="unifiedRemoveScreenshots"><i class="fas fa-trash-alt me-1"></i>Remove screenshots</button>
             <?php endif; ?>
@@ -1759,7 +1780,7 @@ function loadMonitors() {
                 unifiedSyncedMonitor=selected?.id||0;
                 window.unifiedLogs.selectMonitor(unifiedSyncedMonitor);
                 if(unifiedActiveTab==='settings')unifiedLoadSettings();
-            }else window.unifiedLogs?.refreshStats();
+            }
             updateStatusStats(selectedMonitors.length?allMonitors.filter(m=>selectedMonitors.includes(m.id)):allMonitors);
             $('#lastLiveRefresh').text('Updated '+new Date().toLocaleTimeString());
         },
@@ -2346,17 +2367,56 @@ function unifiedSelectMonitor(id,persist=true){
     else if(unifiedActiveTab==='settings')unifiedLoadSettings();
     if(persist)unifiedUpdateUrl();
 }
+// Calendar-preserving ranges: local dates, Monday-start weeks, and inclusive days.
+function unifiedPresetRange(preset,now=new Date()){
+    const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    const offset=(days)=>{const d=new Date(today);d.setDate(d.getDate()+days);return d;};
+    const weekStart=new Date(today);
+    weekStart.setDate(today.getDate()-((today.getDay()+6)%7));
+    let from=new Date(today),to=new Date(today);
+    switch(preset){
+        case 'yesterday':from=to=offset(-1);break;
+        case 'this_week':from=weekStart;break;
+        case 'last_week':from=new Date(weekStart);from.setDate(from.getDate()-7);
+            to=new Date(weekStart);to.setDate(to.getDate()-1);break;
+        case 'this_month':from=new Date(today.getFullYear(),today.getMonth(),1);break;
+        case 'last_month':from=new Date(today.getFullYear(),today.getMonth()-1,1);
+            to=new Date(today.getFullYear(),today.getMonth(),0);break;
+        case 'last_7_days':from=offset(-6);break;
+        case 'last_30_days':from=offset(-29);break;
+        default:break;
+    }
+    return {start:unifiedFormatDay(from),end:unifiedFormatDay(to)};
+}
+function unifiedFormatDay(date){
+    const pad=n=>String(n).padStart(2,'0');
+    return date.getFullYear()+'-'+pad(date.getMonth()+1)+'-'+pad(date.getDate());
+}
 function unifiedApplyDates(){
     const from=$('#unifiedStartDate').val(),to=$('#unifiedEndDate').val();
-    if(from&&to&&from>to){alert('Start date must be on or before end date.');return;}
+    if(!from||!to||from>to){
+        $('#unifiedDateDescription').text('Choose a valid start and end date.');
+        return;
+    }
     window.headerStartDate=from;window.headerEndDate=to;
-    window.unifiedLogs?.setDates(from||unifiedToday(),to||unifiedToday());
+    $('#unifiedDateDescription').text(from===to?from:from+' – '+to);
+    // The embedded Log Browse API already paginates rows in MySQL.
+    window.unifiedLogs?.setDates(from,to);
     if(unifiedActiveTab==='screenshots')loadScreenshotsForSelectedMonitor(1);
 }
-function unifiedToday(){
-    const d=new Date();
-    return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
+function unifiedSelectDatePreset(preset,apply=true){
+    const custom=preset==='custom';
+    $('#unifiedCustomRange').prop('hidden',!custom);
+    if(!custom){
+        const range=unifiedPresetRange(preset);
+        $('#unifiedStartDate').val(range.start);
+        $('#unifiedEndDate').val(range.end);
+        if(apply)unifiedApplyDates();
+    }else if(apply){
+        $('#unifiedDateDescription').text('Choose dates, then Apply.');
+    }
 }
+function unifiedToday(){return unifiedFormatDay(new Date());}
 function unifiedField(label,input){
     return '<label class="form-label">'+label+'</label>'+input;
 }
@@ -2449,12 +2509,11 @@ $(document).on('keydown','[data-monitor-tab]',function(event){
     unifiedSelectTab(buttons[next].dataset.monitorTab);
     buttons[next].focus();
 });
+$(document).on('change','#unifiedDatePreset',function(){unifiedSelectDatePreset(this.value);});
 $(document).on('click','#unifiedApplyFilters',unifiedApplyDates);
 $(document).on('click','#unifiedClearFilters',function(){
-    $('#unifiedStartDate,#unifiedEndDate').val('');
-    window.headerStartDate='';window.headerEndDate='';
-    window.unifiedLogs?.setDates(unifiedToday(),unifiedToday());
-    if(unifiedActiveTab==='screenshots')loadScreenshotsForSelectedMonitor(1);
+    $('#unifiedDatePreset').val('today');
+    unifiedSelectDatePreset('today');
 });
 $(document).on('click','#unifiedRemoveScreenshots',function(){
     if(window.unifiedLogs)window.unifiedLogs.removeScreenshots();
@@ -2464,7 +2523,9 @@ window.reloadUnifiedScreenshots = ()=>loadScreenshotsForSelectedMonitor(1);
 $(document).ready(function(){
     const url=new URL(window.location.href);
     const requestedTab=url.searchParams.get('tab')||'screenshots';
-    $('#unifiedStartDate,#unifiedEndDate').val(unifiedToday());
+    unifiedSelectDatePreset('today',false);
+    window.headerStartDate=unifiedToday();window.headerEndDate=unifiedToday();
+    $('#unifiedDateDescription').text(unifiedToday());
     unifiedSelectTab(requestedTab,false);
 });
 
