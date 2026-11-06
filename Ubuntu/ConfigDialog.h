@@ -14,6 +14,7 @@
 #include <QStackedWidget>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QNetworkAccessManager>
 
 class ConfigDialog : public QDialog {
     Q_OBJECT
@@ -45,6 +46,8 @@ private slots:
     void onSignInClicked();
     void onLockSettingsClicked();
     void onEditClicked();
+    void onCheckUpdate();
+    void onInstallUpdate();
 private:
     QJsonObject authRequest(const QJsonObject &payload,bool authenticated=false);
     QString settingsPath() const;
@@ -86,5 +89,11 @@ private:
     QGroupBox *monitorGroup=nullptr;
     QPushButton *testButton=nullptr,*logoutButton=nullptr,*saveButton=nullptr,*lockSettingsButton=nullptr,*editButton=nullptr;
     QPushButton *sendAllButton=nullptr,*refreshConfigButton=nullptr;
+    QLineEdit *updateServerInput=nullptr;
+    QLabel *updateStatus=nullptr;
+    QPushButton *checkUpdateButton=nullptr,*installUpdateButton=nullptr;
+    QNetworkAccessManager *updateNetwork=nullptr;
+    QString availableUpdateVersion,availableUpdateFile,availableUpdateSha,availableUpdateUrl;
+    qint64 availableUpdateSize=0;
 };
 #endif
