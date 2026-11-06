@@ -530,33 +530,82 @@ ob_start();
 }
 
 
-/* Shared keylog ruler lives below; real-time viewer only customizes its layout. */
-.history-viewer{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,420px);grid-template-rows:minmax(0,1fr) auto;height:calc(100vh - 85px);min-height:0}
+
+/* Compact monitoring workspace and CCTV-style screenshot inspector. */
+.dashboard-container{padding:8px;gap:8px;min-height:calc(100vh - 130px)}
+.sidebar-panel{width:300px;min-width:250px;max-width:330px;border-radius:9px}
+.main-content{border-radius:9px}
+.sidebar-panel .sidebar-header{padding:10px 12px}
+.sidebar-panel .sidebar-header h6{margin-bottom:6px}
+.sidebar-panel .filter-container{margin-top:5px}
+.sidebar-panel .filter-container .form-control{padding:6px 10px;border-radius:6px}
+.sidebar-panel .monitor-item{padding:9px 12px}
+.sidebar-panel .monitor-item-header{margin-bottom:3px}
+.main-header{padding:10px 12px}
+.main-content-area{padding:10px}
+.screenshot-grid{gap:10px}
+.screenshot-card{border-radius:8px}
+.screenshot-info{padding:7px 9px}
+.screenshot-badges{gap:4px;margin-bottom:4px}
+.screenshot-badges .badge{padding:3px 6px}
+#liveSummary{padding:8px 12px!important;gap:8px!important}
+#screenshotModal .modal-content{border-radius:0}
+#screenshotModal .modal-header{padding:7px 12px;min-height:44px;border-radius:0}
+#screenshotModal .modal-title{font-size:1rem;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+#screenshotModal .modal-actions .btn{padding:4px 9px;border-radius:5px}
+.history-viewer{display:grid;grid-template-columns:minmax(0,1fr) minmax(290px,360px);grid-template-rows:minmax(0,1fr) auto;height:calc(100dvh - 45px);min-height:0}
 .history-viewer.drawer-collapsed{grid-template-columns:minmax(0,1fr)}
-.history-stage{background:#101216;display:flex;justify-content:center;align-items:center;min-width:0;min-height:0;overflow:auto;padding:12px}
+.history-stage{background:#0c0f14;display:flex;align-items:center;justify-content:center;overflow:hidden;min-width:0;min-height:0;padding:3px;position:relative}
 .history-stage img{max-width:100%;max-height:100%;object-fit:contain}
-.history-transcript{border-left:1px solid var(--bs-border-color);padding:16px;overflow:auto;min-width:0;min-height:0}
+.history-stage .history-frame-time{position:absolute;left:9px;bottom:7px;background:rgba(0,0,0,.72);border-radius:4px;padding:3px 6px;color:#fff;font-size:.7rem;font-variant-numeric:tabular-nums}
+.history-transcript{border-left:1px solid var(--bs-border-color);padding:9px 10px;overflow:auto;min-width:0;min-height:0}
 .history-transcript.is-collapsed{display:none}
-.history-transcript .key-transcript{grid-template-columns:70px minmax(75px,100px) minmax(0,1fr);gap:4px 7px}
-.history-transcript .key-transcript-time,.history-transcript .key-transcript-app{font-size:.72rem}
-.history-bottom{grid-column:1/-1;border-top:1px solid var(--bs-border-color);padding:8px 14px 12px;min-width:0;background:var(--bs-body-bg)}
+.history-transcript .key-transcript{grid-template-columns:64px 75px minmax(0,1fr);gap:3px 6px}
+.history-transcript .key-transcript-time,.history-transcript .key-transcript-app{font-size:.68rem}
+.history-transcript .key-transcript-content{font-size:.76rem}
+.history-transcript .key-transcript-nav{gap:6px;margin-bottom:7px}
+.history-transcript-info{font-size:.72rem;color:var(--bs-secondary-color);margin-bottom:5px}
+.history-bottom{grid-column:1/-1;border-top:1px solid var(--bs-border-color);padding:5px 9px 7px;min-width:0;background:var(--bs-body-bg)}
 .history-bottom .key-timeline-wrapper{padding:0}
-.history-ruler.key-cctv-ruler{height:178px}
-.history-ruler .key-cctv-selection{top:10px;bottom:10px}
-.history-timeline-image{position:absolute;top:92px;width:106px;height:75px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;border:2px solid var(--bs-border-color);border-radius:6px;background:var(--bs-body-bg);cursor:pointer;z-index:1;padding:2px;box-sizing:border-box}
-.history-timeline-image img{height:49px;width:100%;object-fit:contain;background:#101216}
-.history-timeline-image time{font-size:.65rem;white-space:nowrap;color:var(--bs-secondary-color)}
-.history-timeline-image.is-active{border-color:var(--bs-danger,#e45858)}
-.history-shot-marker{position:absolute;top:78px;width:5px;height:10px;transform:translateX(-50%);border-radius:4px;background:var(--bs-info,#2a9eca);border:0;padding:0;cursor:pointer;z-index:1}
+.history-bottom .key-timeline-heading{margin:0 0 4px;gap:6px}
+.history-bottom .key-timeline-heading small{font-size:.69rem}
+.history-bottom .key-range-inputs{margin-top:4px;gap:7px}
+.history-bottom .key-range-inputs input{padding:3px 5px}
+.history-bottom .key-range-inputs label{font-size:.7rem}
+.history-bottom .key-ruler-controls{gap:4px}
+.history-bottom .key-ruler-controls select{max-width:104px;padding:3px 20px 3px 7px}
+.history-bottom .key-ruler-selected{font-size:.68rem}
+.history-bottom .key-timeline-scroller{border-radius:6px;overscroll-behavior-inline:contain}
+.history-ruler.key-cctv-ruler{height:124px;user-select:none;-webkit-user-select:none;touch-action:none}
+.history-ruler .key-cctv-baseline{top:51px}
+.history-ruler .key-cctv-tick{top:27px;height:25px}
+.history-ruler .key-cctv-tick.major{top:22px;height:30px}
+.history-ruler .key-cctv-tick-label{top:-18px}
+.history-ruler .key-cctv-activity{top:45px!important;height:7px!important}
+.history-ruler .key-cctv-selection{top:7px;bottom:5px;pointer-events:none}
+.history-ruler .key-cctv-selection::before,.history-ruler .key-cctv-selection::after{top:0;height:27px;width:8px}
+.history-timeline-image{position:absolute;top:58px;width:97px;height:60px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;border:1px solid var(--bs-border-color);border-radius:4px;background:var(--bs-body-bg);cursor:pointer;z-index:3;padding:1px;box-sizing:border-box}
+.history-timeline-image img{height:40px;width:100%;object-fit:contain;background:#0c0f14}
+.history-timeline-image time{font-size:.62rem;white-space:nowrap;color:var(--bs-secondary-color)}
+.history-timeline-image.is-active{border:2px solid var(--bs-danger,#e45858)}
+.history-shot-marker{position:absolute;top:47px;width:5px;height:9px;transform:translateX(-50%);border-radius:4px;background:var(--bs-info,#2a9eca);border:0;padding:0;cursor:pointer;z-index:3}
 .history-shot-marker.is-active{background:var(--bs-danger,#e45858)}
-.history-ruler .key-cctv-playhead{height:160px}
+.history-ruler .key-cctv-playhead{height:116px;top:4px;z-index:6;cursor:ew-resize;pointer-events:auto;background:var(--bs-danger,#e45858);padding:0;border:0;outline-offset:3px;width:3px}
+.history-ruler .key-cctv-playhead::before{top:0;border-top-color:var(--bs-danger,#e45858);pointer-events:none}
+.history-ruler .key-cctv-playhead::after{content:"";position:absolute;inset:0 -9px;z-index:-1}
 .history-ruler.is-dragging{cursor:grabbing!important}
-.history-transcript-info{font-size:.77rem;color:var(--bs-secondary-color);margin-bottom:9px}
-@media(max-width:800px){
- .history-viewer{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(160px,1fr) minmax(110px,30vh) auto}
+.history-transport{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+.history-transport .btn{padding:2px 8px;line-height:1.45}
+.history-playhead-label{font-size:.76rem;min-width:70px;font-variant-numeric:tabular-nums;color:var(--bs-danger,#da4545)}
+.history-ruler .history-track-legend{position:absolute;top:55px;left:9px;font-size:.65rem;color:var(--bs-secondary-color);pointer-events:none}
+@media(max-width:850px){
+ .dashboard-container{padding:5px;gap:6px}
+ .sidebar-panel{width:250px;min-width:200px}
+ .history-viewer{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(160px,1fr) minmax(100px,28vh) auto}
  .history-transcript{border-left:0;border-top:1px solid var(--bs-border-color)}
  .history-viewer.drawer-collapsed{grid-template-rows:minmax(160px,1fr) auto}
 }
+@media(max-width:600px){.dashboard-container{flex-direction:column}.sidebar-panel{width:100%;max-width:none;max-height:38vh}.history-bottom .key-ruler-selected{display:none}}
 /* Log Modal Styles */
 .log-sub-modal .modal-dialog {
     max-width: 90%;
@@ -1150,7 +1199,7 @@ ob_start();
             <div class="modal-body p-0">
                 <div class="history-viewer">
                     <section class="history-stage" aria-label="Selected screenshot">
-                        <img id="modalImage" src="" alt="Selected screenshot" class="img-fluid">
+                        <img id="modalImage" src="" alt="Selected screenshot" class="img-fluid"><time id="historyFrameTime" class="history-frame-time" aria-live="off"></time>
                     </section>
 
                     <aside class="history-transcript" id="historyTranscriptPanel" aria-label="Keyboard transcript">
@@ -1168,23 +1217,26 @@ ob_start();
                     <section class="history-bottom" aria-label="Screenshot and keylog history timeline">
                         <div class="key-timeline-wrapper">
                             <div class="key-timeline-heading">
-                                <div>Screenshot and key activity history
-                                    <small id="historyTimelineStatus">Drag the highlighted range to pan; drag either border to resize it.</small>
+                                <div class="d-flex align-items-center flex-wrap gap-2">
+                                    <strong class="small">History</strong>
+                                    <span id="historyTimelineStatus" class="small text-muted" aria-live="polite">Drag red cursor to inspect screenshots.</span>
                                 </div>
-                                <div class="key-ruler-controls">
-                                    <label for="historyScale" class="text-muted">Scale</label>
+                                <div class="history-transport" role="toolbar" aria-label="History timeline controls">
+                                    <button id="historyZoomOut" type="button" class="btn btn-sm btn-outline-secondary" title="Zoom out (−)" aria-label="Zoom timeline out">−</button>
+                                    <button id="historyZoomIn" type="button" class="btn btn-sm btn-outline-secondary" title="Zoom in (+)" aria-label="Zoom timeline in">+</button>
+                                    <button id="historyFit" type="button" class="btn btn-sm btn-outline-secondary" title="Show entire day">24h</button>
+                                    <label for="historyScale" class="visually-hidden">Timeline scale</label>
                                     <select id="historyScale" class="form-select form-select-sm" aria-label="History timeline scale">
-                                        <option value="near">15 min / view</option>
-                                        <option value="medium" selected>1 hour / view</option>
-                                        <option value="wide">6 hours / view</option>
+                                        <option value="near">15 min</option><option value="medium" selected>1 hour</option>
+                                        <option value="wide">6 hours</option><option value="day">24 hours</option>
                                     </select>
-                                    <button id="historyDrawerToggle" class="btn btn-sm btn-outline-secondary" type="button" aria-controls="historyTranscriptPanel" aria-expanded="true">Hide transcript</button>
-                                    <span class="key-ruler-selected" id="historySelectedRange"></span>
+                                    <time id="historyPlayheadTime" class="history-playhead-label" aria-label="Playhead timestamp"></time>
+                                    <button id="historyDrawerToggle" class="btn btn-sm btn-outline-secondary" type="button" aria-controls="historyTranscriptPanel" aria-expanded="true">Hide keys</button>
                                 </div>
                             </div>
                             <div class="key-timeline-scroller" id="historyTimelineViewport">
                                 <div class="key-cctv-ruler history-ruler" id="historyTimelineRuler" tabindex="0" role="group"
-                                     aria-label="Drag the selected time range to pan or its edges to resize. Arrow keys pan, Shift+arrow resizes."></div>
+                                     aria-label="CCTV timeline. Drag the red playhead to scrub; drag the blue range or its borders to pan or resize. Wheel zooms, Shift-wheel pans."></div>
                             </div>
                             <div class="key-range-inputs">
                                 <label for="historyFrom">From <input id="historyFrom" class="form-control form-control-sm" type="datetime-local" step="1" aria-label="History range start"></label>
