@@ -1427,8 +1427,8 @@ function formatCellValue(log, header) {
 }
 
 function formatDate(dateString) {
-    const date = new Date(dateString);
-    return `<small class="text-muted">${date.toLocaleString()}</small>`;
+    const date = new Date(keyEventMillis(String(dateString||'')));
+    return `<small class="text-muted">${Number.isFinite(date.getTime())?date.toLocaleString():'—'}</small>`;
 }
 
 function formatDevice(log) {
