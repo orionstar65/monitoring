@@ -227,18 +227,6 @@ if exist "MonitorClient.exe" (
     echo DLL files copied.
     echo.
     
-    :: Check for settings.ini
-    if not exist "..\settings.ini" (
-        echo NOTE: settings.ini not found in parent directory.
-        echo The application will use default settings.
-        echo You can create settings.ini with:
-        echo   [Server]
-        echo   ip=192.168.1.45
-        echo   port=8924
-        echo   username=your_username
-        echo.
-    )
-    
     echo ========================================
     echo Build Summary:
     echo ========================================
@@ -249,8 +237,8 @@ if exist "MonitorClient.exe" (
     echo - Location: %CD%
     echo.
     echo To run the application:
-    echo 1. Ensure settings.ini is configured (if needed)
-    echo 2. Run: MonitorClient.exe
+    echo 1. Run: MonitorClient.exe
+    echo 2. Configure server and select your monitor in the application
     echo.
     echo The application will run in the system tray.
     echo Right-click the tray icon for options.
