@@ -194,6 +194,7 @@ std::string signedInFullName;
 bool showMonitorSettings();
 bool restoreClientSession();
 static HWND activeSettingsWindow=nullptr;
+static int settingsActiveTab=0;
 std::string getClientToken(){std::lock_guard<std::mutex> g(authMutex);return clientToken;}
 
 // Global configuration
@@ -2021,7 +2022,8 @@ enum {
     SETTINGS_UPDATE_HEADING=4240,SETTINGS_UPDATE_URL=4241,
     SETTINGS_UPDATE_CHECK=4242,SETTINGS_UPDATE_INSTALL=4243,SETTINGS_UPDATE_STATUS=4244,
     SETTINGS_INFO_NAME=4228,SETTINGS_INFO_OS=4229,
-    SETTINGS_INFO_MACHINE=4230,SETTINGS_INFO_REMARK=4231
+    SETTINGS_INFO_MACHINE=4230,SETTINGS_INFO_REMARK=4231,
+    SETTINGS_TABS=4245
 };
 static HWND addControl(HWND parent,const char* cls,const char* label,DWORD style,
                        int x,int y,int width,int height,int id) {
@@ -2226,115 +2228,110 @@ static void refreshUnifiedMonitors(HWND dlg) {
         if(m.get("id",0).asInt()==id){ip=m.get("ip_address","—").asString();break;}
     setDlgUtf8Text(dlg,SETTINGS_MONITOR_IP,ip);
 }
+// Compact, persistent tabbed settings: switching tabs never discards inputs.
 static void updateUnifiedVisibility(HWND dlg) {
     const bool enrolled=!getClientToken().empty();
     const bool pending=!settingsPendingUserNo.empty();
     const bool locked=enrolled&&(settingsAssignmentLocked||settingsMonitorLocked);
-    const int monitorControls[] = {
-        SETTINGS_MONITOR_HEADING,SETTINGS_MONITOR,
-        SETTINGS_LABEL,SETTINGS_OS,SETTINGS_MACHINE,SETTINGS_MONITOR_IP,
-        SETTINGS_REMARK,SETTINGS_OS_MAC,SETTINGS_OS_UBUNTU,
-        SETTINGS_MACHINE_DESKTOP,SETTINGS_LOCK_SETTINGS,4400,4401,4402,4403,4404,4405
-    };
-    for(int id:monitorControls)ShowWindow(GetDlgItem(dlg,id),(enrolled||pending)?SW_SHOW:SW_HIDE);
-    ShowWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),enrolled?SW_SHOW:SW_HIDE);
-    ShowWindow(GetDlgItem(dlg,SETTINGS_TEST),enrolled?SW_HIDE:SW_SHOW);
-    const int signInControls[] = {SETTINGS_SIGNIN_USER, SETTINGS_SIGNIN_PASS, 4510, 4511};
-    const std::string accountSummary="User No: "+signedInUsername+
-        "\nFull name: "+(signedInFullName.empty()?"—":signedInFullName);
-    setDlgUtf8Text(dlg,SETTINGS_ACCOUNT_INFO,enrolled?accountSummary:"");
-    ShowWindow(GetDlgItem(dlg,SETTINGS_ACCOUNT_INFO),enrolled?SW_SHOW:SW_HIDE);
-    for (int id : signInControls)
-        ShowWindow(GetDlgItem(dlg, id), enrolled ? SW_HIDE : SW_SHOW);
+    const bool account=settingsActiveTab==0,monitor=settingsActiveTab==1,
+               prefs=settingsActiveTab==2,updates=settingsActiveTab==3;
+    const int accountIds[]={4503,4504,4505,SETTINGS_IP,SETTINGS_PORT,
+        4510,4511,SETTINGS_SIGNIN_USER,SETTINGS_SIGNIN_PASS,
+        SETTINGS_ACCOUNT_INFO,SETTINGS_TEST,SETTINGS_CONNECTION,SETTINGS_LOGOUT,SETTINGS_NOTICE};
+    const int monitorIds[]={SETTINGS_MONITOR_HEADING,4400,4402,4403,4404,4405,
+        SETTINGS_MONITOR,SETTINGS_EDIT,SETTINGS_OS,SETTINGS_OS_MAC,SETTINGS_OS_UBUNTU,
+        SETTINGS_INFO_OS,SETTINGS_MACHINE,SETTINGS_MACHINE_DESKTOP,SETTINGS_INFO_MACHINE,
+        SETTINGS_MONITOR_IP,SETTINGS_REMARK,SETTINGS_INFO_REMARK,SETTINGS_LOCK_SETTINGS};
+    const int prefsIds[]={4506,4507,SETTINGS_NOTIFY,SETTINGS_SEND_ALL,SETTINGS_REFRESH_CONFIG};
+    const int updateIds[]={SETTINGS_UPDATE_HEADING,4509,SETTINGS_UPDATE_URL,
+        SETTINGS_UPDATE_CHECK,SETTINGS_UPDATE_INSTALL,SETTINGS_UPDATE_STATUS};
+    for(int id:accountIds)ShowWindow(GetDlgItem(dlg,id),account?SW_SHOW:SW_HIDE);
+    for(int id:monitorIds)ShowWindow(GetDlgItem(dlg,id),monitor&&(enrolled||pending)?SW_SHOW:SW_HIDE);
+    for(int id:prefsIds)ShowWindow(GetDlgItem(dlg,id),prefs?SW_SHOW:SW_HIDE);
+    for(int id:updateIds)ShowWindow(GetDlgItem(dlg,id),updates?SW_SHOW:SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_USER),SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_USER_NO),SW_HIDE);
-    ShowWindow(GetDlgItem(dlg,SETTINGS_SEND_ALL),enrolled?SW_SHOW:SW_HIDE);
-    ShowWindow(GetDlgItem(dlg,SETTINGS_REFRESH_CONFIG),enrolled?SW_SHOW:SW_HIDE);
-    EnableWindow(GetDlgItem(dlg,SETTINGS_SEND_ALL),enrolled&&selectedMonitorId.load()>0);
-    EnableWindow(GetDlgItem(dlg,SETTINGS_REFRESH_CONFIG),enrolled&&selectedMonitorId.load()>0);
-    EnableWindow(GetDlgItem(dlg,SETTINGS_USER_NO),!locked);
-    EnableWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),enrolled);
-    EnableWindow(GetDlgItem(dlg,SETTINGS_MONITOR),!locked);
-    EnableWindow(GetDlgItem(dlg,SETTINGS_IP),!locked);
-    EnableWindow(GetDlgItem(dlg,SETTINGS_PORT),!locked);
-    EnableWindow(GetDlgItem(dlg,SETTINGS_TEST),!locked);
+    setDlgUtf8Text(dlg,SETTINGS_ACCOUNT_INFO,enrolled?"User No: "+signedInUsername:"");
+    ShowWindow(GetDlgItem(dlg,SETTINGS_ACCOUNT_INFO),account&&enrolled?SW_SHOW:SW_HIDE);
+    for(int id:{4510,4511,SETTINGS_SIGNIN_USER,SETTINGS_SIGNIN_PASS})
+        ShowWindow(GetDlgItem(dlg,id),account&&!enrolled?SW_SHOW:SW_HIDE);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_TEST),account&&!enrolled?SW_SHOW:SW_HIDE);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),account&&enrolled?SW_SHOW:SW_HIDE);
     const bool hasNotice=(enrolled&&settingsAssignmentLocked)||!settingsDirectoryError.empty();
-    ShowWindow(GetDlgItem(dlg,SETTINGS_NOTICE),hasNotice?SW_SHOW:SW_HIDE);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_NOTICE),account&&hasNotice?SW_SHOW:SW_HIDE);
     if(enrolled&&settingsAssignmentLocked)
         setDlgUtf8Text(dlg,SETTINGS_NOTICE,"User selection is locked. Ask your administrator to edit.");
     else if(!settingsDirectoryError.empty())
         setDlgUtf8Text(dlg,SETTINGS_NOTICE,settingsDirectoryError);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_IP),!locked);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_PORT),!locked);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_TEST),!locked);
+    setDlgUtf8Text(dlg,SETTINGS_CONNECTION,
+        enrolled?(selectedMonitorId.load()>0?"Signed in · Monitor selected":"Signed in · Choose monitor")
+                :"Not signed in");
     const int index=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
     const int chosen=index<0?0:(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,index,0);
     const bool creating=(enrolled||pending)&&chosen==-1&&!locked;
     const bool existing=enrolled&&chosen>0&&!pending;
-    const bool editing=!locked&&(creating || (existing&&settingsEditing));
-    // Existing records have a real information view; inputs exist only in Edit
-    // or Add new modes. Never leave controls from the previous user visible.
-    const int editIds[]={SETTINGS_REMARK,SETTINGS_OS,
-        SETTINGS_OS_MAC,SETTINGS_OS_UBUNTU,SETTINGS_MACHINE,SETTINGS_MACHINE_DESKTOP};
-    const int infoIds[]={SETTINGS_INFO_OS,SETTINGS_INFO_MACHINE,
-        SETTINGS_INFO_REMARK};
-    for(int id:editIds)ShowWindow(GetDlgItem(dlg,id),editing?SW_SHOW:SW_HIDE);
-    for(int id:infoIds)ShowWindow(GetDlgItem(dlg,id),existing&&!editing?SW_SHOW:SW_HIDE);
-    ShowWindow(GetDlgItem(dlg,SETTINGS_EDIT),existing&&!locked?SW_SHOW:SW_HIDE);
+    const bool editing=!locked&&(creating||(existing&&settingsEditing));
+    const int editIds[]={SETTINGS_REMARK,SETTINGS_OS,SETTINGS_OS_MAC,
+        SETTINGS_OS_UBUNTU,SETTINGS_MACHINE,SETTINGS_MACHINE_DESKTOP};
+    const int infoIds[]={SETTINGS_INFO_OS,SETTINGS_INFO_MACHINE,SETTINGS_INFO_REMARK};
+    for(int id:editIds)ShowWindow(GetDlgItem(dlg,id),monitor&&editing?SW_SHOW:SW_HIDE);
+    for(int id:infoIds)ShowWindow(GetDlgItem(dlg,id),monitor&&existing&&!editing?SW_SHOW:SW_HIDE);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_EDIT),monitor&&existing&&!locked?SW_SHOW:SW_HIDE);
     setDlgUtf8Text(dlg,SETTINGS_EDIT,editing?"Cancel Edit":"Edit");
-    // Save persists server/notification options even when no monitor details are being edited.
-    ShowWindow(GetDlgItem(dlg,SETTINGS_SAVE),SW_SHOW);
-    EnableWindow(GetDlgItem(dlg,SETTINGS_SAVE),TRUE);
-    setDlgUtf8Text(dlg,SETTINGS_SAVE,creating?"Add Monitor":"Save");
+    EnableWindow(GetDlgItem(dlg,SETTINGS_MONITOR),!locked);
+    ShowWindow(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),monitor&&existing?SW_SHOW:SW_HIDE);
     EnableWindow(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),existing&&!locked);
-    ShowWindow(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),existing?SW_SHOW:SW_HIDE);
     setDlgUtf8Text(dlg,SETTINGS_LOCK_SETTINGS,locked?"Settings Locked":"Lock Settings");
-    setDlgUtf8Text(dlg,SETTINGS_CONNECTION,
-        enrolled?(selectedMonitorId.load()>0?"● Signed in · Monitor active":"● Signed in · Select monitor"):"● Not signed in");
-    ShowWindow(GetDlgItem(dlg,SETTINGS_NOTIFY),SW_SHOW);
-    // Compute each position from its original layout, not the last displayed
-    // state: opening / switching / disconnecting must never accumulate offsets.
-    const int offset=hasNotice?0:58;
-    struct Position { int id,x,y; };
-    const Position monitorLayout[]={
-        {SETTINGS_MONITOR_HEADING,13,346},
-        {4400,13,375},{SETTINGS_MONITOR,108,373},{SETTINGS_EDIT,338,373},
-        {4402,13,410},{SETTINGS_OS,108,407},{SETTINGS_OS_MAC,200,407},{SETTINGS_OS_UBUNTU,268,407},
-        {SETTINGS_INFO_OS,108,410},
-        {4403,13,443},{SETTINGS_MACHINE,108,440},{SETTINGS_MACHINE_DESKTOP,220,440},
-        {SETTINGS_INFO_MACHINE,108,443},
-        {4404,13,476},{SETTINGS_MONITOR_IP,108,476},
-        {4405,13,509},{SETTINGS_REMARK,108,506},{SETTINGS_INFO_REMARK,108,509}
+    EnableWindow(GetDlgItem(dlg,SETTINGS_SEND_ALL),enrolled&&selectedMonitorId.load()>0);
+    EnableWindow(GetDlgItem(dlg,SETTINGS_REFRESH_CONFIG),enrolled&&selectedMonitorId.load()>0);
+    const bool canSave=(account&&enrolled)||(monitor&&(enrolled||pending));
+    ShowWindow(GetDlgItem(dlg,SETTINGS_SAVE),canSave?SW_SHOW:SW_HIDE);
+    setDlgUtf8Text(dlg,SETTINGS_SAVE,creating?"Add Monitor":"Save");
+    EnableWindow(GetDlgItem(dlg,SETTINGS_SAVE),TRUE);
+    RedrawWindow(dlg,nullptr,nullptr,RDW_INVALIDATE|RDW_ALLCHILDREN);
+}
+// Apply one consistent compact grid regardless of login and monitor state.
+static void layoutSettingsTabs(HWND dlg) {
+    struct Pos{int id,x,y,w,h;};
+    const Pos fields[]={
+        {4500,24,13,36,36},{4501,69,16,260,22},{4502,69,38,130,18},
+        {SETTINGS_TABS,12,70,511,325},
+        {4503,34,120,300,22},{4504,34,156,106,20},
+        {SETTINGS_IP,151,151,335,26},{4505,34,194,106,20},
+        {SETTINGS_PORT,151,189,335,26},{SETTINGS_CONNECTION,34,228,455,26},
+        {4510,34,270,106,20},{SETTINGS_SIGNIN_USER,151,265,335,26},
+        {4511,34,308,106,20},{SETTINGS_SIGNIN_PASS,151,303,335,26},
+        {SETTINGS_ACCOUNT_INFO,151,265,335,26},
+        {SETTINGS_TEST,151,341,130,27},{SETTINGS_LOGOUT,151,304,130,27},
+        {SETTINGS_NOTICE,34,343,456,38},
+        {SETTINGS_MONITOR_HEADING,34,117,310,22},
+        {4400,34,155,106,20},{SETTINGS_MONITOR,151,150,244,250},{SETTINGS_EDIT,402,150,84,26},
+        {4402,34,194,106,20},{SETTINGS_OS,151,189,92,24},
+        {SETTINGS_OS_MAC,249,189,67,24},{SETTINGS_OS_UBUNTU,326,189,96,24},
+        {SETTINGS_INFO_OS,151,192,335,22},
+        {4403,34,235,106,20},{SETTINGS_MACHINE,151,230,106,24},
+        {SETTINGS_MACHINE_DESKTOP,263,230,118,24},
+        {SETTINGS_INFO_MACHINE,151,233,335,22},
+        {4404,34,274,106,20},{SETTINGS_MONITOR_IP,151,273,335,22},
+        {4405,34,311,106,20},{SETTINGS_REMARK,151,306,335,26},
+        {SETTINGS_INFO_REMARK,151,309,335,22},
+        {SETTINGS_LOCK_SETTINGS,333,343,153,27},
+        {4506,34,120,310,22},{SETTINGS_NOTIFY,151,157,320,25},
+        {4507,34,218,310,22},{SETTINGS_SEND_ALL,151,255,155,28},
+        {SETTINGS_REFRESH_CONFIG,313,255,173,28},
+        {SETTINGS_UPDATE_HEADING,34,120,330,22},
+        {4509,34,163,108,22},{SETTINGS_UPDATE_URL,151,157,335,26},
+        {SETTINGS_UPDATE_CHECK,151,209,167,28},
+        {SETTINGS_UPDATE_INSTALL,326,209,130,28},
+        {SETTINGS_UPDATE_STATUS,34,261,453,92},
+        {SETTINGS_SAVE,296,407,105,30},{SETTINGS_CLOSE,413,407,103,30}
     };
-    for(const auto& item:monitorLayout)
-        SetWindowPos(GetDlgItem(dlg,item.id),nullptr,item.x,item.y-offset,0,0,
-                     SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
-    const int notifyY=(enrolled||pending)?539-offset:(hasNotice?351:285);
-    const int updateY=notifyY+38;
-    const int buttonsY=updateY+134;
-    SetWindowPos(GetDlgItem(dlg,SETTINGS_NOTIFY),nullptr,108,notifyY,0,0,
-                 SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
-    const Position updateLayout[]={
-        {SETTINGS_UPDATE_HEADING,13,updateY},
-        {SETTINGS_UPDATE_URL,108,updateY+27},
-        {SETTINGS_UPDATE_CHECK,108,updateY+62},
-        {SETTINGS_UPDATE_INSTALL,277,updateY+62},
-        {SETTINGS_UPDATE_STATUS,108,updateY+94}
-    };
-    for(const auto& item:updateLayout)
-        SetWindowPos(GetDlgItem(dlg,item.id),nullptr,item.x,item.y,0,0,
-                     SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(dlg,SETTINGS_LOCK_SETTINGS),nullptr,214,buttonsY,0,0,
-                 SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(dlg,SETTINGS_SAVE),nullptr,108,buttonsY,0,0,
-                 SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(dlg,SETTINGS_CLOSE),nullptr,332,buttonsY,0,0,
-                 SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(dlg,SETTINGS_SEND_ALL),nullptr,13,buttonsY+43,0,0,
-                 SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
-    SetWindowPos(GetDlgItem(dlg,SETTINGS_REFRESH_CONFIG),nullptr,174,buttonsY+43,0,0,
-                 SWP_NOZORDER|SWP_NOSIZE|SWP_NOACTIVATE);
-    const int dialogHeight=(enrolled||pending)?buttonsY+112:buttonsY+78;
-    SetWindowPos(dlg,nullptr,0,0,465,dialogHeight,
-                 SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
-    RedrawWindow(dlg,nullptr,nullptr,RDW_INVALIDATE|RDW_ERASE|RDW_ALLCHILDREN);
+    for(const auto& p:fields)if(HWND field=GetDlgItem(dlg,p.id))
+        SetWindowPos(field,nullptr,p.x,p.y,p.w,p.h,SWP_NOZORDER|SWP_NOACTIVATE);
+    SetWindowPos(dlg,nullptr,0,0,535,455,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
 }
 // Update operations use the bundled, reviewed PowerShell helper, never scripts
 // downloaded from the update server. Check and stage execute off the UI thread.
@@ -2437,14 +2434,26 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         activeSettingsWindow=dlg;
         settingsPendingUserNo.clear();
         settingsEditing=false;
+        settingsActiveTab=0;
         setWindowUtf8Text(dlg,"MonitorClient v"+APP_VERSION+" — Settings");
+        HWND tab=addControl(dlg,"SysTabControl32","",TCS_TABS|TCS_SINGLELINE|WS_TABSTOP,
+                             12,70,511,325,SETTINGS_TABS);
+        if(tab){
+            const wchar_t* labels[]={L"Account & Server",L"Monitor",L"Preferences",L"Updates"};
+            for(int i=0;i<4;++i){
+                TCITEMW item{};
+                item.mask=TCIF_TEXT;
+                item.pszText=const_cast<wchar_t*>(labels[i]);
+                SendMessageW(tab,TCM_INSERTITEMW,i,reinterpret_cast<LPARAM>(&item));
+            }
+        }
         HWND logo=addControl(dlg,"STATIC","",SS_ICON,13,10,38,38,4500);
         SendMessageW(logo,STM_SETIMAGE,IMAGE_ICON,(LPARAM)LoadIconW(GetModuleHandleW(nullptr),MAKEINTRESOURCEW(1)));
         if(SendMessageW(logo,STM_GETIMAGE,IMAGE_ICON,0)==0)
             SendMessageW(logo,STM_SETIMAGE,IMAGE_ICON,(LPARAM)LoadIconW(nullptr,IDI_APPLICATION));
         addControl(dlg,"STATIC","MonitorClient",0,62,12,260,21,4501);
         addControl(dlg,"STATIC",("v"+APP_VERSION).c_str(),0,62,33,90,19,4502);
-        addControl(dlg,"STATIC","Server Settings",0,13,57,180,22,4503);
+        addControl(dlg,"STATIC","Server connection",0,13,57,260,22,4503);
         addControl(dlg,"STATIC","Server IP",0,13,85,91,20,4504);
         addControl(dlg,"EDIT",serverIP.c_str(),WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,82,310,25,SETTINGS_IP);
         addControl(dlg,"STATIC","Port",0,13,118,91,20,4505);
@@ -2461,7 +2470,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         SendMessageW(GetDlgItem(dlg,SETTINGS_USER_NO),CB_SETDROPPEDWIDTH,540,0);
         addControl(dlg,"BUTTON","Sign Out",WS_TABSTOP,298,215,120,27,SETTINGS_LOGOUT);
          addControl(dlg,"STATIC","",SS_LEFT,16,276,430,54,SETTINGS_NOTICE);
-         addControl(dlg,"STATIC","Monitor Settings",0,13,346,180,23,SETTINGS_MONITOR_HEADING);
+         addControl(dlg,"STATIC","Selected monitor",0,13,346,260,23,SETTINGS_MONITOR_HEADING);
         addControl(dlg,"STATIC","Monitor",0,13,375,90,21,4400);
         addControl(dlg,"COMBOBOX","",CBS_DROPDOWNLIST|WS_VSCROLL|WS_TABSTOP,108,373,222,220,SETTINGS_MONITOR);
         addControl(dlg,"BUTTON","Edit",WS_TABSTOP,338,373,80,25,SETTINGS_EDIT);
@@ -2480,7 +2489,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,539,310,25,SETTINGS_REMARK);
         addControl(dlg,"STATIC","—",0,108,542,310,21,SETTINGS_INFO_REMARK);
         addControl(dlg,"BUTTON","Show status notifications",BS_AUTOCHECKBOX|WS_TABSTOP,108,572,250,24,SETTINGS_NOTIFY);
-        addControl(dlg,"STATIC","Updates",0,13,609,180,22,SETTINGS_UPDATE_HEADING);
+        addControl(dlg,"STATIC","Client updates",0,13,609,220,22,SETTINGS_UPDATE_HEADING);
         addControl(dlg,"EDIT",readClientSetting("Update","url","").c_str(),
                    WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,636,310,25,SETTINGS_UPDATE_URL);
         addControl(dlg,"BUTTON","Check new version",WS_TABSTOP,108,671,160,27,SETTINGS_UPDATE_CHECK);
@@ -2490,15 +2499,28 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
 
         addControl(dlg,"BUTTON","Send All Logs",WS_TABSTOP,13,625,150,28,SETTINGS_SEND_ALL);
         addControl(dlg,"BUTTON","Refresh Configuration",WS_TABSTOP,174,625,210,28,SETTINGS_REFRESH_CONFIG);
+        addControl(dlg,"STATIC","Notifications",0,13,578,240,22,4506);
+        addControl(dlg,"STATIC","Maintenance",0,13,607,240,22,4507);
+        addControl(dlg,"STATIC","Update server",0,13,633,104,21,4509);
         CheckDlgButton(dlg,SETTINGS_NOTIFY,notificationsEnabled?BST_CHECKED:BST_UNCHECKED);
         addControl(dlg,"BUTTON","Lock Settings",WS_TABSTOP,214,607,112,30,SETTINGS_LOCK_SETTINGS);
         addControl(dlg,"BUTTON","Save Monitor",WS_TABSTOP|BS_DEFPUSHBUTTON,108,607,96,30,SETTINGS_SAVE);
         addControl(dlg,"BUTTON","Close",WS_TABSTOP,332,607,86,30,SETTINGS_CLOSE);
         ShowWindow(GetDlgItem(dlg,SETTINGS_USER),SW_HIDE);
         ShowWindow(GetDlgItem(dlg,SETTINGS_USER_NO),SW_HIDE);
+        layoutSettingsTabs(dlg);
         refreshUnifiedMonitors(dlg);
         updateUnifiedVisibility(dlg);
         return TRUE;
+    }
+    case WM_NOTIFY: {
+        auto *header=reinterpret_cast<NMHDR*>(lp);
+        if(header && header->idFrom==SETTINGS_TABS && header->code==TCN_SELCHANGE){
+            settingsActiveTab=(int)SendDlgItemMessageW(dlg,SETTINGS_TABS,TCM_GETCURSEL,0,0);
+            updateUnifiedVisibility(dlg);
+            return TRUE;
+        }
+        break;
     }
     case WM_DESTROY:
         if(activeSettingsWindow==dlg)activeSettingsWindow=nullptr;
@@ -3202,6 +3224,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     }
     switch (uMsg) {
         case WM_TRAYICON:
+            if (lParam == WM_LBUTTONDBLCLK) {
+                showMonitorSettings();
+                return 0;
+            }
             if (lParam == WM_RBUTTONUP) {
                 POINT pt;
                 GetCursorPos(&pt);
