@@ -816,6 +816,7 @@ function runCleanupBatches(totalToDelete) {
         showCleanupProgress(message, isError);
         loadStats();
         loadLogs();
+        if(!isError)window.reloadUnifiedScreenshots?.();
     };
 
     const runBatch = () => {
@@ -1494,6 +1495,7 @@ window.unifiedLogs = {
         updateFilters();currentPage=1;loadStats();loadLogs();
     },
     refresh(){updateFilters();loadStats();loadLogs();},
+    refreshStats(){loadStats();},
     getCurrentTab(){return currentTab;}
 };
 })();<?php endif; ?>
