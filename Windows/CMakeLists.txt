@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 project(MonitorClient VERSION 1.5)
+set(MONITORCLIENT_VERSION "1.5" CACHE STRING "MonitorClient runtime version")
 
 # Windows-specific build configuration for MinGW-w64
 
@@ -71,6 +72,7 @@ target_compile_definitions(MonitorClient PRIVATE
     _WIN32_WINNT=0x0601
     UNICODE
     _UNICODE
+    MONITORCLIENT_VERSION="${MONITORCLIENT_VERSION}"
 )
 
 # MinGW-specific compiler flags
