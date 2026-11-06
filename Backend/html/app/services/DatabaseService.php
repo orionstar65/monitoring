@@ -1190,8 +1190,8 @@ class DatabaseService {
                      SELECT ?,data_type,month_year,record_count,total_size,NOW()
                      FROM storage_statistics WHERE monitor_ip_id=?
                      ON DUPLICATE KEY UPDATE
-                      record_count=COALESCE(record_count,0)+VALUES(record_count),
-                      total_size=COALESCE(total_size,0)+VALUES(total_size),
+                      record_count=COALESCE(storage_statistics.record_count,0)+VALUES(record_count),
+                      total_size=COALESCE(storage_statistics.total_size,0)+VALUES(total_size),
                       last_updated=NOW()'
                 );
                 $st->bind_param('ii',$targetId,$sourceId);$st->execute();$st->close();
