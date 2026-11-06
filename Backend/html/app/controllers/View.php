@@ -75,7 +75,8 @@ class View extends Base {
              WHERE owner_user_id=:owner AND id<>:id ORDER BY id',
             ['owner'=>$monitor['owner_user_id'],'id'=>$id]
         ):[];
-        $this->json(['success'=>true,'monitor'=>$monitor,'users'=>$users,'merge_targets'=>$targets]);
+        $this->json(['success'=>true,'monitor'=>$monitor,'users'=>$users,'merge_targets'=>$targets,
+            'can_reassign'=>$this->isAdmin(),'can_merge'=>$this->isAdmin()]);
     }
 
     /** Bounded monitor-specific screenshot history for the interactive viewer. */
