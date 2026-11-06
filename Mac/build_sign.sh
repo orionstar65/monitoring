@@ -117,13 +117,9 @@ get_version() {
     fi
     
     # Basic validation: version should contain at least one digit
-    if ! echo "$VERSION" | grep -qE '^[0-9]+(\.[0-9]+)*$'; then
-        print_warning "Version format may be invalid. Expected format: X.Y.Z (e.g., 1.2.0)"
-        read -p "Continue anyway? (y/n): " confirm
-        if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
-            print_error "Build cancelled by user"
-            exit 1
-        fi
+    if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+        print_error "Version must use MAJOR.MINOR.PATCH format, e.g. 1.5.1"
+        exit 2
     fi
     
     print_success "Version set to: $VERSION"
@@ -156,6 +152,8 @@ build_app() {
                -scheme MonitorClient \
                -configuration Release \
                -derivedDataPath "$BUILD_DIR" \
+               MARKETING_VERSION="$VERSION" \
+               CURRENT_PROJECT_VERSION="$VERSION" \
                build
     
     if [ $? -ne 0 ]; then
@@ -518,7 +516,21 @@ main() {
     sign_distribution_package
     create_notarization_script
     cleanup
-    
+
+    # A plain python -m http.server serves this manifest and its packages.
+    # Keep the usual Installer.pkg artifact, and publish an arch-specific copy.
+    local os_arch
+    case "$(uname -m)" in
+       arm64) os_arch="macos-arm64" ;;
+       x86_64) os_arch="macos-x64" ;;
+       *) print_error "Unsupported macOS architecture"; exit 1 ;;
+    esac
+    local update_package="MonitorClient-${VERSION}-${os_arch}.pkg"
+    cp "${APP_NAME}-${VERSION}-Installer.pkg" "$update_package"
+    python3 "../scripts/publish_update.py" --platform "$os_arch" \
+       --version "$VERSION" --package "$update_package" --output "../release-updates"
+    print_success "Published: ../release-updates/$update_package"
+
     print_success "Build and sign process completed successfully!"
     print_status "Generated files:"
     echo "  - ${APP_NAME}-${VERSION}-Installer.pkg (Signed installation package)"
