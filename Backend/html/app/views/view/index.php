@@ -1236,8 +1236,9 @@ ob_start();
             </div>
         </header>
 
-        <div class="monitoring-filter-bar" id="monitoringActionBar">
-            <label for="unifiedDatePreset" class="monitoring-preset-label">Date range
+        <section class="monitoring-filter-bar" id="monitoringActionBar" aria-label="Date and monitor filters">
+            <div class="monitoring-filter-main">
+                <label class="monitoring-preset-label" for="unifiedDatePreset">Date range</label>
                 <select id="unifiedDatePreset" class="form-select form-select-sm" aria-label="Log and screenshot date range">
                     <option value="today" selected>Today</option>
                     <option value="yesterday">Yesterday</option>
@@ -1249,19 +1250,21 @@ ob_start();
                     <option value="last_30_days">Last 30 days</option>
                     <option value="custom">Custom</option>
                 </select>
-            </label>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="unifiedClearFilters" title="Reset date range to today">Reset</button>
+            </div>
             <div id="unifiedCustomRange" class="monitoring-custom-range" hidden>
                 <label for="unifiedStartDate">From <input type="date" id="unifiedStartDate" class="form-control form-control-sm"></label>
                 <label for="unifiedEndDate">To <input type="date" id="unifiedEndDate" class="form-control form-control-sm"></label>
                 <button type="button" class="btn btn-sm btn-primary" id="unifiedApplyFilters">Apply</button>
             </div>
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="unifiedClearFilters" title="Reset date range to today">Reset</button>
-            <small class="text-muted" id="unifiedDateDescription" aria-live="polite"></small>
-            <?php if(($_SESSION['role']??'')===ROLE_ADMIN): ?>
-            <button type="button" class="btn btn-sm btn-outline-danger" id="unifiedRemoveScreenshots"><i class="fas fa-trash-alt me-1"></i>Remove screenshots</button>
-            <?php endif; ?>
-            <span id="unifiedSelectionSummary" class="small text-muted ms-auto">All devices</span>
-        </div>
+            <div class="monitoring-filter-context">
+                <small id="unifiedDateDescription" aria-live="polite"></small>
+                <span class="monitoring-selection-chip" id="unifiedSelectionSummary">All devices</span>
+                <?php if(($_SESSION['role']??'')===ROLE_ADMIN): ?>
+                <button type="button" class="btn btn-sm btn-outline-danger" id="unifiedRemoveScreenshots"><i class="fas fa-trash-alt me-1"></i>Remove screenshots</button>
+                <?php endif; ?>
+            </div>
+        </section>
         <div id="unifiedCleanupProgress" class="small px-2" role="status" aria-live="polite" hidden></div>
         <div class="monitoring-statistics" aria-label="Monitoring statistics">
             <div><span id="totalLogs">0</span><small>Total logs</small></div>
