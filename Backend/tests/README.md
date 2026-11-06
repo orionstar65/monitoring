@@ -48,6 +48,7 @@ php Backend/tests/unified_monitoring_workspace_contract.php
 php Backend/tests/portal_timeline_and_account_actions_contract.php
 php Backend/tests/monitor_selector_sort_contract.php
 node Backend/tests/timeline_geometry_test.js
+node Backend/tests/monitoring_date_transcript_test.js
 ```
 
 Before production rollout, smoke-test in a browser with an admin account:
@@ -74,3 +75,26 @@ Before production rollout, smoke-test in a browser with an admin account:
 **Important:** the source contracts and geometry checks do not verify a real
 database, browser behavior, Win32/Qt/Swift compilation or an existing v1.3
 client. These still require local/manual verification. Do not trigger Actions.
+
+## Selected-monitor log browsing and date presets
+
+The unified Monitoring page defaults to **Today**. The date-range menu supports
+Today, Yesterday, This/Last Week, This/Last Month, Last 7/30 Days and Custom.
+Date ranges are inclusive, with Monday as the first day of the week; Custom
+requires both dates before Apply. Browser/Keyboard/USB log tabs require a device
+from the left panel before querying logs or aggregated log counts. When a device
+is selected, the existing APIs paginate in SQL with LIMIT/OFFSET (20 per page by
+default), not by sending the entire log stream to the browser. Activity ruler and
+transcript context endpoints remain capped; browser-side code discards stale
+requests after filters or selections change.
+
+Screenshot History now uses one compact toolbar and an initial 30-minute
+inspection range. The keyboard drawer shows actual key events for its selected
+monitor and time range, or an explicit no-activity message. A nearest-activity
+jump is available when timeline activity is known outside that range. Special
+keys are displayed only once; hover to see the source database event ID. If two
+identical keys have *different* event IDs, both records exist in the database
+and should be investigated at ingestion rather than silently removed.
+
+Smoke-test all date presets, monitor/no-monitor transitions, server-side table
+pagination, and Screenshot History transcripts using populated staging data.
