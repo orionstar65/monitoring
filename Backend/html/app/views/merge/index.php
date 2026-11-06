@@ -333,13 +333,27 @@ document.addEventListener('DOMContentLoaded', function() {
             sourceOption.textContent = formatMergeMonitorLabel(monitor);
             sourceSelect.appendChild(sourceOption);
             
-            const targetOption = document.createElement('option');
-            targetOption.value = monitor.id;
-            targetOption.textContent = formatMergeMonitorLabel(monitor);
-            targetSelect.appendChild(targetOption);
+
         });
     }
     
+    function populateTargetOptions(source) {
+        const previous=Number(targetSelect.value||0);
+        targetSelect.innerHTML = '<option value="">-- Select Target Monitor --</option>';
+        if(source && Number(source.owner_user_id)>0){
+            monitors.filter(m=>Number(m.owner_user_id)===Number(source.owner_user_id)
+                &&Number(m.id)!==Number(source.id)).forEach(m=>{
+                    const option=document.createElement('option');
+                    option.value=m.id;
+                    option.textContent=formatMergeMonitorLabel(m);
+                    targetSelect.appendChild(option);
+                });
+        }
+        if([...targetSelect.options].some(option=>Number(option.value)===previous)){
+            targetSelect.value=String(previous);
+        }else updateTargetDetails(null);
+    }
+
     function updateSourceDetails(monitor) {
         if (!monitor) {
             document.getElementById('source-details').classList.add('hidden');
@@ -399,7 +413,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function checkMergeButton() {
-        if (sourceMonitor && targetMonitor && sourceMonitor.id !== targetMonitor.id) {
+        if (sourceMonitor && targetMonitor && sourceMonitor.id !== targetMonitor.id &&
+            Number(sourceMonitor.owner_user_id)>0 &&
+            Number(sourceMonitor.owner_user_id)===Number(targetMonitor.owner_user_id)) {
             mergeBtn.disabled = false;
         } else {
             mergeBtn.disabled = true;
