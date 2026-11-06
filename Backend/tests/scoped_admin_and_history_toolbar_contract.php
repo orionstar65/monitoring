@@ -30,6 +30,22 @@ $checks=[
  'Scoped Admin users list and editing enforce assignment'=>
     str_contains($users,'a.admin_user_id=:manager_id')
     &&str_contains($users,'requireUserAccess($id)'),
+ 'Scoped Admin sees own account and assigned users once each'=>
+    str_contains($users,'WHERE u.id=:self_id OR (u.role=:target_role AND u.id IN (')
+    &&str_contains($users,"'self_id'=>(int)\$this->user['id']")
+    &&str_contains($read('Backend/html/app/views/users/index.php'),'Your account'),
+ 'Scoped Admin can view self-owned monitor even without assignment'=>
+    str_contains($base,'m.owner_user_id=:self_id OR EXISTS (')
+    &&str_contains($base,'{$alias}.owner_user_id=:scope_self_id OR')
+    &&str_contains($base,"if(\$id===(int)\$this->user['id'])return true;"),
+ 'Scoped Admin monitor owner selectors include own account'=>
+    str_contains($monitors,'WHERE u.id=:self_id OR (u.role=:role AND EXISTS (')
+    &&str_contains($view,'WHERE u.id=:self_id OR (u.role=:role AND EXISTS ('),
+ 'Scoped Admin account permissions remain limited to assigned regular users'=>
+    str_contains($base,'a.admin_user_id=:admin AND u.role=:role')
+    &&str_contains($base,'scope_user.role=:scope_role')
+    &&str_contains($users,'Role changes require Super Admin')
+    &&str_contains($users,'Password changes require Super Admin'),
  'User assignment only allowed for Super Admin'=>
     str_contains($users,'function assign_users(')
     &&str_contains($users,'$this->requireSuperAdmin()')
