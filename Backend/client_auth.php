@@ -38,6 +38,23 @@ header('Cache-Control: no-store');
 if(($_SERVER['REQUEST_METHOD']??'')!=='POST'){http_response_code(405);echo json_encode(['error'=>'POST required']);exit;}
 try {
     $db=clientIdentityDatabase();
+    require_once __DIR__.'/html/app/services/DatabaseService.php';
+    $apiStart=microtime(true);
+    $apiAction='unknown';
+    $apiLogger=new DatabaseService($db);
+    // Includes rejected login/enrollment requests without recording passwords,
+    // user numbers, tokens or request bodies.
+    register_shutdown_function(static function() use($apiLogger,$apiStart,&$apiAction):void {
+        try{
+            $status=http_response_code();
+            $apiLogger->logApiRequest('/client_auth.php',
+                (string)($_SERVER['REQUEST_METHOD']??'POST'),
+                (string)($_SERVER['REMOTE_ADDR']??''),
+                is_int($status)&&$status>=100?$status:200,
+                (microtime(true)-$apiStart)*1000,
+                $apiAction);
+        }catch(Throwable $error){error_log('Auth API logging failed: '.$error->getMessage());}
+    });
     if((int)($_SERVER['CONTENT_LENGTH']??0)>128*1024){
         http_response_code(413);echo json_encode(['error'=>'Request too large']);exit;
     }
@@ -50,6 +67,7 @@ try {
         http_response_code(400);echo json_encode(['error'=>'Invalid JSON request']);exit;
     }
     $action=$data['action'];
+    $apiAction=$action;
     // Direct private-LAN clients may list/enroll without pairing codes.
     // Public clients and untrusted proxy traffic remain denied unless an
     // administrator explicitly permits remote/VPN use via the environment.
