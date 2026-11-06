@@ -2253,7 +2253,8 @@ static void updateUnifiedVisibility(HWND dlg) {
     ShowWindow(GetDlgItem(dlg,SETTINGS_USER_NO),SW_HIDE);
     setDlgUtf8Text(dlg,SETTINGS_ACCOUNT_INFO,enrolled?"User No: "+signedInUsername:"");
     ShowWindow(GetDlgItem(dlg,SETTINGS_ACCOUNT_INFO),account&&enrolled?SW_SHOW:SW_HIDE);
-    for(int id:{4510,4511,SETTINGS_SIGNIN_USER,SETTINGS_SIGNIN_PASS})
+    const int signInIds[]={4510,4511,SETTINGS_SIGNIN_USER,SETTINGS_SIGNIN_PASS};
+    for(int id:signInIds)
         ShowWindow(GetDlgItem(dlg,id),account&&!enrolled?SW_SHOW:SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_TEST),account&&!enrolled?SW_SHOW:SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),account&&enrolled?SW_SHOW:SW_HIDE);
