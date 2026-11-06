@@ -789,7 +789,7 @@ std::string takeScreenshot() {
     HBITMAP hbmOld = (HBITMAP)SelectObject(hdcMemory, hbmScreen);
     
     // Capture the entire desktop
-    BitBlt(hdcMemory, 0, 0, captureWidth, captureHeight, hdcScreen, 0, 0, SRCCOPY);
+    const BOOL captureOk=BitBlt(hdcMemory, 0, 0, captureWidth, captureHeight, hdcScreen, 0, 0, SRCCOPY);
     
     // Save to temporary file using GDI+ with optimized compression
     Gdiplus::GdiplusStartupInput gdiplusStartupInput;
@@ -799,8 +799,8 @@ std::string takeScreenshot() {
     Gdiplus::Bitmap* bmp = Gdiplus::Bitmap::FromHBITMAP(hbmScreen, NULL);
     
     // Use JPEG encoder for better compression instead of PNG
-    CLSID jpegClsid;
-    GetEncoderClsid(L"image/jpeg", &jpegClsid);
+    CLSID jpegClsid{};
+    const int encoderIndex=GetEncoderClsid(L"image/jpeg", &jpegClsid);
     
     // Set JPEG quality parameters for smaller file size
     Gdiplus::EncoderParameters encoderParams;
@@ -816,11 +816,17 @@ std::string takeScreenshot() {
     // Create temporary file path
     char tempPath[MAX_PATH];
     GetTempPathA(MAX_PATH, tempPath);
-    std::string tempFileName = std::string(tempPath) + "screenshot_" + std::to_string(GetTickCount()) + ".jpg";
+    static std::atomic<unsigned long> nextCapture{0};
+    const std::string tempFileName = std::string(tempPath) + "screenshot_" +
+        std::to_string(GetCurrentProcessId()) + "_" +
+        std::to_string(GetTickCount64()) + "_" +
+        std::to_string(++nextCapture) + ".jpg";
     
     std::wstring wTempFileName(tempFileName.begin(), tempFileName.end());
     
-    bmp->Save(wTempFileName.c_str(), &jpegClsid, &encoderParams);
+    const Gdiplus::Status saved=(captureOk && encoderIndex>=0 && bmp)
+        ? bmp->Save(wTempFileName.c_str(), &jpegClsid, &encoderParams)
+        : Gdiplus::GenericError;
     
     delete bmp;
     Gdiplus::GdiplusShutdown(gdiplusToken);
@@ -828,8 +834,12 @@ std::string takeScreenshot() {
     SelectObject(hdcMemory, hbmOld);
     DeleteObject(hbmScreen);
     DeleteDC(hdcMemory);
-    ReleaseDC(NULL, hdcScreen);
-    
+    ReleaseDC(hDesktop, hdcScreen);
+    if(saved!=Gdiplus::Ok){
+        writeDebugLog("Screenshot capture/JPEG save failed (GDI+ status "+
+                      std::to_string(static_cast<int>(saved))+")");
+        return "";
+    }
     return tempFileName;
 }
 
@@ -856,7 +866,7 @@ int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
 // Send screenshot to server
 bool sendScreenshot(const std::string& filePath) {
     std::string url = API_BASE_URL + API_ROUTE + "?type=upload";
-    if(selectedMonitorId.load()<1)return false;
+    if(selectedMonitorId.load()<1 || getClientToken().empty() || filePath.empty())return false;
     std::string response = httpPostFile(url, filePath);
     
     // Keep failed captures available for investigation/retry; remove after
@@ -866,7 +876,9 @@ bool sendScreenshot(const std::string& filePath) {
     Json::Value root;
     Json::Reader reader;
     if (reader.parse(response, root)) {
-        if (root.isMember("status") && root["status"].asString() == "success") {
+        if (root.isMember("status") && root["status"].asString() == "success" &&
+            root["data"].get("filename","").isString() &&
+            !root["data"].get("filename","").asString().empty()) {
             // Update connection status
             {
                 std::lock_guard<std::mutex> lock(statusMutex);
