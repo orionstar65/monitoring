@@ -741,6 +741,8 @@ function buildCleanupBody(extra) {
         start_date: currentFilters.start_date,
         end_date: currentFilters.end_date
     });
+    // Preview and deletion must refer to the identical viewer-local days.
+    appendBrowseUtcBounds(body);
 
     Object.keys(extra || {}).forEach(key => body.append(key, extra[key]));
     return body;
