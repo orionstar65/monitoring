@@ -49,6 +49,7 @@ php Backend/tests/scoped_admin_and_history_toolbar_contract.php
 php Backend/tests/unified_monitoring_workspace_contract.php
 node Backend/tests/timeline_geometry_test.js
 node Backend/tests/monitoring_date_transcript_test.js
+node Backend/tests/keyboard_history_toolbar_test.js
 ```
 
 **Live negative tests are mandatory before production use.** Create two regular users, each with a monitor and keyboard/browser records. Assign only one user to an Admin. Verify that the Admin:
