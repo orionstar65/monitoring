@@ -416,6 +416,16 @@ class View extends Base {
             [$scope,$params]=$this->monitorScope('m');
             $variants=[$path,'./'.$path,'html/'.$path,'./html/'.$path];
             $columns=[];
+            // Legacy media metadata may use absolute paths such as
+            // /var/monitor/Backend/html/data/screens/... instead of data/screens/...
+            // Compare the exact trailing canonical path; do not use wildcard LIKE.
+            $params['canonical_suffix']=$path;
+            $params['canonical_suffix_length']=strlen($path);
+            $columns[]='RIGHT(s.file_path,:canonical_suffix_length)=:canonical_suffix';
+            // PDO native prepares may disallow reusing a named parameter.
+            $params['thumbnail_suffix']=$path;
+            $params['thumbnail_suffix_length']=strlen($path);
+            $columns[]='RIGHT(s.thumbnail_path,:thumbnail_suffix_length)=:thumbnail_suffix';
             foreach($variants as $idx=>$variant){
                 $params['source_path_'.$idx]=$variant;
                 $params['thumb_path_'.$idx]=$variant;
