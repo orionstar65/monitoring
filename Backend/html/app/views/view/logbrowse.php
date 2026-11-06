@@ -892,6 +892,26 @@ function showSelectMonitorNotice(){
     const pagination=document.getElementById('paginationPanel');
     if(pagination)pagination.style.display='none';
 }
+// Interpret date inputs as local calendar days; send UTC instants for
+// database filtering. Each midnight is calculated separately for DST.
+function browseLocalMidnightUtc(day,next=false){
+    const match=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day||''));
+    if(!match)return null;
+    const y=Number(match[1]),m=Number(match[2]),d=Number(match[3]);
+    const check=new Date(y,m-1,d);
+    if(check.getFullYear()!==y||check.getMonth()!==m-1||check.getDate()!==d)return null;
+    return new Date(y,m-1,d+(next?1:0)).toISOString();
+}
+function appendBrowseUtcBounds(params,start=currentFilters.start_date,end=currentFilters.end_date){
+    const from=start?browseLocalMidnightUtc(start):null;
+    const to=end?browseLocalMidnightUtc(end,true):null;
+    if(from)params.set('start_utc',from);
+    if(to)params.set('end_utc',to);
+}
+function keyUtcClock(ms){
+    return new Date(ms).toISOString().slice(0,19).replace('T',' ');
+}
+
 function loadStats() {
     const seq=++browseStatsRequest;
     if(isEmbeddedMonitoring&&!currentFilters.device_id){
@@ -901,7 +921,8 @@ function loadStats() {
         return;
     }
     const params = new URLSearchParams(currentFilters);
-    
+    appendBrowseUtcBounds(params);
+
     fetch(`<?php echo BASE_URL; ?>logbrowse/api_stats?${params}`)
         .then(response => response.json())
         .then(data => {
@@ -933,6 +954,7 @@ function loadLogs() {
         page: currentPage,
         per_page: currentPerPage
     });
+    appendBrowseUtcBounds(params);
     
     const apiEndpoint = getApiEndpoint();
     
@@ -993,11 +1015,11 @@ let keyRulerState = null;
 let keyContextRequestId = 0;
 
 function keyEventMillis(stamp) {
-    // MySQL timestamps have no offset; interpret all values consistently
-    // within the ruler rather than mixing browser UTC parsing conventions.
+    // Stored MySQL DATETIME is UTC. Convert once to an absolute instant.
     if (typeof stamp !== 'string') return NaN;
-    const m = stamp.match(/^(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d):(\d\d)/);
-    return m ? new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]).getTime() : NaN;
+    const m = stamp.match(/^(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d):(\d\d)$/);
+    return m ? Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6])
+             : Date.parse(stamp);
 }
 function keyClock(ms, fullDate = false) {
     const d = new Date(ms);
@@ -1065,11 +1087,14 @@ function createKeyTimeline(logs) {
 async function loadFullKeyTimeline(state) {
     if(isEmbeddedMonitoring&&!currentFilters.device_id)return;
     const info=document.getElementById('keyTimelineInfo');
+    const fromDay=currentFilters.start_date||localDateString();
+    const toDay=currentFilters.end_date||localDateString();
     const params=new URLSearchParams({
-        start_date:currentFilters.start_date||localDateString(),
-        end_date:currentFilters.end_date||localDateString(),
+        start_date:fromDay,
+        end_date:toDay,
         device_id:currentFilters.device_id||''
     });
+    appendBrowseUtcBounds(params,fromDay,toDay);
     try{
         const response=await fetch(`<?php echo BASE_URL; ?>logbrowse/api_key_timeline?${params}`,{credentials:'same-origin'});
         if(!response.ok)throw new Error('HTTP '+response.status);
@@ -1080,8 +1105,8 @@ async function loadFullKeyTimeline(state) {
             .filter(event=>Number.isFinite(event.ms)&&Number(event.monitor_ip_id)>0);
         if(points.length){
             state.events=points.sort((a,b)=>a.ms-b.ms);
-            const start=keyEventMillis(data.start_date+' 00:00:00');
-            const end=keyEventMillis(data.end_date+' 23:59:59');
+            const start=Date.parse(browseLocalMidnightUtc(data.start_date));
+            const end=Date.parse(browseLocalMidnightUtc(data.end_date,true))-1;
             if(Number.isFinite(start)&&Number.isFinite(end)&&end>start){
                 state.start=start;
                 state.end=end;
@@ -1194,8 +1219,8 @@ async function inspectKeyContextRange() {
     // takes priority. Otherwise choose the device nearest this range.
     const nearest=state.events.reduce((best,event)=>Math.abs(event.ms-midpoint)<Math.abs(best.ms-midpoint)?event:best,state.events[0]);
     const seq=++keyContextRequestId;
-    const from=keyClock(state.rangeStart,true);
-    const to=keyClock(state.rangeEnd,true);
+    const from=keyUtcClock(state.rangeStart);
+    const to=keyUtcClock(state.rangeEnd);
     panel.textContent='Loading keyboard events for selected range…';
     const params=new URLSearchParams({device_id:String(currentFilters.device_id||nearest.monitor_ip_id),from,to});
     try{
@@ -1282,7 +1307,7 @@ document.addEventListener('change',event=>{
         state.pxPerMinute=KEY_RULER_SCALES[state.scale];
         renderKeyRuler(true);
     }else if(event.target?.id==='keyRangeStart'||event.target?.id==='keyRangeEnd'){
-        const parsed=keyEventMillis(event.target.value.replace('T',' '));
+        const parsed=new Date(event.target.value).getTime();
         if(!Number.isFinite(parsed)){updateKeyRangeVisual();return;}
         if(event.target.id==='keyRangeStart')updateKeyTimeRange(parsed,state.rangeEnd);
         else updateKeyTimeRange(state.rangeStart,parsed);
