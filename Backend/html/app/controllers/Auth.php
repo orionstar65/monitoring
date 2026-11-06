@@ -27,7 +27,7 @@ class Auth extends Base {
                     
                     $this->redirect(!empty($user['must_change_password'])
                         ? 'auth/change_password'
-                        : ($user['role']==='admin' ? 'dashboard' : 'monitors'));
+                        : ($user['role']===ROLE_SUPER_ADMIN ? 'dashboard' : ($user['role']===ROLE_SCOPED_ADMIN ? 'view' : 'monitors')));
                 } else {
                     $this->db->insert('login_attempts',['attempt_key'=>$attemptKey]);
                     $error = 'Invalid User No or password.';
@@ -65,7 +65,7 @@ class Auth extends Base {
                     ['id'=>$_SESSION['user_id']]);
                 session_regenerate_id(true);
                 $_SESSION['success_message']='Password updated successfully.';
-                $this->redirect(($_SESSION['role']??'')==='admin'?'dashboard':'monitors');
+                $this->redirect(($_SESSION['role']??'')===ROLE_SUPER_ADMIN?'dashboard':(($_SESSION['role']??'')===ROLE_SCOPED_ADMIN?'view':'monitors'));
             }
         }
         $this->view('auth/change_password',[
