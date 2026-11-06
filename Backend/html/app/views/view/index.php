@@ -1269,7 +1269,9 @@ ob_start();
             <button class="monitoring-tab" role="tab" aria-selected="false" data-monitor-tab="key">Keyboard</button>
             <button class="monitoring-tab" role="tab" aria-selected="false" data-monitor-tab="browser">Browser</button>
             <button class="monitoring-tab" role="tab" aria-selected="false" data-monitor-tab="usb">USB</button>
+            <?php if(in_array(($_SESSION['role']??''),[ROLE_SUPER_ADMIN,ROLE_SCOPED_ADMIN],true)): ?>
             <button class="monitoring-tab" role="tab" aria-selected="false" data-monitor-tab="settings">Settings</button>
+            <?php endif; ?>
         </nav>
         <section id="unifiedScreenshotPanel" role="tabpanel">
             <div class="main-header">
@@ -2214,9 +2216,12 @@ function navigateScreenshot(direction) {
 
 /* Unified workspace: one monitor selection, one filter/action bar, all log tabs. */
 let unifiedActiveTab='screenshots',unifiedSettingsRequest=0,unifiedInitialSelectionDone=false,unifiedSyncedMonitor=null;
+const unifiedSuperAdmin = <?php echo json_encode(($_SESSION['role']??'')===ROLE_SUPER_ADMIN); ?>;
+const unifiedManager = <?php echo json_encode(in_array(($_SESSION['role']??''),[ROLE_SUPER_ADMIN,ROLE_SCOPED_ADMIN],true)); ?>;
 const unifiedBase = <?php echo json_encode(BASE_URL); ?>;
 function unifiedSelectTab(tab,persist=true){
     if(!['screenshots','key','browser','usb','settings'].includes(tab))tab='screenshots';
+    if(tab==='settings'&&!unifiedManager)tab='screenshots';
     unifiedActiveTab=tab;
     document.querySelectorAll('[data-monitor-tab]').forEach(button=>{
         const selected=button.dataset.monitorTab===tab;
@@ -2349,7 +2354,7 @@ function unifiedLoadSettings(){
             +'<div class="col-12"><label><input type="checkbox" name="settings_locked" value="1"'+(locked?' checked':'')+'> Lock monitor settings and assignment</label></div>'
             +'<div class="col-12 text-end"><button type="submit" class="btn btn-sm btn-primary">Save changes</button></div>'
             +'</div></form></div></div>'
-            +(data.can_merge?'<div class="card mt-2"><div class="card-body p-2"><strong>Merge this monitor into another</strong>'
+            +(data.can_merge&&unifiedSuperAdmin?'<div class="card mt-2"><div class="card-body p-2"><strong>Merge this monitor into another</strong>'
             +'<p class="small text-muted mb-2">Only monitors assigned to the same user are eligible. The source is deleted only when every log and statistics record has been transferred.</p>'
             +'<div class="d-flex flex-wrap gap-2"><select id="unifiedMergeTarget" class="form-select form-select-sm flex-fill"><option value="">Select target monitor</option>'+targets+'</select>'
             +'<button id="unifiedMergeButton" class="btn btn-sm btn-outline-danger" type="button"'+(targets?'':' disabled')+'>Merge into target</button></div>'
@@ -2369,6 +2374,7 @@ function unifiedLoadSettings(){
     }).catch(error=>{if(request===unifiedSettingsRequest)panel.text('Cannot load monitor settings: '+error.message);});
 }
 $(document).on('click','#unifiedMergeButton',async function(){
+    if(!unifiedSuperAdmin)return;
     const source=selectedMonitors.length===1?selectedMonitors[0]:0;
     const target=Number($('#unifiedMergeTarget').val());
     if(!source||!target||source===target)return;
