@@ -3,6 +3,7 @@ require_once BASEPATH . 'app/controllers/Base.php';
 require_once BASEPATH . 'app/services/LogParserService.php';
 require_once BASEPATH . 'app/services/StatusService.php';
 require_once BASEPATH . 'app/services/MonitorMediaPaths.php';
+require_once dirname(BASEPATH).'/services/TelemetryTime.php';
 
 class View extends Base {
     private $logParser;
@@ -103,8 +104,8 @@ class View extends Base {
         $rows=$this->db->fetchAll(
             "SELECT s.* FROM screenshot_metadata s
              INNER JOIN (SELECT MIN(id) AS chosen FROM screenshot_metadata
-               WHERE monitor_ip_id=:id AND capture_datetime>=:from AND capture_datetime<=:to
-               GROUP BY FLOOR(UNIX_TIMESTAMP(capture_datetime)/{$seconds})
+               WHERE monitor_ip_id=:id AND capture_datetime>=:from AND capture_datetime<:to
+               GROUP BY FLOOR(TIMESTAMPDIFF(SECOND,'1970-01-01 00:00:00',capture_datetime)/{$seconds})
                ORDER BY chosen LIMIT 121) samples ON samples.chosen=s.id
              ORDER BY s.capture_datetime ASC,s.id ASC",
             ['id'=>$id,'from'=>$from,'to'=>$to]
@@ -126,6 +127,13 @@ class View extends Base {
         $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
         $per_page = isset($_GET['per_page']) ? min(50, max(1, intval($_GET['per_page']))) : 50;
         $offset = ($page - 1) * $per_page;
+        try {
+            [$utcStart,$utcEnd]=monitorUtcBounds($_GET);
+        } catch (InvalidArgumentException $error) {
+            http_response_code(400);
+            $this->json(['error'=>$error->getMessage()]);
+            return;
+        }
         
         // Get monitor filter
         $selected_monitors = [];
@@ -170,22 +178,18 @@ class View extends Base {
                 return;
             }
                 
-                // Get date filter parameters
-                $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : null;
-                $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : null;
-                
-            // Build WHERE clause for date filtering
+            // Dates sent from a browser are already UTC instants covering
+            // the selected local calendar days, including DST transitions.
+            // Use an exclusive end; do not infer the server's timezone.
             $where_conditions = ["monitor_ip_id = :monitor_id"];
             $params = ['monitor_id' => $monitor['id']];
-            
-            if ($start_date) {
+            if ($utcStart !== null) {
                 $where_conditions[] = "capture_datetime >= :start_date";
-                $params['start_date'] = $start_date . ' 00:00:00';
+                $params['start_date'] = $utcStart;
             }
-            
-            if ($end_date) {
-                $where_conditions[] = "capture_datetime <= :end_date";
-                $params['end_date'] = $end_date . ' 23:59:59';
+            if ($utcEnd !== null) {
+                $where_conditions[] = "capture_datetime < :end_date";
+                $params['end_date'] = $utcEnd;
             }
             
             $where_clause = implode(' AND ', $where_conditions);
@@ -246,7 +250,21 @@ class View extends Base {
             }
             
             $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
-            
+            // Filter inside the derived table, otherwise MAX(id) chooses a
+            // screenshot outside the selected local-day range.
+            $timeConditions=[];
+            $timeParams=[];
+            if ($utcStart !== null) {
+                $timeConditions[]='capture_datetime >= ?';
+                $timeParams[]=$utcStart;
+            }
+            if ($utcEnd !== null) {
+                $timeConditions[]='capture_datetime < ?';
+                $timeParams[]=$utcEnd;
+            }
+            $timeWhere=$timeConditions?'WHERE '.implode(' AND ',$timeConditions):'';
+            $params=array_merge($timeParams,$params);
+
             // Optimized query: Use derived table to get latest screenshot per monitor, then JOIN once
             // This is MUCH faster than the correlated subquery approach
             // Include MAC address in JOIN for path resolution
@@ -255,6 +273,7 @@ class View extends Base {
                  FROM (
                      SELECT monitor_ip_id, MAX(id) as max_id
                      FROM screenshot_metadata
+                     {$timeWhere}
                      GROUP BY monitor_ip_id
                  ) latest
                  INNER JOIN screenshot_metadata s ON s.id = latest.max_id
