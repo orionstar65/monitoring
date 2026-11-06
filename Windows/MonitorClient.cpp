@@ -246,7 +246,10 @@ std::ofstream debugLogFile;
 std::string API_BASE_URL;
 std::string API_ROUTE = "/webapi.php";
 std::string TIC_ROUTE = "/eventhandler.php";
-std::string APP_VERSION = "1.5";
+#ifndef MONITORCLIENT_VERSION
+#define MONITORCLIENT_VERSION "1.5"
+#endif
+std::string APP_VERSION = MONITORCLIENT_VERSION;
 
 // USB monitoring using WMI
 std::thread usbMonitoringThread;
