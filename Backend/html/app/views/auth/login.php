@@ -14,6 +14,7 @@ ob_start();
                     <?php if(!empty($error)): ?><div class="alert alert-danger"><?= htmlspecialchars($error,ENT_QUOTES,'UTF-8') ?></div><?php endif; ?>
                     <?php if(!empty($_SESSION['success_message'])): ?><div class="alert alert-success"><?= htmlspecialchars($_SESSION['success_message'],ENT_QUOTES,'UTF-8') ?></div><?php unset($_SESSION['success_message']); endif; ?>
                     <form method="POST" action="<?php echo BASE_URL; ?>auth/login">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']??'',ENT_QUOTES,'UTF-8') ?>">
                         <div class="mb-3">
                             <label for="identifier" class="form-label">User No</label>
                             <input type="text" class="form-control" id="identifier" name="identifier" autocomplete="username"
