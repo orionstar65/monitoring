@@ -187,8 +187,9 @@ std::string username;
 std::mutex authMutex;
 std::string clientToken;
 std::atomic<int> selectedMonitorId{0};
-bool notificationsEnabled = true;
+std::atomic<bool> notificationsEnabled{true};
 std::string signedInUsername;
+std::string signedInFullName;
 bool showMonitorSettings();
 bool restoreClientSession();
 static HWND activeSettingsWindow=nullptr;
@@ -321,22 +322,30 @@ bool showClientLogin();
 
 // Show Windows notification
 void showToastNotification(const std::string& title, const std::string& message, const std::string& type) {
-    if (!notificationsEnabled) return;
-    // Use Windows Shell notification (balloon tip)
-    if (nid.hWnd != NULL) {
-        nid.uFlags = NIF_INFO;
-        nid.dwInfoFlags = (type == "error") ? NIIF_ERROR : NIIF_INFO;
-        strcpy_s(nid.szInfo, message.c_str());
-        strcpy_s(nid.szInfoTitle, title.c_str());
-        
-        if (Shell_NotifyIconA(NIM_MODIFY, &nid)) {
-            // Notification shown successfully
-        } else {
-            // Failed to show notification
-        }
-    } else {
-        // System tray not available
-    }
+    if (!notificationsEnabled.load()) return;
+    if (nid.hWnd == NULL) return;
+    // Never put NIF_INFO into the persistent tray icon flags: later icon
+    // updates can otherwise replay an old balloon even after disabling them.
+    NOTIFYICONDATAA alert=nid;
+    alert.uFlags=NIF_INFO;
+    alert.dwInfoFlags=(type=="error")?NIIF_ERROR:NIIF_INFO;
+    const size_t msgLength=message.copy(alert.szInfo,sizeof(alert.szInfo)-1);
+    alert.szInfo[msgLength]='\0';
+    const size_t titleLength=title.copy(alert.szInfoTitle,sizeof(alert.szInfoTitle)-1);
+    alert.szInfoTitle[titleLength]='\0';
+    Shell_NotifyIconA(NIM_MODIFY,&alert);
+}
+
+static void clearPendingTrayNotification(){
+    if(nid.hWnd==NULL)return;
+    NOTIFYICONDATAA empty=nid;
+    empty.uFlags=NIF_INFO;
+    empty.szInfo[0]='\0';
+    empty.szInfoTitle[0]='\0';
+    Shell_NotifyIconA(NIM_MODIFY,&empty);
+    nid.uFlags&=~NIF_INFO;
+    nid.szInfo[0]='\0';
+    nid.szInfoTitle[0]='\0';
 }
 
 // Check for connection status changes and show notifications
@@ -1936,6 +1945,7 @@ bool restoreClientSession() {
         return false;
     }
     signedInUsername=answer["user"].get("user_no","").asString();
+    signedInFullName=answer["user"].get("name","").asString();
     selectedMonitorId.store(answer.get("monitor_id",0).asInt());
     if(selectedMonitorId.load()>0){
         if(!keyboardHook) setupKeyboardHook();
@@ -2003,7 +2013,7 @@ enum {
     SETTINGS_OS_MAC=4223, SETTINGS_OS_UBUNTU=4224,
     SETTINGS_MACHINE_DESKTOP=4225, SETTINGS_LOCK_SETTINGS=4226,
     SETTINGS_EDIT=4227,SETTINGS_SIGNIN_USER=4232,SETTINGS_SIGNIN_PASS=4233,
-    SETTINGS_SEND_ALL=4234,SETTINGS_REFRESH_CONFIG=4235,
+    SETTINGS_SEND_ALL=4234,SETTINGS_REFRESH_CONFIG=4235,SETTINGS_ACCOUNT_INFO=4236,
     SETTINGS_INFO_NAME=4228,SETTINGS_INFO_OS=4229,
     SETTINGS_INFO_MACHINE=4230,SETTINGS_INFO_REMARK=4231
 };
@@ -2236,6 +2246,7 @@ static void refreshUnifiedMonitors(HWND dlg) {
             sortMonitorOptions(settingsMonitors);
             settingsAssignmentLocked=answer.get("assignment_locked",false).asBool();
             signedInUsername=answer["user"].get("user_no","").asString();
+            signedInFullName=answer["user"].get("name","").asString();
             selectedMonitorId.store(answer.get("monitor_id",0).asInt());
             selectDirectoryUser(dlg,signedInUsername);
         }else{
@@ -2246,6 +2257,8 @@ static void refreshUnifiedMonitors(HWND dlg) {
             selectedMonitorId.store(0);
             settingsAssignmentLocked=false;
             settingsPendingUserNo.clear();
+            signedInUsername.clear();
+            signedInFullName.clear();
             if(keyboardHook)removeKeyboardHook();
         }
     }
@@ -2285,6 +2298,10 @@ static void updateUnifiedVisibility(HWND dlg) {
     ShowWindow(GetDlgItem(dlg,SETTINGS_LOGOUT),enrolled?SW_SHOW:SW_HIDE);
     ShowWindow(GetDlgItem(dlg,SETTINGS_TEST),enrolled?SW_HIDE:SW_SHOW);
     const int signInControls[] = {SETTINGS_SIGNIN_USER, SETTINGS_SIGNIN_PASS, 4510, 4511};
+    const std::string accountSummary="User No: "+signedInUsername+
+        "\nFull name: "+(signedInFullName.empty()?"—":signedInFullName);
+    setDlgUtf8Text(dlg,SETTINGS_ACCOUNT_INFO,enrolled?accountSummary:"");
+    ShowWindow(GetDlgItem(dlg,SETTINGS_ACCOUNT_INFO),enrolled?SW_SHOW:SW_HIDE);
     for (int id : signInControls)
         ShowWindow(GetDlgItem(dlg, id), enrolled ? SW_HIDE : SW_SHOW);
     ShowWindow(GetDlgItem(dlg,SETTINGS_USER),SW_HIDE);
@@ -2388,6 +2405,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,146,310,25,SETTINGS_SIGNIN_USER);
         addControl(dlg,"STATIC","Password",0,13,185,90,20,4511);
         addControl(dlg,"EDIT","",WS_BORDER|WS_TABSTOP|ES_PASSWORD|ES_AUTOHSCROLL,108,181,310,25,SETTINGS_SIGNIN_PASS);
+        addControl(dlg,"STATIC","",SS_LEFT,108,146,310,53,SETTINGS_ACCOUNT_INFO);
         addControl(dlg,"BUTTON","Sign In",WS_TABSTOP,108,215,132,27,SETTINGS_TEST);
         addControl(dlg,"STATIC","● Not signed in",0,13,252,405,21,SETTINGS_CONNECTION);
         addControl(dlg,"STATIC","",SS_ETCHEDHORZ,13,277,405,2,4506);
@@ -2467,7 +2485,8 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             }
             {std::lock_guard<std::mutex> guard(authMutex);clientToken=token;}
             rememberClientToken(token);
-            signedInUsername=userNo;
+            signedInUsername=answer["user"].get("user_no",userNo).asString();
+            signedInFullName=answer["user"].get("name","").asString();
             selectedMonitorId.store(answer.get("monitor_id",0).asInt());
             connectionStatus.serverConnected=true;
             setDlgUtf8Text(dlg,SETTINGS_CONNECTION,"● Signed in");
@@ -2573,6 +2592,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             {std::lock_guard<std::mutex> lock(authMutex);clientToken=token;}
             selectedMonitorId.store(monitor);
             signedInUsername=number;
+            signedInFullName.clear();
             rememberClientToken(token);
             refreshUnifiedMonitors(dlg);
             updateUnifiedVisibility(dlg);
@@ -2590,6 +2610,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             {std::lock_guard<std::mutex> lock(authMutex);clientToken.clear();}
             selectedMonitorId.store(0);
             signedInUsername.clear();
+            signedInFullName.clear();
             setDlgUtf8Text(dlg,SETTINGS_SIGNIN_PASS,"");
             selectDirectoryUser(dlg,"");
             settingsAssignmentLocked=false;
@@ -2615,10 +2636,20 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             refreshUnifiedMonitors(dlg);updateUnifiedVisibility(dlg);
             return TRUE;
         }
+        if(id==SETTINGS_NOTIFY && HIWORD(wp)==BN_CLICKED){
+            const bool enabled=IsDlgButtonChecked(dlg,SETTINGS_NOTIFY)==BST_CHECKED;
+            notificationsEnabled.store(enabled);
+            saveClientSetting("Client","notifications",enabled?"1":"0");
+            if(!enabled)clearPendingTrayNotification();
+            updateTrayMenu();
+            return TRUE;
+        }
         if(id==SETTINGS_SAVE){
             if(!applyUnifiedServer(dlg)){updateUnifiedVisibility(dlg);return TRUE;}
-            notificationsEnabled=IsDlgButtonChecked(dlg,SETTINGS_NOTIFY)==BST_CHECKED;
-            saveClientSetting("Client","notifications",notificationsEnabled?"1":"0");
+            const bool enabled=IsDlgButtonChecked(dlg,SETTINGS_NOTIFY)==BST_CHECKED;
+            notificationsEnabled.store(enabled);
+            saveClientSetting("Client","notifications",enabled?"1":"0");
+            if(!enabled)clearPendingTrayNotification();
             if(!settingsPendingUserNo.empty()){
                 const int currentIndex=(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETCURSEL,0,0);
                 const int chosen=currentIndex<0?0:(int)SendDlgItemMessageW(dlg,SETTINGS_MONITOR,CB_GETITEMDATA,currentIndex,0);
@@ -3064,8 +3095,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     showMonitorSettings();
                     break;
                 case ID_TRAY_NOTIFICATIONS:
-                    notificationsEnabled = !notificationsEnabled;
-                    saveClientSetting("Client","notifications",notificationsEnabled ? "1":"0");
+                    const bool enabled=!notificationsEnabled.load();
+                    notificationsEnabled.store(enabled);
+                    saveClientSetting("Client","notifications",enabled?"1":"0");
+                    if(!enabled)clearPendingTrayNotification();
                     updateTrayMenu();
                     break;
                 case ID_TRAY_CONFIG_REFRESH:
