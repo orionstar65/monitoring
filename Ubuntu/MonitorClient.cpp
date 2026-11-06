@@ -292,7 +292,7 @@ void MonitorClient::processUsbEvent(struct udev_device* dev)
     if (!syspath) return;
 
     QString deviceInfo;
-    QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
+    QString timestamp = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
 
     if (strcmp(action, "add") == 0) {
         deviceInfo = getDeviceInfo(dev);
@@ -509,7 +509,7 @@ void MonitorClient::sendScreensAsync(const QString &filePath, std::function<void
     ctimePart.setHeader(QNetworkRequest::ContentDispositionHeader,
                         QVariant(QStringLiteral("form-data; name=\"ctime\"")));
     // ISO-8601 includes the machine's UTC offset; the backend stores UTC.
-    ctimePart.setBody(QDateTime::currentDateTime().toString(Qt::ISODate).toUtf8());
+    ctimePart.setBody(QDateTime::currentDateTimeUtc().toString(Qt::ISODate).toUtf8());
     multiPart->append(ctimePart);
 
     QHttpPart imagePart;
@@ -712,7 +712,7 @@ void MonitorClient::queryBrowserHistory(const QString& dbPath, const QString& qu
                     QString url = sqlQuery.record().indexOf("url") != -1 ? sqlQuery.record().value("url").toString() : QString();
                     QString title = sqlQuery.record().indexOf("title") != -1 ? sqlQuery.record().value("title").toString() : QString();
                     QJsonObject historyItem;
-                    historyItem["date"] = dt.toString(Qt::ISODate);
+                    historyItem["date"] = dt.toUTC().toString(Qt::ISODate);
                     historyItem["browser"] = browserName;
                     historyItem["url"] = url;
                     if (!title.isEmpty()) {
@@ -1049,7 +1049,7 @@ void MonitorClient::getStorageDevices()
                     QString deviceInfo = getDeviceInfo(dev);
                     usbDeviceInfo[syspath] = deviceInfo;  // Store device info
                     
-                    QString timestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
+                    QString timestamp = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
                     QJsonObject entryObj;
                     entryObj["date"] = timestamp;
                     entryObj["device_name"] = "Connected: " + deviceInfo;
