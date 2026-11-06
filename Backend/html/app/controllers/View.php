@@ -73,6 +73,7 @@ class View extends Base {
             $shots[]=['global_id'=>$this->generateScreenshotId($id,$shot['file_path']),
                 'thumbnail'=>$this->getRelativePath($this->preferredScreenshotPath($shot)),
                 'screenshot'=>$this->getRelativePath($shot['file_path']),
+                'capture_datetime'=>$shot['capture_datetime'],
                 'modified_time'=>(new DateTimeImmutable($shot['capture_datetime'],new DateTimeZone('UTC')))->getTimestamp()];
         }
         $this->json(['success'=>true,'screenshots'=>$shots,'monitor'=>$monitor,'sampled'=>true]);
