@@ -282,6 +282,7 @@ class View extends Base {
                     'id' => $screenshot['monitor_ip_id'],
                     'ip_address' => $screenshot['ip_address'],
                     'username' => $screenshot['username'],
+                    'user_no' => $screenshot['user_no'],
                     'name' => $screenshot['monitor_name']
                 ];
                 $screenshot['thumbnail'] = $this->getRelativePath($this->preferredScreenshotPath($screenshot));
