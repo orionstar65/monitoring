@@ -66,8 +66,8 @@ $checks=[
     $invalid(['start_utc'=>'2026-11-06T00:00:00-06:00']),
  'Backend screenshot files and database date derive from normalized UTC capture'=>
     str_contains($upload,'monitorCaptureTimeUTC((string)$ctime)') &&
-    str_contains($upload,"$".'date_dir=$captureTime->format('."'Y-m-d'".');') &&
-    str_contains($upload,"$".'capture_datetime=$captureTime->format('."'Y-m-d H:i:s'".');'),
+    str_contains($upload,'$date_dir=$captureTime->format(') &&
+    str_contains($upload,'$capture_datetime=$captureTime->format('),
  'All-device and single-device screenshot searches use UTC bounds'=>
     str_contains($view,'monitorUtcBounds($_GET)') &&
     str_contains($view,'$timeWhere') &&
@@ -87,7 +87,7 @@ $checks=[
     str_contains($logs,'device_date < :end_date'),
  'All three desktop clients send offset-aware screenshot capture timestamps'=>
     str_contains($ubuntu,'ctimePart.setBody(QDateTime::currentDateTime().toString(Qt::ISODate)') &&
-    str_contains($mac,'formatter.dateFormat = "yyyy-MM-dd'."'T'".'HH:mm:ssXXXXX"') &&
+    str_contains($mac,"formatter.dateFormat = \"yyyy-MM-dd'T'HH:mm:ssXXXXX\"") &&
     str_contains($windows,'formData += getWireDateTimeString()'),
  'Hardcoded +10 hour browser time adjustments removed'=>
     !str_contains($ubuntu,"'+10:00'") && !str_contains($mac,"'+10:00'")
