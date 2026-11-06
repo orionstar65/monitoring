@@ -12,6 +12,9 @@ $userEditor=$read('Backend/html/app/views/users/edit.php');
 $userController=$read('Backend/html/app/controllers/Users.php');
 $keyView=$read('Backend/html/app/views/view/logbrowse.php');
 $keyController=$read('Backend/html/app/controllers/Logbrowse.php');
+$liveView=$read('Backend/html/app/views/view/index.php');
+$shared=$read('Backend/html/app/views/view/partials/key_history_shared.php');
+$liveController=$read('Backend/html/app/controllers/View.php');
 $checks=[
  'Merge selectors include user number and machine'=>str_contains($mergeController,'u.user_no AS user_no')&&str_contains($mergeController,'m.platform')&&str_contains($mergeView,'formatMergeMonitorLabel(monitor)'),
  'Merge source, target and fix selectors use same formatter'=>substr_count($mergeView,'formatMergeMonitorLabel(monitor)')>=4,
@@ -28,9 +31,18 @@ $checks=[
  'UI loads full-date activity after the initial page'=>str_contains($keyView,'loadFullKeyTimeline(keyRulerState)'),
  'Timeline supports zoom'=>str_contains($keyView,'keyTimelineScale')&&str_contains($keyView,'renderKeyRuler'),
  'Keylog navigation is above transcript'=>str_contains($keyView,'id="keyPreviousRange"')&&str_contains($keyView,'id="keyNextRange"')&&str_contains($keyView,"currentTab === 'key'"),
- 'Keyboard preview renders Enter and Backspace effects'=>str_contains($keyView,"kind:'newline'")&&str_contains($keyView,"last.deleted=true"),
- 'Keyboard preview has timestamp column'=>str_contains($keyView,'key-transcript-time'),
- 'Other keyboard events remain visible as badges'=>str_contains($keyView,'key-special-badge'),
+ 'Keyboard preview renders Enter and Backspace effects'=>str_contains($shared,"kind:'newline'")&&str_contains($shared,"last.deleted=true"),
+ 'Keyboard preview has timestamp column'=>str_contains($shared,'key-transcript-time'),
+ 'Other keyboard events remain visible as badges'=>str_contains($shared,'key-special-badge'),
+ 'Both pages share transcript formatting'=>str_contains($keyView,'monitorTranscriptKeyRows(keys,escapeHtml)')&&str_contains($liveView,'monitorTranscriptKeyRows(keys,escapeViewerText)'),
+ 'Both pages share ruler styles'=>str_contains($keyView,"partials/key_history_shared.php")&&str_contains($liveView,"partials/key_history_shared.php"),
+ 'Both timeline ranges can be panned'=>str_contains($keyView,"drag.mode==='pan'")&&str_contains($liveView,"drag.mode==='pan'"),
+ 'Both timeline boundaries can be resized'=>str_contains($keyView,"drag.mode==='start'")&&str_contains($keyView,"drag.mode==='end'")&&str_contains($liveView,"drag.mode==='start'")&&str_contains($liveView,"drag.mode==='end'"),
+ 'Zoomed-out ranges can still be panned'=>str_contains($keyView,'selectedPixels*.3')&&str_contains($liveView,'selectedPixels*.3'),
+ 'Live viewer uses identical CCTV ruler and editable timestamps'=>str_contains($liveView,'id="historyTimelineRuler"')&&str_contains($liveView,'key-cctv-ruler history-ruler')&&str_contains($liveView,'id="historyFrom"')&&str_contains($liveView,'id="historyTo"'),
+ 'Live ruler shows sampled screenshot thumbnails and key activity'=>str_contains($liveView,'history-timeline-image')&&str_contains($liveView,'key-cctv-activity')&&str_contains($liveController,'function api_screenshot_timeline()'),
+ 'Live timeline fetches bounded keylogs'=>str_contains($liveView,'logbrowse/api_key_timeline')&&str_contains($liveView,'logbrowse/api_key_context'),
+ 'Old double range slider removed'=>!str_contains($liveView,'historyStartHandle')&&!str_contains($liveView,'historyEndHandle'),
 ];
 $failed=0;
 foreach($checks as $name=>$ok){
