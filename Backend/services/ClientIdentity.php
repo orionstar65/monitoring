@@ -109,6 +109,47 @@ function clientAuthenticatedSession(mysqli $db,bool $bound=true): ?array {
     }
     return $session;
 }
+/**
+ * Explicit transitional bridge for already-installed v1.3 devices that cannot
+ * send a bearer token. Disabled by default; never creates monitors or sessions.
+ *
+ * It requires (1) a direct private-LAN peer, (2) an exact source-IP entry in
+ * MONITOR_LEGACY_V13_IPS, (3) precisely one existing assigned monitor whose
+ * registered IP matches the peer, and (4) optional MAC equality when the
+ * client supplied a MAC. Do not put a reverse proxy in front of this bridge.
+ */
+function monitoringLegacyV13Monitor(mysqli $db, ?string $claimedMac = null): ?int {
+    if(getenv('MONITOR_ENABLE_LEGACY_V13')!=='1')return null;
+    if(clientBearer()!=='')return null; // Invalid credentials cannot downgrade.
+    $peer=(string)($_SERVER['REMOTE_ADDR']??'');
+    if(!monitoringIsPrivateLanAddress($peer))return null;
+    if(isset($_SERVER['HTTP_FORWARDED'])||isset($_SERVER['HTTP_X_FORWARDED_FOR']))return null;
+    $allowed=array_filter(array_map('trim',explode(',',getenv('MONITOR_LEGACY_V13_IPS')?:'')));
+    if(!in_array($peer,$allowed,true))return null;
+    $mac=trim((string)$claimedMac);
+    if($mac!==''&&!preg_match('/^[0-9a-f]{2}(?:[:-][0-9a-f]{2}){5}$/iD',$mac))return null;
+    $stmt=$db->prepare(
+        'SELECT m.id,m.mac_address FROM tbl_monitor_ips m
+         JOIN users u ON u.id=m.owner_user_id
+         WHERE m.ip_address=? LIMIT 3'
+    );
+    $stmt->bind_param('s',$peer);$stmt->execute();
+    $rows=$stmt->get_result()->fetch_all(MYSQLI_ASSOC);$stmt->close();
+    // IP-only screenshot uploads are permitted solely for unique IP mappings.
+    if(count($rows)!==1)return null;
+    $registeredMac=trim((string)($rows[0]['mac_address']??''));
+    if($mac!=='' && ($registeredMac==='' ||
+        str_replace('-',':',strtolower($registeredMac))!==str_replace('-',':',strtolower($mac))))return null;
+    return (int)$rows[0]['id'];
+}
+function requireClientMonitorOrLegacy(mysqli $db, ?string $claimedMac = null): int {
+    $session=clientAuthenticatedSession($db,true);
+    if($session)return (int)$session['monitor_id'];
+    $legacy=monitoringLegacyV13Monitor($db,$claimedMac);
+    if($legacy!==null)return $legacy;
+    header('Content-Type: application/json');http_response_code(401);
+    echo json_encode(['error'=>'Device authentication required or legacy device not allowlisted']);exit;
+}
 function requireClientMonitor(mysqli $db): int {
     $session=clientAuthenticatedSession($db,true);
     if(!$session){
