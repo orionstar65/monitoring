@@ -25,7 +25,7 @@ class Apilogs extends Base {
         }
         
         try {
-            $date = $_GET['date'] ?? date('Y-m-d');
+            $date = $_GET['date'] ?? gmdate('Y-m-d');
             $endpoint = $_GET['endpoint'] ?? '';
             $request_type = $_GET['request_type'] ?? '';
             $ip_address = $_GET['ip_address'] ?? '';
