@@ -3102,6 +3102,7 @@ void manualConfigRefresh() {
     fetchConfigurationFromAPI();
 }
 
+static HICON buildStatusIcon(COLORREF dot);
 static HICON greenTrayIcon=nullptr;
 static HICON redTrayIcon=nullptr;
 static UINT trayTaskbarCreatedMessage=0;
