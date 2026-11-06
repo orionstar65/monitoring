@@ -2439,6 +2439,16 @@ $(document).on('click','#unifiedMergeButton',async function(){
     finally{button.prop('disabled',false);}
 });
 $(document).on('click','[data-monitor-tab]',function(){unifiedSelectTab(this.dataset.monitorTab);});
+$(document).on('keydown','[data-monitor-tab]',function(event){
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+    event.preventDefault();
+    const buttons=[...document.querySelectorAll('[data-monitor-tab]')];
+    const current=buttons.indexOf(this);
+    const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:
+        (current+(event.key==='ArrowRight'?1:-1)+buttons.length)%buttons.length;
+    unifiedSelectTab(buttons[next].dataset.monitorTab);
+    buttons[next].focus();
+});
 $(document).on('click','#unifiedApplyFilters',unifiedApplyDates);
 $(document).on('click','#unifiedClearFilters',function(){
     $('#unifiedStartDate,#unifiedEndDate').val('');
