@@ -1758,7 +1758,7 @@ function loadMonitors() {
                 unifiedSyncedMonitor=selected?.id||0;
                 window.unifiedLogs.selectMonitor(unifiedSyncedMonitor);
                 if(unifiedActiveTab==='settings')unifiedLoadSettings();
-            }
+            }else window.unifiedLogs?.refreshStats();
             updateStatusStats(selectedMonitors.length?allMonitors.filter(m=>selectedMonitors.includes(m.id)):allMonitors);
             $('#lastLiveRefresh').text('Updated '+new Date().toLocaleTimeString());
         },
@@ -2475,6 +2475,7 @@ $(document).on('click','#unifiedRemoveScreenshots',function(){
     if(window.unifiedLogs)window.unifiedLogs.removeScreenshots();
 });
 $(document).on('click','#refreshLiveNow',function(){window.unifiedLogs?.refresh();});
+window.reloadUnifiedScreenshots = ()=>loadScreenshotsForSelectedMonitor(1);
 $(document).ready(function(){
     const url=new URL(window.location.href);
     const requestedTab=url.searchParams.get('tab')||'screenshots';
