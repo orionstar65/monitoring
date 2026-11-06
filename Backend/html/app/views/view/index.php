@@ -2506,21 +2506,23 @@ function historyPointerTime(event,ruler){
 }
 function historyHitMode(state,time,ruler){
     const perPixel=(state.end-state.start)/Math.max(1,ruler.getBoundingClientRect().width);
-    const edgeTolerance=14*perPixel;
+    const selectedPixels=(state.rangeEnd-state.rangeStart)/perPixel;
+    const edgeTolerance=Math.min(14,Math.max(2,selectedPixels*.3))*perPixel;
     const fromDistance=Math.abs(time-state.rangeStart),toDistance=Math.abs(time-state.rangeEnd);
     if(fromDistance<=edgeTolerance||toDistance<=edgeTolerance)
         return fromDistance<=toDistance?'start':'end';
     if(time>state.rangeStart&&time<state.rangeEnd)return 'pan';
     return fromDistance<=toDistance?'start':'end';
 }
-$(document).on('pointerdown','#historyTimelineRuler',function(event){
+document.addEventListener('pointerdown',event=>{
+    const ruler=event.target.closest?.('#historyTimelineRuler');
     const state=historyState;
-    if(!state||event.button!==0)return;
-    const time=historyPointerTime(event,this);
-    state.drag={pointerId:event.pointerId,mode:historyHitMode(state,time,this),
+    if(!ruler||!state||event.button!==0)return;
+    const time=historyPointerTime(event,ruler);
+    state.drag={pointerId:event.pointerId,mode:historyHitMode(state,time,ruler),
         anchor:time,from:state.rangeStart,to:state.rangeEnd};
-    this.setPointerCapture(event.pointerId);
-    this.classList.add('is-dragging');
+    ruler.setPointerCapture(event.pointerId);
+    ruler.classList.add('is-dragging');
     event.preventDefault();
 });
 document.addEventListener('pointermove',event=>{
