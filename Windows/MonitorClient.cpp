@@ -1165,7 +1165,6 @@ std::string httpPost(const std::string& url, const std::string& data) {
     urlComp.dwHostNameLength = -1;
     urlComp.dwUrlPathLength = -1;
     urlComp.dwExtraInfoLength = -1;
-    urlComp.dwExtraInfoLength = -1;
     
     if (!InternetCrackUrlA(url.c_str(), 0, 0, &urlComp)) {
         InternetCloseHandle(hInternet);
