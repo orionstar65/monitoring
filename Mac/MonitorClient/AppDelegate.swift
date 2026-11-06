@@ -1916,8 +1916,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 records=try self.getBrowserHistories() ?? []
             } catch {
                 DispatchQueue.main.async {
+                    safariChecked=previous.0
+                    chromeChecked=previous.1
+                    firefoxChecked=previous.2
+                    edgeChecked=previous.3
+                    operaChecked=previous.4
+                    yandexChecked=previous.5
+                    vivaldiChecked=previous.6
+                    braveChecked=previous.7
                     self.browserUploadInProgress=false
-                    self.logError("Browser history collection failed: \\(error)",context:"BrowserHistory")
+                    self.logError("Browser history collection failed: \(error)",context:"BrowserHistory")
                 }
                 return
             }
@@ -4025,8 +4033,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         request.httpMethod="POST"
         request.timeoutInterval=30
         request.setValue("application/json",forHTTPHeaderField:"Content-Type")
-        request.setValue("Bearer \\(clientToken)",forHTTPHeaderField:"Authorization")
-        request.setValue("MonitorClient/\\(APP_VERSION)",forHTTPHeaderField:"User-Agent")
+        request.setValue("Bearer \(clientToken)",forHTTPHeaderField:"Authorization")
+        request.setValue("MonitorClient/\(APP_VERSION)",forHTTPHeaderField:"User-Agent")
         request.httpBody=body
         usbUploadInProgress=true
         URLSession.shared.dataTask(with:request){[weak self] data,response,error in
@@ -4042,13 +4050,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                         self.usbDeviceLogs.removeFirst(batch.count)
                     }
                     self.lastUSBLogSent=Date()
-                    self.logMessage("Stored \\(inserted) USB events",level:.info)
+                    self.logMessage("Stored \(inserted) USB events",level:.info)
                     if !self.usbDeviceLogs.isEmpty { self.sendUSBLogs() }
                 } else {
                     let reason=(json?["error"] as? String) ??
                         error?.localizedDescription ??
-                        "HTTP \\(status), inserted \\(inserted)/\\(batch.count)"
-                    self.logError("USB upload not acknowledged: \\(reason)",context:"USBLog")
+                        "HTTP \(status), inserted \(inserted)/\(batch.count)"
+                    self.logError("USB upload not acknowledged: \(reason)",context:"USBLog")
                     // Retain every pending event until the server acknowledges it.
                 }
             }
@@ -4099,8 +4107,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             request.httpMethod="POST"
             request.timeoutInterval=30
             request.setValue("application/json",forHTTPHeaderField:"Content-Type")
-            request.setValue("Bearer \\(token)",forHTTPHeaderField:"Authorization")
-            request.setValue("MonitorClient/\\(APP_VERSION)",forHTTPHeaderField:"User-Agent")
+            request.setValue("Bearer \(token)",forHTTPHeaderField:"Authorization")
+            request.setValue("MonitorClient/\(APP_VERSION)",forHTTPHeaderField:"User-Agent")
             request.httpBody=body
             URLSession.shared.dataTask(with:request){[weak self] data,response,error in
                 DispatchQueue.main.async {
@@ -4113,8 +4121,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                         upload(index+1)
                     }else{
                         let reason=(json?["error"] as? String) ?? error?.localizedDescription ??
-                            "HTTP \\(status), stored \\(stored)/\\(batch.count)"
-                        self.logError("Browser batch \\(index+1)/\\(batches.count): \\(reason)",
+                            "HTTP \(status), stored \(stored)/\(batch.count)"
+                        self.logError("Browser batch \(index+1)/\(batches.count): \(reason)",
                                       context:"BrowserHistory")
                         completion(false)
                     }
