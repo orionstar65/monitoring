@@ -1025,37 +1025,42 @@ function createKeyTimeline(logs) {
             loadFullKeyTimeline(keyRulerState);
         }
     });
-    return `<div class="key-timeline-wrapper">
-      <div class="key-timeline-heading">
-       <div>Key activity history <small id="keyTimelineInfo">Loading activity… · Drag the start/end handles to select a time range</small></div>
-       <div class="key-ruler-controls">
-        <button id="keyZoomOut" class="btn btn-sm btn-outline-secondary" type="button" aria-label="Zoom keyboard history out">−</button>
-        <button id="keyZoomIn" class="btn btn-sm btn-outline-secondary" type="button" aria-label="Zoom keyboard history in">+</button>
-        <label for="keyTimelineScale" class="text-muted">Scale</label>
-        <select id="keyTimelineScale" class="form-select form-select-sm" aria-label="Timeline scale">
-         <option value="near">15 min / view</option>
-         <option value="medium" selected>1 hour / view</option>
-         <option value="wide">6 hours / view</option><option value="custom" disabled>Custom</option>
-        </select>
-        <span class="key-ruler-selected" id="keyTimelineSelected"></span>
-       </div>
+    return \`<div class="key-timeline-wrapper">
+      <div class="key-history-toolbar" role="toolbar" aria-label="Keyboard history range and navigation">
+        <div class="key-history-summary">
+          <strong>History</strong>
+          <small id="keyTimelineInfo" class="text-muted" aria-live="polite" title="Keyboard history status">Drag the range or its borders to select activity.</small>
+        </div>
+        <label class="key-history-date-field" for="keyRangeStart"><span>From</span>
+          <input id="keyRangeStart" class="form-control form-control-sm" type="datetime-local" step="1" aria-label="Keyboard range start"></label>
+        <label class="key-history-date-field" for="keyRangeEnd"><span>To</span>
+          <input id="keyRangeEnd" class="form-control form-control-sm" type="datetime-local" step="1" aria-label="Keyboard range end"></label>
+        <label class="key-history-scale-field" for="keyTimelineScale"><span>Scale</span>
+          <select id="keyTimelineScale" class="form-select form-select-sm" aria-label="Keyboard timeline scale">
+            <option value="near">15m</option>
+            <option value="medium" selected>1h</option>
+            <option value="wide">6h</option>
+            <option value="custom" disabled>Custom</option>
+          </select>
+        </label>
+        <button id="keyZoomOut" class="btn btn-sm btn-outline-secondary" type="button" aria-label="Zoom keyboard timeline out" title="Zoom out"><i class="fas fa-minus"></i></button>
+        <button id="keyZoomIn" class="btn btn-sm btn-outline-secondary" type="button" aria-label="Zoom keyboard timeline in" title="Zoom in"><i class="fas fa-plus"></i></button>
+        <button id="keyFitTimeline" class="btn btn-sm btn-outline-secondary" type="button" aria-label="Fit keyboard timeline" title="Fit timeline"><i class="fas fa-expand-arrows-alt"></i></button>
+        <button id="keyPreviousRange" class="btn btn-sm btn-outline-secondary" type="button" aria-label="Previous keyboard range" title="Previous range"><i class="fas fa-chevron-left"></i></button>
+        <button id="keyNextRange" class="btn btn-sm btn-outline-secondary" type="button" aria-label="Next keyboard range" title="Next range"><i class="fas fa-chevron-right"></i></button>
       </div>
       <div class="key-timeline-scroller" id="keyTimelineViewport">
-       <div class="key-cctv-ruler" id="keyTimelineRuler" tabindex="0" role="group" aria-label="Drag to choose a keyboard history time range"></div>
-      </div>
-      <div class="key-range-inputs">
-       <label for="keyRangeStart">From <input id="keyRangeStart" class="form-control form-control-sm" type="datetime-local" step="1" aria-label="Keylog range start"></label>
-       <label for="keyRangeEnd">To <input id="keyRangeEnd" class="form-control form-control-sm" type="datetime-local" step="1" aria-label="Keylog range end"></label>
+        <div class="key-cctv-ruler" id="keyTimelineRuler" tabindex="0" role="group" aria-label="Keyboard timeline: drag highlighted range to pan, drag borders to resize, use mouse wheel to zoom"></div>
       </div>
       <div class="key-context-panel" id="keyContextPanel" aria-live="polite">
-       <div class="key-transcript-nav">
-        <button id="keyPreviousRange" type="button" class="btn btn-outline-secondary btn-sm">‹ Previous</button>
-        <strong id="keyContextRangeLabel"></strong>
-        <button id="keyNextRange" type="button" class="btn btn-outline-secondary btn-sm">Next ›</button>
-       </div>
-       <div id="keyContextBody">Select a time range to inspect recorded keys.</div>
+        <div class="key-transcript-header">
+          <strong><i class="fas fa-keyboard me-1"></i> Keyboard transcript</strong>
+          <small id="keyContextRangeLabel" class="text-muted"></small>
+          <span id="keyTimelineSelected" class="visually-hidden"></span>
+        </div>
+        <div id="keyContextBody">Select a time range to inspect recorded keys.</div>
       </div>
-    </div>`;
+    </div>\`;
 }
 async function loadFullKeyTimeline(state) {
     if(isEmbeddedMonitoring&&!currentFilters.device_id)return;
@@ -1297,9 +1302,18 @@ function zoomKeyRuler(factor,clientX=null){
         (anchorTime-state.start)/(state.end-state.start)*state.width-anchorX,0,
         Math.max(0,state.width-viewport.clientWidth));
 }
+function fitKeyRuler(){
+    const state=keyRulerState,viewport=document.getElementById('keyTimelineViewport');
+    if(!state||!viewport)return;
+    const durationMinutes=Math.max(1,(state.end-state.start)/60000);
+    state.pxPerMinute=Math.max(.3,viewport.clientWidth/durationMinutes);
+    document.getElementById('keyTimelineScale').value='custom';
+    renderKeyRuler(true);
+}
 document.addEventListener('click',event=>{
     if(event.target.closest?.('#keyZoomIn'))zoomKeyRuler(1.6);
     if(event.target.closest?.('#keyZoomOut'))zoomKeyRuler(1/1.6);
+    if(event.target.closest?.('#keyFitTimeline'))fitKeyRuler();
 });
 document.addEventListener('wheel',event=>{
     const viewport=event.target.closest?.('#keyTimelineViewport');
