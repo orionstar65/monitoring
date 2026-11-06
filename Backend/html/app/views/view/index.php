@@ -1594,6 +1594,8 @@ waitForJQuery(function() {
         window.currentScreenshotId = null;
         historySeq++;
         historyKeySeq++;
+        historyVisibleSeq++;
+        if(historyVisibleTimer)clearTimeout(historyVisibleTimer);
         historyState=null;
         // Reset z-index when modal is closed
         $('#screenshotModal').css('z-index', '');
@@ -2570,7 +2572,7 @@ function historyRenderRuler(center=false){
     const ruler=document.getElementById('historyTimelineRuler');
     if(!state||!viewport||!ruler)return;
     const span=state.end-state.start,minutes=span/60000;
-    const width=Math.min(24000,Math.max(viewport.clientWidth||800,Math.round(minutes*state.pxPerMinute)));
+    const width=Math.min(240000,Math.max(viewport.clientWidth||800,Math.round(minutes*state.pxPerMinute)));
     const pxPerMinute=width/minutes;
     const steps=[1,2,5,10,15,30,60,120,360,720,1440];
     const step=steps.find(value=>value*pxPerMinute>=90)||1440;
@@ -2714,6 +2716,46 @@ async function historyLoadDomain(){
     historySeek(state.cursorTime,false);
     historyLoadTranscript();
     historyScheduleVisibleShots();
+}
+
+function historyScheduleVisibleShots(){
+    if(historyVisibleTimer)clearTimeout(historyVisibleTimer);
+    historyVisibleTimer=setTimeout(historyLoadVisibleShots,180);
+}
+async function historyLoadVisibleShots(){
+    const state=historyState,viewport=document.getElementById('historyTimelineViewport');
+    if(!state||!viewport||!state.width||!viewport.clientWidth||!$('#screenshotModal').hasClass('show'))return;
+    const span=state.end-state.start;
+    const left=Math.max(0,viewport.scrollLeft-viewport.clientWidth*.2);
+    const right=Math.min(state.width,viewport.scrollLeft+viewport.clientWidth*1.2);
+    const from=state.start+left/state.width*span;
+    const to=state.start+right/state.width*span;
+    if(to<=from)return;
+    const key=String(state.monitor)+'|'+historyClock(from,true)+'|'+historyClock(to,true);
+    if(state.visibleCacheKey===key)return;
+    const sequence=++historyVisibleSeq;
+    const params=new URLSearchParams({monitor_id:String(state.monitor),from:historyClock(from,true),to:historyClock(to,true)});
+    try{
+        const response=await fetch(historyBase+'view/api_screenshot_timeline?'+params,{credentials:'same-origin'});
+        if(!response.ok)throw new Error('HTTP '+response.status);
+        const result=await response.json();
+        if(sequence!==historyVisibleSeq||historyState!==state||!result.success)return;
+        const incoming=(result.screenshots||[]).map(shot=>({
+            global_id:String(shot.global_id||''),ms:historyMillis(shot.capture_datetime),
+            full:historyImageUrl(shot.screenshot),thumb:historyImageUrl(shot.thumbnail||shot.screenshot)
+        })).filter(shot=>shot.global_id&&Number.isFinite(shot.ms));
+        const combined=new Map(state.shots.map(shot=>[shot.global_id,shot]));
+        incoming.forEach(shot=>combined.set(shot.global_id,shot));
+        // Retain surrounding samples without growing indefinitely during long scrubbing sessions.
+        const center=(from+to)/2;
+        state.shots=[...combined.values()].sort((a,b)=>
+            Math.abs(a.ms-center)-Math.abs(b.ms-center)).slice(0,480);
+        state.visibleCacheKey=key;
+        historyRenderRuler(false);
+        historySeek(state.cursorTime,false);
+    }catch(error){
+        if(sequence===historyVisibleSeq)$('#historyTimelineStatus').text('Visible screenshot samples unavailable: '+error.message);
+    }
 }
 async function historyLoadTranscript(){
     const state=historyState;if(!state)return;
@@ -2888,7 +2930,15 @@ document.addEventListener('keydown',event=>{
         historyCenterView();
     }
 });
-$(document).on('shown.bs.modal','#screenshotModal',()=>historyRenderRuler(true));
+$(document).on('shown.bs.modal','#screenshotModal',()=>{
+    historyRenderRuler(true);
+    historyScheduleVisibleShots();
+});
+$(window).on('resize',()=>{
+    if(historyState&&$('#screenshotModal').hasClass('show')){
+        historyRenderRuler(false);historyScheduleVisibleShots();
+    }
+});
 
 </script>
 
