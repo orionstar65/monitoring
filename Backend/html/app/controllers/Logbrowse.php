@@ -257,7 +257,7 @@ class Logbrowse extends Base {
             return;
         }
         $rows=$this->db->fetchAll(
-            'SELECT k.key_date,k.key_pressed,k.application FROM key_logs k
+            'SELECT k.id AS event_id,k.key_date,k.key_pressed,k.application FROM key_logs k
              WHERE k.monitor_ip_id=:id AND k.key_date >= :start AND k.key_date <= :end
              ORDER BY k.key_date ASC,k.id ASC LIMIT 2001',
             ['id'=>$monitorId,'start'=>$from,'end'=>$to]
