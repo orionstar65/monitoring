@@ -1204,6 +1204,15 @@ std::string httpPost(const std::string& url, const std::string& data) {
     
     // Send request
     BOOL result = HttpSendRequestA(hRequest, NULL, 0, (LPVOID)data.c_str(), data.length());
+    if(!result) {
+        writeDebugLog("HTTP JSON request failed: WinINet error "+std::to_string(GetLastError()));
+    } else {
+        DWORD statusCode=0, statusSize=sizeof(statusCode);
+        if(HttpQueryInfoA(hRequest,HTTP_QUERY_STATUS_CODE|HTTP_QUERY_FLAG_NUMBER,
+                &statusCode,&statusSize,nullptr) && statusCode>=400)
+            writeDebugLog("HTTP JSON request rejected: status "+std::to_string(statusCode)+
+                " endpoint "+urlPath);
+    }
     
     std::string response;
     if (result) {
@@ -1313,6 +1322,12 @@ std::string httpPostFile(const std::string& url, const std::string& filePath) {
     BOOL result = HttpSendRequestA(hRequest, NULL, 0, (LPVOID)formData.c_str(), formData.length());
     if(!result)
         writeDebugLog("Screenshot HTTP send failed (WinINet error "+std::to_string(GetLastError())+")");
+    if(result) {
+        DWORD statusCode=0, statusSize=sizeof(statusCode);
+        if(HttpQueryInfoA(hRequest,HTTP_QUERY_STATUS_CODE|HTTP_QUERY_FLAG_NUMBER,
+                &statusCode,&statusSize,nullptr) && statusCode>=400)
+            writeDebugLog("Screenshot upload HTTP status "+std::to_string(statusCode));
+    }
     
     std::string response;
     if (result) {
