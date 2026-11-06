@@ -468,6 +468,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     // Status bar menu components
     var statusBarItem: NSStatusItem?
     var statusMenu: NSMenu?
+    private var pendingTrayMenuWork: DispatchWorkItem?
     var statusUpdateTimer: Timer?
 
     // Add these properties at the top of the class
@@ -4824,6 +4825,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             // Add click action for status bar icon
             button.action = #selector(statusBarIconClicked)
             button.target = self
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             // Status bar button configured
         } else {
             // Error: Could not get status bar button
@@ -4837,7 +4839,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         setupStatusMenuItems()
         
         // Set the menu
-        statusBarItem?.menu = statusMenu
+        // Assigning NSStatusItem.menu would swallow double-click events.
+        // Handle clicks ourselves: a short single-click opens the menu,
+        // while double-click opens the settings window.
+        statusBarItem?.menu = nil
         updateTrayStatusDot()
         
         // Start status update timer (optimized interval)
@@ -4961,39 +4966,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
     
     @objc private func statusBarIconClicked() {
-        updateTrayStatusDot()
-        // Show a quick status notification
-        let notification = UNMutableNotificationContent()
-        notification.title = "MonitorClient Status"
-        
-        let serverIP = storage.string(forKey: "server-ip") ?? "Not configured"
-        let serverPort = storage.string(forKey: "server-port") ?? "8924"
-        let serverStatus: String
-        if serverIP == "Not configured" {
-            serverStatus = "Not configured"
-        } else {
-            let serverAddress = "\(serverIP):\(serverPort)"
-            serverStatus = "\(serverAddress) (\(isServerConnected ? "Connected" : "Disconnected"))"
+        guard let event=NSApp.currentEvent else { return }
+        pendingTrayMenuWork?.cancel()
+        pendingTrayMenuWork=nil
+        if event.clickCount >= 2 && event.type != .rightMouseUp {
+            openUnifiedSettingsWindow()
+            return
         }
-        
-        let isAccessibilityEnabled = isInputMonitoringEnabled()
-        let isScreenRecordingEnabled = isScreenRecordingEnabled()
-        let isKeyboardActive = eventTap != nil && CGEvent.tapIsEnabled(tap: eventTap!)
-        
-        notification.body = """
-        Client: \(clientIPAddress) / \(macAddress)
-        Server: \(serverIP) (\(serverStatus))
-        Accessibility: \(isAccessibilityEnabled ? "✅" : "❌")
-        Screen Recording: \(isScreenRecordingEnabled ? "✅" : "❌")
-        Keyboard: \(isKeyboardActive ? "✅" : "❌")
-        Keys: \(keyLogs.count)
-        USB Events: \(usbDeviceLogs.count)
-        """
-        
-        notification.sound = nil // No sound for status clicks
-        self.deliverNotification(notification)
+        if event.type == .rightMouseUp {
+            showStatusBarMenu()
+            return
+        }
+        // Delay the single-click menu just enough for a second click to
+        // arrive, otherwise AppKit's menu-tracking loop prevents double-click.
+        let action = DispatchWorkItem { [weak self] in
+            self?.pendingTrayMenuWork=nil
+            self?.showStatusBarMenu()
+        }
+        pendingTrayMenuWork=action
+        DispatchQueue.main.asyncAfter(deadline:.now()+0.40,execute:action)
     }
-    
+
+    private func showStatusBarMenu() {
+        guard let button=statusBarItem?.button,let menu=statusMenu else { return }
+        updateStatusMenu()
+        menu.popUp(positioning:nil,at:NSPoint(x:0,y:0),in:button)
+    }
+
     @objc private func updateStatusMenu() {
         updateTrayStatusDot()
         guard let menu = statusMenu else { return }
