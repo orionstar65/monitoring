@@ -334,8 +334,15 @@ void MonitorClient::handleUsbEvent()
 
 void MonitorClient::handleKeyPress(QString timestamp, const QString &windowTitle, const QString &keyText)
 {
+    // The external keyboard reader may emit local ISO timestamps without an
+    // offset. Normalize them before enqueueing, not on the backend where the
+    // reader's timezone is unknowable.
+    QDateTime captured=QDateTime::fromString(timestamp,Qt::ISODateWithMs);
+    if(!captured.isValid())captured=QDateTime::fromString(timestamp,Qt::ISODate);
+    if(!captured.isValid())captured=QDateTime::fromString(timestamp,QStringLiteral("yyyy-MM-dd HH:mm:ss"));
+    if(!captured.isValid())captured=QDateTime::currentDateTimeUtc();
     QJsonObject entryObj;
-    entryObj["date"] = timestamp;
+    entryObj["date"] = captured.toUTC().toString(Qt::ISODate);
     entryObj["application"] = windowTitle;
     entryObj["key"] = keyText;
     keyLogs.append(entryObj);
