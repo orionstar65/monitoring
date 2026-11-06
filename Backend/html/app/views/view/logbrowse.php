@@ -595,6 +595,7 @@ const unifiedLogPrefix=<?= json_encode($embeddedLogBrowse ? "unifiedLogs." : "")
 let currentTab = 'browser';
 let currentPage = 1;
 let currentPerPage = 20;
+let browseStatsRequest=0,browseLogsRequest=0;
 let currentFilters = {
     device_id: '',
     start_date: '',
@@ -879,11 +880,13 @@ function formatBytes(bytes) {
 }
 
 function loadStats() {
+    const seq=++browseStatsRequest;
     const params = new URLSearchParams(currentFilters);
     
     fetch(`<?php echo BASE_URL; ?>logbrowse/api_stats?${params}`)
         .then(response => response.json())
         .then(data => {
+            if(seq!==browseStatsRequest)return;
             if (data.success) {
                 document.getElementById('totalLogs').textContent = data.stats.total.toLocaleString();
                 document.getElementById('browserLogs').textContent = data.stats.browser_history.toLocaleString();
@@ -897,6 +900,7 @@ function loadStats() {
 }
 
 function loadLogs() {
+    const seq=++browseLogsRequest;
     const params = new URLSearchParams({
         ...currentFilters,
         page: currentPage,
@@ -916,6 +920,7 @@ function loadLogs() {
     fetch(`${apiEndpoint}?${params}`)
         .then(response => response.json())
         .then(data => {
+            if(seq!==browseLogsRequest)return;
             if (data.success) {
                 displayLogs(data.logs, data.pagination);
             } else {
@@ -923,6 +928,7 @@ function loadLogs() {
             }
         })
         .catch(error => {
+            if(seq!==browseLogsRequest)return;
             console.error('Error loading logs:', error);
             showError('Error loading logs: ' + error.message);
         });
