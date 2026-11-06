@@ -154,6 +154,7 @@ build_app() {
                -derivedDataPath "$BUILD_DIR" \
                MARKETING_VERSION="$VERSION" \
                CURRENT_PROJECT_VERSION="$VERSION" \
+               ARCHS="$(uname -m)" ONLY_ACTIVE_ARCH=YES \
                build
     
     if [ $? -ne 0 ]; then
