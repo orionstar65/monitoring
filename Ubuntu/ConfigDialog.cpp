@@ -2,6 +2,7 @@
 #include "version.h"
 #include <QCryptographicHash>
 #include <QSaveFile>
+#include <QFileInfo>
 #include <QRegularExpression>
 #include <QSysInfo>
 #include <memory>
@@ -799,7 +800,7 @@ void ConfigDialog::onCheckUpdate(){
     }
     QDir().mkpath(QFileInfo(settingsPath()).absolutePath());
     QSettings cfg(settingsPath(),QSettings::IniFormat);
-    cfg.setValue("Updates/url",base.toString(QUrl::RemoveTrailingSlash));
+    cfg.setValue("Updates/url",base.toString());
     cfg.sync();
     checkUpdateButton->setEnabled(false);
     updateStatus->setText("Checking for an Ubuntu update...");
