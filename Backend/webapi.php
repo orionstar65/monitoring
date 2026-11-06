@@ -39,6 +39,12 @@ if ($mysqli->connect_error) {
 $dbService = new DatabaseService($mysqli);
 $monitorId=requireClientMonitorOrLegacy($mysqli,(string)($_POST['mac_address']??''));
 $dbService->setAuthenticatedMonitorId($monitorId);
+$uploadErrorMessage='Failed to upload screenshot';
+function failScreenshotUpload(string $reason,int $status=500): bool {
+    $GLOBALS['uploadErrorMessage']=$reason;
+    http_response_code($status);
+    return false;
+}
 
 // The monitor identity for every upload comes exclusively from the validated
 // device bearer session. A request IP or caller-provided MAC is not an identity.
@@ -52,34 +58,41 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
     // requireClientMonitor() already verified this session is bound to an
     // existing, owned monitor. Never rediscover identity using MAC/ARP/IP.
     $monitor_id=(int)$GLOBALS['monitorId'];
-    if($monitor_id<1)return false;
+    if($monitor_id<1)return failScreenshotUpload('Select a valid monitor',403);
 
     // Get device-based paths for file storage (uses ONLY id_{monitor_id} format)
     $monitor_paths = getMonitorPaths($monitor_id);
     if (!$monitor_paths) {
         error_log("Failed to get monitor paths for monitor_id: $monitor_id");
-        return false;
+        return failScreenshotUpload('Screenshot storage unavailable',503);
     }
     
     // Create directories if they don't exist
     foreach ($monitor_paths as $path) {
-        if (!file_exists($path)) {
-            @mkdir($path, 0755, true);
+        if (!is_dir($path) && !@mkdir($path, 0755, true) && !is_dir($path)) {
+            error_log('Screenshot storage directory could not be created');
+            return failScreenshotUpload('Screenshot storage directory unavailable',503);
+        }
+        if (!is_writable($path)) {
+            error_log('Screenshot storage directory is not writable');
+            return failScreenshotUpload('Screenshot storage directory is not writable',503);
         }
     }
     
-    if (!DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $ctime)) { http_response_code(400); return false; }
+    if (!DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $ctime))
+        return failScreenshotUpload('Invalid screenshot timestamp',400);
     // Create date-based subdirectory (no time-based subdirectories)
     $date_dir = date('Y-m-d', strtotime($ctime));
     $screens_date_path = $monitor_paths['screens'] . $date_dir . '/';
     $thumbnails_date_path = $monitor_paths['thumbnails'] . $date_dir . '/';
     
-    if (!file_exists($screens_date_path)) {
-        @mkdir($screens_date_path, 0755, true);
-    }
-    if (!file_exists($thumbnails_date_path)) {
-        @mkdir($thumbnails_date_path, 0755, true);
-    }
+    if (!is_dir($screens_date_path) && !@mkdir($screens_date_path,0755,true) && !is_dir($screens_date_path))
+        return failScreenshotUpload('Screenshot date directory unavailable',503);
+    if (!is_writable($screens_date_path))
+        return failScreenshotUpload('Screenshot date directory is not writable',503);
+    // Thumbnail creation is optional; a missing thumbnail should not reject
+    // an otherwise valid screenshot.
+    if (!is_dir($thumbnails_date_path))@mkdir($thumbnails_date_path,0755,true);
     
     // Generate filename with monitor_id and datetime (NO IP address)
     $datetime = date('Y-m-d_H.i.s', strtotime($ctime));
@@ -90,7 +103,7 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
     $imagefile_tmp = $_FILES['imagefile']['tmp_name'] ?? null;
     if (!$imagefile_tmp || !is_uploaded_file($imagefile_tmp)) {
         error_log("No valid uploaded file found");
-        return false;
+        return failScreenshotUpload('Screenshot file is missing',400);
     }
     
     // Reject oversized, malformed, and non-JPEG content before writing into the web tree.
@@ -98,7 +111,7 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
     if (($_FILES['imagefile']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
        || ($_FILES['imagefile']['size'] ?? 0) < 1 || ($_FILES['imagefile']['size'] ?? 0) > 8*1024*1024
        || !$imageInfo || $imageInfo[2] !== IMAGETYPE_JPEG || $imageInfo[0]>8192 || $imageInfo[1]>8192) {
-        http_response_code(400); return false;
+        return failScreenshotUpload('Invalid JPEG screenshot or upload larger than 8 MB',400);
     }
     $img_name = $monitor_id . '_' . $datetime . '_' . bin2hex(random_bytes(8)) . '.jpg';
     $file_location = $screens_date_path . $img_name;
@@ -156,11 +169,11 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
             @unlink($file_location);
             if ($thumb_file_location) @unlink($thumb_file_location);
             error_log("Failed to store screenshot metadata in database");
-            return false;
+            return failScreenshotUpload('Failed to store screenshot metadata',503);
         }
     } else {
         error_log("Failed to move uploaded file to destination");
-        return false;
+        return failScreenshotUpload('Failed to write screenshot; check storage permissions and disk space',503);
     }
 }
 
@@ -279,10 +292,15 @@ switch ($request_type_param) {
             $com_name = $_POST['com_name'] ?? '';
             $ctime = $_POST['ctime'] ?? date('Y-m-d H:i:s');
             
-            $result = uploadCacheScreenWithMetadata($com_name, $ctime, $_FILES['imagefile']);
+            try {
+                $result=uploadCacheScreenWithMetadata($com_name,$ctime,$_FILES['imagefile']);
+            } catch (Throwable $error) {
+                error_log('Screenshot upload exception: '.$error->getMessage());
+                $result=failScreenshotUpload('Screenshot upload failed on server',500);
+            }
             if (!$result) {
                 if(http_response_code()<400)http_response_code(500);
-                echo json_encode(['error' => 'Failed to upload screenshot']);
+                echo json_encode(['error'=>$uploadErrorMessage]);
             }
         } else {
             http_response_code(400);
