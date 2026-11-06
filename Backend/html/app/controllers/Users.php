@@ -10,12 +10,13 @@ class Users extends Base {
     
     public function index() {
         $scope=$this->isScopedAdmin()
-            ? 'WHERE u.role=:target_role AND u.id IN (
+            ? 'WHERE u.id=:self_id OR (u.role=:target_role AND u.id IN (
                 SELECT a.managed_user_id FROM admin_user_assignments a
-                WHERE a.admin_user_id=:manager_id)'
+                WHERE a.admin_user_id=:manager_id))'
             : '';
         $params=$this->isScopedAdmin()
-            ? ['target_role'=>ROLE_USER,'manager_id'=>(int)$this->user['id']] : [];
+            ? ['self_id'=>(int)$this->user['id'],
+               'target_role'=>ROLE_USER,'manager_id'=>(int)$this->user['id']] : [];
         $users = $this->db->fetchAll(
             "SELECT u.id,u.user_no,u.name,u.role,u.created_at,u.must_change_password,
                     MAX(m.last_monitor_tic) AS last_activity,
