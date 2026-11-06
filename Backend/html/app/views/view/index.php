@@ -539,6 +539,9 @@ ob_start();
 .history-range-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
 .history-range-controls label{font-size:.8rem;flex:1;min-width:180px}
 .history-strip{display:flex;gap:6px;overflow-x:auto;min-height:64px;padding:4px 0;scrollbar-width:thin}
+.history-range-track{height:30px;position:relative;background:var(--bs-tertiary-bg);border-radius:8px;display:flex;align-items:center;gap:10px;padding:0 12px}
+.history-range-track label{flex:1;font-size:.7rem;margin:0}
+.history-range-track input{width:100%;accent-color:var(--bs-primary);display:block}
 .history-thumb{position:relative;flex:none;border:2px solid transparent;background:var(--bs-tertiary-bg);border-radius:5px;padding:3px;cursor:pointer;font-size:.72rem;min-width:110px}
 .history-thumb.selected{border-color:var(--bs-primary)}
 .history-thumb img{height:64px;width:112px;object-fit:contain;display:block;background:#171717}
@@ -1168,6 +1171,7 @@ ob_start();
                             <label>To <input id="historyTo" class="form-control form-control-sm" type="datetime-local" step="1"></label>
                             <button id="historyApplyRange" class="btn btn-sm btn-primary" type="button">Apply range</button>
                         </div>
+                        <div class="history-range-track mt-2" aria-label="Drag the time-range handles"><label>Start<input id="historyStartHandle" aria-label="Range start" type="range" min="0" max="1000" value="250"></label><label>End<input id="historyEndHandle" aria-label="Range end" type="range" min="0" max="1000" value="750"></label></div>
                         <div class="history-strip mt-2" id="historyStrip" aria-label="Click a screenshot thumbnail to navigate"></div>
                         <div class="small text-muted mt-1" id="historyTimelineStatus"></div>
                     </section>
@@ -2237,6 +2241,7 @@ function navigateScreenshot(direction) {
 
 const historyBase = <?php echo json_encode(BASE_URL); ?>;
 let historySeq=0,historyKeySeq=0,historyMonitor=0,historyStart=0,historyEnd=0,historyActive=0;
+let historyDomainStart=0,historyDomainEnd=0;
 function historyUtc(ms){
     const d=new Date(ms);
     return d.toISOString().slice(0,19).replace('T',' ');
@@ -2254,6 +2259,12 @@ function historyRange(start,end){
         $('#historyTimelineStatus').text('Select a valid time range up to 24 hours.');return;
     }
     historyStart=start;historyEnd=end;
+    if(!historyDomainStart||start<historyDomainStart||end>historyDomainEnd){
+        const extent=Math.max(60*60000,end-start);
+        historyDomainStart=start-extent;historyDomainEnd=end+extent;
+    }
+    $('#historyStartHandle').val(Math.round(1000*(start-historyDomainStart)/(historyDomainEnd-historyDomainStart)));
+    $('#historyEndHandle').val(Math.round(1000*(end-historyDomainStart)/(historyDomainEnd-historyDomainStart)));
     $('#historyFrom').val(historyInput(start));$('#historyTo').val(historyInput(end));
     fetchHistoryShots();
     fetchHistoryKeys();
@@ -2262,6 +2273,7 @@ function startHistoryViewer(id,timestamp){
     const found=/^screenshot_(\d+)_/.exec(id||'');
     if(!found)return;
     historyMonitor=Number(found[1]);
+    historyDomainStart=0;historyDomainEnd=0;
     historyActive=id;
     const center=timestamp>0?timestamp*1000:Date.now();
     const span=Number($('#historyScale').val()||15)*60000;
@@ -2332,6 +2344,12 @@ async function fetchHistoryKeys(){
         if(data.limited)body.append($('<div class="text-warning mt-2"/>').text('Showing first 2,000 events. Narrow the range for more.'));
     }catch(e){if(seq===historyKeySeq)$('#historyTranscriptBody').text('Cannot load keyboard activity: '+e.message);}
 }
+$(document).on('change','#historyStartHandle,#historyEndHandle',function(){
+    let a=Number($('#historyStartHandle').val()),b=Number($('#historyEndHandle').val());
+    if(a>=b){if(this.id==='historyStartHandle')a=Math.max(0,b-1);else b=Math.min(1000,a+1);}
+    const width=historyDomainEnd-historyDomainStart;
+    historyRange(historyDomainStart+a*width/1000,historyDomainStart+b*width/1000);
+});
 $(document).on('click','#historyApplyRange',()=>historyRange(historyFromInput($('#historyFrom').val()),historyFromInput($('#historyTo').val())));
 $(document).on('change','#historyScale',()=>{
     if(!historyMonitor)return;
