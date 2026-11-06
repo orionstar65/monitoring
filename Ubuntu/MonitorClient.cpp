@@ -838,7 +838,7 @@ void MonitorClient::getChromeHistory() {
     
     for (const QString& dbPath : profilePaths) {
         if (!dbPath.isEmpty()) {
-            QString query = "SELECT datetime(visit_time/1000000-11644473600, 'unixepoch', '+10:00') as last_visit_time, urls.url AS url, urls.title AS title, visit_time "
+            QString query = "SELECT datetime(visit_time/1000000-11644473600, 'unixepoch', '+00:00') as last_visit_time, urls.url AS url, urls.title AS title, visit_time "
                            "FROM urls, visits WHERE visits.url = urls.id";
             queryBrowserHistory(dbPath, query, "Chrome");
         }
@@ -851,7 +851,7 @@ void MonitorClient::getEdgeHistory() {
     
     for (const QString& dbPath : profilePaths) {
         if (!dbPath.isEmpty()) {
-            QString query = "SELECT datetime(visit_time/1000000-11644473600, 'unixepoch', '+10:00') as last_visit_time, urls.url AS url, urls.title AS title, visit_time "
+            QString query = "SELECT datetime(visit_time/1000000-11644473600, 'unixepoch', '+00:00') as last_visit_time, urls.url AS url, urls.title AS title, visit_time "
                            "FROM urls, visits WHERE visits.url = urls.id";
             queryBrowserHistory(dbPath, query, "Edge");
         }
@@ -864,7 +864,7 @@ void MonitorClient::getOperaHistory() {
     
     for (const QString& dbPath : profilePaths) {
         if (!dbPath.isEmpty()) {
-            QString query = "SELECT datetime(visit_time/1000000-11644473600, 'unixepoch', '+10:00') as last_visit_time, urls.url AS url, urls.title AS title, visit_time "
+            QString query = "SELECT datetime(visit_time/1000000-11644473600, 'unixepoch', '+00:00') as last_visit_time, urls.url AS url, urls.title AS title, visit_time "
                            "FROM urls, visits WHERE visits.url = urls.id";
             queryBrowserHistory(dbPath, query, "Opera");
         }
@@ -877,7 +877,7 @@ void MonitorClient::getBraveHistory() {
     
     for (const QString& dbPath : profilePaths) {
         if (!dbPath.isEmpty()) {
-            QString query = "SELECT datetime(visit_time/1000000-11644473600, 'unixepoch', '+10:00') as last_visit_time, urls.url AS url, urls.title AS title, visit_time "
+            QString query = "SELECT datetime(visit_time/1000000-11644473600, 'unixepoch', '+00:00') as last_visit_time, urls.url AS url, urls.title AS title, visit_time "
                            "FROM urls, visits WHERE visits.url = urls.id";
             queryBrowserHistory(dbPath, query, "Brave");
         }
@@ -890,7 +890,7 @@ void MonitorClient::getMidoriHistory() {
     
     for (const QString& dbPath : profilePaths) {
         if (!dbPath.isEmpty()) {
-            QString query = "SELECT datetime(visit_date/1000, 'unixepoch', '+10:00') as last_visit_time, p.url, h.visit_date as visit_time "
+            QString query = "SELECT datetime(visit_date/1000, 'unixepoch', '+00:00') as last_visit_time, p.url, h.visit_date as visit_time "
                            "FROM moz_places p JOIN moz_historyvisits h ON p.id = h.place_id ";
             queryBrowserHistory(dbPath, query, "Midori");
         }
@@ -903,7 +903,7 @@ void MonitorClient::getYandexHistory() {
     
     for (const QString& dbPath : profilePaths) {
         if (!dbPath.isEmpty()) {
-            QString query = "SELECT datetime(visit_time/1000000-11644473600, 'unixepoch', '+10:00') as last_visit_time, urls.url as url, visit_time "
+            QString query = "SELECT datetime(visit_time/1000000-11644473600, 'unixepoch', '+00:00') as last_visit_time, urls.url as url, visit_time "
                            "FROM urls, visits WHERE visits.url = urls.id";
             queryBrowserHistory(dbPath, query, "Yandex");
         }
@@ -916,7 +916,7 @@ void MonitorClient::getSlimjetHistory() {
     
     for (const QString& dbPath : profilePaths) {
         if (!dbPath.isEmpty()) {
-            QString query = "SELECT datetime(visit_time/1000000-11644473600, 'unixepoch', '+10:00') as last_visit_time, urls.url as url, visit_time "
+            QString query = "SELECT datetime(visit_time/1000000-11644473600, 'unixepoch', '+00:00') as last_visit_time, urls.url as url, visit_time "
                            "FROM urls, visits WHERE visits.url = urls.id";
             queryBrowserHistory(dbPath, query, "Slimjet");
         }
@@ -941,7 +941,7 @@ void MonitorClient::getFalkonHistory() {
     
     for (const QString& dbPath : profilePaths) {
         if (!dbPath.isEmpty()) {
-            QString query = "SELECT datetime(date/1000, 'unixepoch', '+10:00') as last_visit_time, url, date as visit_time "
+            QString query = "SELECT datetime(date/1000, 'unixepoch', '+00:00') as last_visit_time, url, date as visit_time "
                            "FROM history WHERE id > 0";
             queryBrowserHistory(dbPath, query, "Falkon");
         }
@@ -1203,7 +1203,7 @@ void MonitorClient::getVivaldiHistory() {
     
     for (const QString& dbPath : profilePaths) {
         if (!dbPath.isEmpty()) {
-            QString query = "SELECT datetime(visit_time/1000000-11644473600, 'unixepoch', '+10:00') as last_visit_time, urls.url AS url, visit_time "
+            QString query = "SELECT datetime(visit_time/1000000-11644473600, 'unixepoch', '+00:00') as last_visit_time, urls.url AS url, visit_time "
                            "FROM urls, visits WHERE visits.url = urls.id";
             queryBrowserHistory(dbPath, query, "Vivaldi");
         }
