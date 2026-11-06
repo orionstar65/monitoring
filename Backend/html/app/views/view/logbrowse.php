@@ -716,6 +716,13 @@ function showCleanupProgress(message, isError) {
     panel.style.display = 'block';
     panel.className = 'cleanup-progress' + (isError ? ' error' : '');
     panel.innerHTML = message;
+    const shared=document.getElementById('unifiedCleanupProgress');
+    if(shared){
+        shared.hidden=false;
+        shared.className='small px-2 py-1 '+(isError?'text-danger':'text-muted');
+        // Keep cleanup messages in the main action bar when embedded.
+        shared.innerHTML=message;
+    }
 }
 
 function buildCleanupBody(extra) {
