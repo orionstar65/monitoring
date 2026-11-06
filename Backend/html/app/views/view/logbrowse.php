@@ -591,6 +591,7 @@ if (!$embeddedLogBrowse) {
 <script>
 <?php if($embeddedLogBrowse): ?>(function(){<?php endif; ?>
 const unifiedLogPrefix=<?= json_encode($embeddedLogBrowse ? "unifiedLogs." : "") ?>;
+const isEmbeddedMonitoring = <?= $embeddedLogBrowse ? 'true' : 'false' ?>;
 // Global variables
 let currentTab = 'browser';
 let currentPage = 1;
@@ -611,10 +612,16 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Refresh available devices from the same source used by the live status pages.
     // Keep server-rendered options if the API is temporarily unavailable.
-    loadAvailableDevices();
+    // The unified workspace has a single monitor list on the left. Never
+    // query all-device logs or aggregate log counts on initial page load.
+    if(!isEmbeddedMonitoring)loadAvailableDevices();
     updateFilters();
-    loadStats();
-    loadLogs();
+    if(!isEmbeddedMonitoring || currentFilters.device_id){
+        loadStats();
+        loadLogs();
+    } else {
+        showSelectMonitorNotice();
+    }
 });
 
 function loadAvailableDevices() {
@@ -879,8 +886,20 @@ function formatBytes(bytes) {
     return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
 }
 
+function showSelectMonitorNotice(){
+    const panel=document.getElementById('tableContainer');
+    if(panel)panel.innerHTML='<div class="p-4 text-center text-muted" role="status"><i class="fas fa-desktop mb-2 d-block"></i>Select a monitor from the left panel to load its history.</div>';
+    const pagination=document.getElementById('paginationPanel');
+    if(pagination)pagination.style.display='none';
+}
 function loadStats() {
     const seq=++browseStatsRequest;
+    if(isEmbeddedMonitoring&&!currentFilters.device_id){
+        ['totalLogs','browserLogs','keyLogs','usbLogs'].forEach(id=>{
+            const el=document.getElementById(id);if(el)el.textContent='—';
+        });
+        return;
+    }
     const params = new URLSearchParams(currentFilters);
     
     fetch(`<?php echo BASE_URL; ?>logbrowse/api_stats?${params}`)
@@ -901,6 +920,14 @@ function loadStats() {
 
 function loadLogs() {
     const seq=++browseLogsRequest;
+    // SQL pagination already exists (LIMIT/OFFSET); the expensive all-device
+    // scan is unnecessary when the user hasn't selected a monitor.
+    if(isEmbeddedMonitoring&&!currentFilters.device_id){
+        keyRulerState=null;
+        keyContextRequestId++;
+        showSelectMonitorNotice();
+        return;
+    }
     const params = new URLSearchParams({
         ...currentFilters,
         page: currentPage,
@@ -1031,6 +1058,7 @@ function createKeyTimeline(logs) {
     </div>`;
 }
 async function loadFullKeyTimeline(state) {
+    if(isEmbeddedMonitoring&&!currentFilters.device_id)return;
     const info=document.getElementById('keyTimelineInfo');
     const params=new URLSearchParams({
         start_date:currentFilters.start_date||localDateString(),
