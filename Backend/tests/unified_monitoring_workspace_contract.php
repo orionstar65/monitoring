@@ -67,6 +67,20 @@ $checks=[
  'Keylog uses same CCTV geometry'=>str_contains($browse,'MonitorCctvRange.drag')
      &&str_contains($browse,'MonitorCctvRange.hit')&&str_contains($browse,'zoomKeyRuler'),
  'Log management old route redirects to unified view'=>str_contains($view,"redirect('view?tab=browser'"),
+ 'Portal footer is pushed to the viewport bottom without fixed positioning'=>
+     str_contains($layout,'#mainContent {') &&
+     str_contains($layout,'display: flex;'.PHP_EOL.'            flex-direction: column;') &&
+     str_contains($layout,'min-height: 100dvh;') &&
+     str_contains($layout,'#mainContent > .content-area {') &&
+     str_contains($layout,'flex: 1 0 auto;') &&
+     str_contains($layout,'#mainContent > .footer {') &&
+     str_contains($layout,'margin-top: auto;') &&
+     !str_contains($layout,'padding-bottom: 120px;') &&
+     !str_contains($layout,'margin-top: 48px;'),
+ 'Footer remains a normal document-flow element after page content'=>
+     strpos($layout,'<footer class="footer">') >
+         strpos($layout,'<?php echo $content ?? \'\'; ?>') &&
+     strpos($layout,'</footer>') < strpos($layout,'</main>'),
  'Admin sidebar has only unified monitoring entry'=>!str_contains($layout,'<span>Log Browse</span>')
      &&!str_contains($layout,'<span>Merge Logs</span>'),
  'Browser and Keyboard tabs require an explicit monitor in embedded workspace'=>str_contains($browse,'if(isEmbeddedMonitoring&&!currentFilters.device_id)')
