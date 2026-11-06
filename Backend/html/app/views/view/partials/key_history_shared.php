@@ -114,4 +114,43 @@ function monitorTranscriptKeyRows(keys,escapeHtml) {
         +(specials?'<div class="small text-muted mt-3 mb-1">Other key events</div><div class="key-remaining">'+specials+'</div>':'');
 }
 
+
+/** Geometry shared by the Keylog and Screenshot CCTV rulers. All values are milliseconds. */
+const MonitorCctvRange = Object.freeze({
+    clamp(value,min,max){ return Math.min(max,Math.max(min,value)); },
+    point(event,ruler,state){
+        const box=ruler.getBoundingClientRect();
+        const ratio=this.clamp((event.clientX-box.left)/Math.max(1,box.width),0,1);
+        return state.start+ratio*(state.end-state.start);
+    },
+    hit(state,time,width,{seek=false,cursor=NaN,playhead=false}={}){
+        const pxPerMs=Math.max(1,width)/Math.max(1,state.end-state.start);
+        if(seek && (playhead || (Number.isFinite(cursor)&&Math.abs(time-cursor)*pxPerMs<=8)))
+            return 'seek';
+        const selectedPixels=(state.rangeEnd-state.rangeStart)*pxPerMs;
+        const tolerance=Math.min(12,Math.max(2,selectedPixels*.3))/pxPerMs;
+        const left=Math.abs(time-state.rangeStart),right=Math.abs(time-state.rangeEnd);
+        const duration=state.rangeEnd-state.rangeStart;
+        if(time>state.rangeStart&&time<state.rangeEnd&&left>duration*.3&&right>duration*.3)return 'pan';
+        if(left<=tolerance||right<=tolerance)return left<=right?'start':'end';
+        if(time>state.rangeStart&&time<state.rangeEnd)return 'pan';
+        return seek?'seek':left<=right?'start':'end';
+    },
+    drag(state,mode,from,to,anchor,time){
+        const delta=time-anchor,minimum=1000;
+        if(mode==='pan'){
+            const duration=to-from;
+            const start=this.clamp(from+delta,state.start,state.end-duration);
+            return [start,start+duration];
+        }
+        if(mode==='start')return [this.clamp(from+delta,state.start,to-minimum),to];
+        if(mode==='end')return [from,this.clamp(to+delta,from+minimum,state.end)];
+        return [from,to];
+    },
+    zoomScroll({oldPx,newPx,domainStart,anchorTime,anchorX,scrollWidth}){
+        const offset=(anchorTime-domainStart)/60000*newPx-anchorX;
+        return this.clamp(offset,0,Math.max(0,scrollWidth));
+    }
+});
+
 </script>
