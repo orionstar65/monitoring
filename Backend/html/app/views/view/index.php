@@ -1744,7 +1744,15 @@ function loadMonitors() {
             }
             
             filteredMonitors = [...allMonitors];
+            if(!unifiedInitialSelectionDone){
+                unifiedInitialSelectionDone=true;
+                const requested=Number(new URL(window.location.href).searchParams.get('monitor_id')||0);
+                if(requested>0&&allMonitors.some(m=>m.id===requested))selectedMonitors=[requested];
+            }
             updateMonitorList(filteredMonitors);
+            const selected=allMonitors.find(m=>m.id===selectedMonitors[0]);
+            $('#unifiedSelectionSummary').text(selected?String(selected.user_no||'—')+': '+String(selected.username||'Unassigned')+' · #'+selected.id:'All devices');
+            if(window.unifiedLogs)window.unifiedLogs.selectMonitor(selected?.id||'');
             updateStatusStats(allMonitors);
             $('#lastLiveRefresh').text('Updated '+new Date().toLocaleTimeString());
         },
@@ -2311,6 +2319,160 @@ function navigateScreenshot(direction) {
 }
 
 
+
+
+/* Unified workspace: one monitor selection, one filter/action bar, all log tabs. */
+let unifiedActiveTab='screenshots',unifiedSettingsRequest=0,unifiedInitialSelectionDone=false;
+const unifiedBase = <?php echo json_encode(BASE_URL); ?>;
+function unifiedSelectTab(tab,persist=true){
+    if(!['screenshots','key','browser','usb','settings'].includes(tab))tab='screenshots';
+    unifiedActiveTab=tab;
+    document.querySelectorAll('[data-monitor-tab]').forEach(button=>{
+        const selected=button.dataset.monitorTab===tab;
+        button.classList.toggle('active',selected);
+        button.setAttribute('aria-selected',String(selected));
+        button.tabIndex=selected?0:-1;
+    });
+    $('#unifiedScreenshotPanel').prop('hidden',tab!=='screenshots');
+    $('#unifiedLogPanel').prop('hidden',!['key','browser','usb'].includes(tab));
+    $('#unifiedSettingsPanel').prop('hidden',tab!=='settings');
+    if(['key','browser','usb'].includes(tab)&&window.unifiedLogs){
+        window.unifiedLogs.switchTab(tab);
+    }
+    if(tab==='settings')unifiedLoadSettings();
+    if(tab==='screenshots')loadScreenshotsForSelectedMonitor(1);
+    if(persist)unifiedUpdateUrl();
+}
+function unifiedUpdateUrl(){
+    const url=new URL(window.location.href);
+    if(unifiedActiveTab==='screenshots')url.searchParams.delete('tab');
+    else url.searchParams.set('tab',unifiedActiveTab);
+    if(selectedMonitors.length===1)url.searchParams.set('monitor_id',String(selectedMonitors[0]));
+    else url.searchParams.delete('monitor_id');
+    window.history.replaceState(null,'',url.pathname+url.search+url.hash);
+}
+function unifiedSelectMonitor(id,persist=true){
+    selectedMonitors=Number.isInteger(id)&&id>0?[id]:[];
+    updateMonitorList(filteredMonitors);
+    const monitor=allMonitors.find(m=>m.id===id);
+    $('#unifiedSelectionSummary').text(monitor?
+        String(monitor.user_no||'—')+': '+String(monitor.username||'Unassigned')+' · #'+id:
+        'All devices');
+    window.unifiedLogs?.selectMonitor(id||'');
+    if(unifiedActiveTab==='screenshots')loadScreenshotsForSelectedMonitor(1);
+    else if(unifiedActiveTab==='settings')unifiedLoadSettings();
+    if(persist)unifiedUpdateUrl();
+}
+function unifiedApplyDates(){
+    const from=$('#unifiedStartDate').val(),to=$('#unifiedEndDate').val();
+    if(from&&to&&from>to){alert('Start date must be on or before end date.');return;}
+    window.headerStartDate=from;window.headerEndDate=to;
+    window.unifiedLogs?.setDates(from||unifiedToday(),to||unifiedToday());
+    if(unifiedActiveTab==='screenshots')loadScreenshotsForSelectedMonitor(1);
+}
+function unifiedToday(){
+    const d=new Date();
+    return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
+}
+function unifiedField(label,input){
+    return '<label class="form-label">'+label+'</label>'+input;
+}
+function unifiedLoadSettings(){
+    const panel=$('#unifiedSettingsContent');
+    const id=selectedMonitors.length===1?selectedMonitors[0]:0;
+    const request=++unifiedSettingsRequest;
+    if(!id){panel.text('Choose a monitor from the left list to edit its settings.');return;}
+    panel.text('Loading monitor settings…');
+    fetch(unifiedBase+'view/api_monitor_settings?'+new URLSearchParams({monitor_id:String(id)}),{credentials:'same-origin'})
+    .then(async response=>{
+        const data=await response.json();
+        if(!response.ok||!data.success)throw Error(data.error||'Cannot load settings');
+        return data;
+    }).then(data=>{
+        if(request!==unifiedSettingsRequest||selectedMonitors[0]!==id)return;
+        const m=data.monitor,escape=escapeViewerText;
+        const selected=(a,b)=>String(a??'')===String(b??'')?' selected':'';
+        const chosen=(value)=>String(value)==='1'?' checked':'';
+        const users=(data.users||[]).map(u=>'<option value="'+Number(u.id)+'"'
+            +selected(m.owner_user_id,u.id)+'>'+escape((u.user_no||'—')+': '+(u.name||'')+' ('+Number(u.device_count||0)+' devices)')+'</option>').join('');
+        const os=['','Windows','Mac','Ubuntu'].map(v=>'<option value="'+escape(v)+'"'+selected(m.platform||'',v)+'>'+escape(v||'Not set')+'</option>').join('');
+        const types=['desktop','laptop','server'].map(v=>'<option value="'+v+'"'+selected(m.type||'desktop',v)+'>'+escape(v)+'</option>').join('');
+        const locked=!!(Number(m.settings_locked)||Number(m.assignment_locked));
+        const targets=(data.merge_targets||[]).map(t=>'<option value="'+Number(t.id)+'">'
+            +escape((t.platform||'—')+' · '+(t.type||'Desktop')+' · '+(t.last_seen_ip||t.ip_address||'—')+' #'+Number(t.id))+'</option>').join('');
+        panel.html('<div class="row g-2">'
+            +'<div class="col-12"><div class="d-flex align-items-center gap-2 justify-content-between"><h6 class="mb-0">Monitor settings · #'+id+'</h6><span class="small text-muted">'
+            +escape((m.user_no||'—')+': '+(m.username||'Unassigned'))+'</span></div></div>'
+            +'<div class="col-xl-8"><div class="card"><div class="card-body p-2">'
+            +'<form method="post" action="'+unifiedBase+'monitors/edit/'+id+'" id="unifiedMonitorSettingsForm">'
+            +'<input type="hidden" name="return_to" value="monitoring">'
+            +'<div class="row g-2">'
+            +'<div class="col-12">'+unifiedField('Assigned user','<select class="form-select" name="owner_user_id"><option value="">Unassigned</option>'+users+'</select>')+'</div>'
+            +'<div class="col-sm-6">'+unifiedField('OS','<select class="form-select" name="platform">'+os+'</select>')+'</div>'
+            +'<div class="col-sm-6">'+unifiedField('Machine','<select class="form-select" name="type">'+types+'</select>')+'</div>'
+            +'<div class="col-12">'+unifiedField('Remark','<textarea class="form-control" maxlength="500" name="remark" rows="2">'+escape(m.remark||'')+'</textarea>')+'</div>'
+            +'<div class="col-12">'+unifiedField('Slack ID','<input class="form-control" maxlength="255" name="slack_id" value="'+escape(m.slack_id||'')+'">')+'</div>'
+            +'<div class="col-12"><label><input type="checkbox" name="settings_locked" value="1"'+(locked?' checked':'')+'> Lock monitor settings and assignment</label></div>'
+            +'<div class="col-12 text-end"><button type="submit" class="btn btn-sm btn-primary">Save changes</button></div>'
+            +'</div></form></div></div>'
+            +'<div class="card mt-2"><div class="card-body p-2"><strong>Merge this monitor into another</strong>'
+            +'<p class="small text-muted mb-2">Only monitors assigned to the same user are eligible. The source is deleted only when every log and statistics record has been transferred.</p>'
+            +'<div class="d-flex flex-wrap gap-2"><select id="unifiedMergeTarget" class="form-select form-select-sm flex-fill"><option value="">Select target monitor</option>'+targets+'</select>'
+            +'<button id="unifiedMergeButton" class="btn btn-sm btn-outline-danger" type="button"'+(targets?'':' disabled')+'>Merge into target</button></div>'
+            +'<div class="small mt-2" id="unifiedMergeResult" role="status" aria-live="polite"></div>'
+            +'</div></div></div>'
+            +'<div class="col-xl-4"><div class="card"><div class="card-body p-2">'
+            +'<strong>Device information</strong><dl class="small mt-2 mb-0">'
+            +'<dt>Monitor ID</dt><dd>#'+id+'</dd>'
+            +'<dt>User No</dt><dd>'+escape(m.user_no||'—')+'</dd>'
+            +'<dt>Configured IP</dt><dd>'+escape(m.ip_address||'—')+'</dd>'
+            +'<dt>Observed IP</dt><dd>'+escape(m.last_seen_ip||'—')+'</dd>'
+            +'<dt>MAC</dt><dd>'+escape(m.mac_address||'—')+'</dd>'
+            +'<dt>Last activity</dt><dd>'+escape(m.last_monitor_tic||'Never')+'</dd>'
+            +'<dt>Created</dt><dd>'+escape(m.created_at||'—')+'</dd>'
+            +'<dt>Updated</dt><dd>'+escape(m.updated_at||'—')+'</dd>'
+            +'</dl></div></div></div></div>');
+    }).catch(error=>{if(request===unifiedSettingsRequest)panel.text('Cannot load monitor settings: '+error.message);});
+}
+$(document).on('click','#unifiedMergeButton',async function(){
+    const source=selectedMonitors.length===1?selectedMonitors[0]:0;
+    const target=Number($('#unifiedMergeTarget').val());
+    if(!source||!target||source===target)return;
+    if(!confirm('Merge monitor #'+source+' into #'+target+'? This moves records and may remove the source monitor. This cannot be undone.'))return;
+    const button=$(this).prop('disabled',true);
+    const status=$('#unifiedMergeResult').text('Merging records…');
+    try{
+        const body=new URLSearchParams({source_id:String(source),target_id:String(target)});
+        const response=await fetch(unifiedBase+'merge/api_merge',{method:'POST',credentials:'same-origin',
+            headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
+        const data=await response.json();
+        if(!response.ok||!data.success)throw Error(data.error||'Merge failed');
+        if(data.partial)status.text('Merge partially completed: '+(data.errors||[]).join('; '));
+        else status.text('Merge complete. Source '+(data.source_deleted?'removed.':'retained.'));
+        loadMonitors();
+        if(data.source_deleted)unifiedSelectMonitor(target);
+        else unifiedLoadSettings();
+    }catch(error){status.text('Merge failed: '+error.message);}
+    finally{button.prop('disabled',false);}
+});
+$(document).on('click','[data-monitor-tab]',function(){unifiedSelectTab(this.dataset.monitorTab);});
+$(document).on('click','#unifiedApplyFilters',unifiedApplyDates);
+$(document).on('click','#unifiedClearFilters',function(){
+    $('#unifiedStartDate,#unifiedEndDate').val('');
+    window.headerStartDate='';window.headerEndDate='';
+    window.unifiedLogs?.setDates(unifiedToday(),unifiedToday());
+    if(unifiedActiveTab==='screenshots')loadScreenshotsForSelectedMonitor(1);
+});
+$(document).on('click','#unifiedRemoveScreenshots',function(){
+    if(window.unifiedLogs)window.unifiedLogs.removeScreenshots();
+});
+$(document).on('click','#refreshLiveNow',function(){window.unifiedLogs?.refresh();});
+$(document).ready(function(){
+    const url=new URL(window.location.href);
+    const requestedTab=url.searchParams.get('tab')||'screenshots';
+    $('#unifiedStartDate,#unifiedEndDate').val(unifiedToday());
+    unifiedSelectTab(requestedTab,false);
+});
 
 const historyBase = <?php echo json_encode(BASE_URL); ?>;
 const HISTORY_SCALES = {near:55,medium:14,wide:2.5};
