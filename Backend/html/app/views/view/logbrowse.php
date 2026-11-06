@@ -1025,7 +1025,7 @@ function createKeyTimeline(logs) {
             loadFullKeyTimeline(keyRulerState);
         }
     });
-    return \`<div class="key-timeline-wrapper">
+    return `<div class="key-timeline-wrapper">
       <div class="key-history-toolbar" role="toolbar" aria-label="Keyboard history range and navigation">
         <div class="key-history-summary">
           <strong>History</strong>
@@ -1060,7 +1060,7 @@ function createKeyTimeline(logs) {
         </div>
         <div id="keyContextBody">Select a time range to inspect recorded keys.</div>
       </div>
-    </div>\`;
+    </div>`;
 }
 async function loadFullKeyTimeline(state) {
     if(isEmbeddedMonitoring&&!currentFilters.device_id)return;
