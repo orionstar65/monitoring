@@ -5,30 +5,39 @@ class Users extends Base {
     
     public function __construct() {
         parent::__construct();
-        $this->requireAdmin();
+        $this->requireManager();
     }
     
     public function index() {
+        $scope=$this->isScopedAdmin()
+            ? 'WHERE u.role=:target_role AND u.id IN (
+                SELECT a.managed_user_id FROM admin_user_assignments a
+                WHERE a.admin_user_id=:manager_id)'
+            : '';
+        $params=$this->isScopedAdmin()
+            ? ['target_role'=>ROLE_USER,'manager_id'=>(int)$this->user['id']] : [];
         $users = $this->db->fetchAll(
             "SELECT u.id,u.user_no,u.name,u.role,u.created_at,u.must_change_password,
                     MAX(m.last_monitor_tic) AS last_activity,
                     COUNT(m.id) AS device_count
              FROM users u LEFT JOIN tbl_monitor_ips m ON m.owner_user_id=u.id
+             {$scope}
              GROUP BY u.id,u.user_no,u.name,u.role,u.created_at,u.must_change_password
-             ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id"
+             ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id", $params
         );
         
         $this->view('users/index', ['users' => $users]);
     }
     
     public function create() {
+        $this->requireSuperAdmin();
         $error=null;
         if (($_SERVER['REQUEST_METHOD']??'GET')==='POST') {
             $userNo=trim((string)($_POST['user_no']??''));
             $name=trim((string)($_POST['name']??''));
             $password=(string)($_POST['password']??'');
             $role=(string)($_POST['role']??ROLE_USER);
-            if(!in_array($role,['admin','user'],true))$role='user';
+            if(!in_array($role,[ROLE_SUPER_ADMIN,ROLE_SCOPED_ADMIN,ROLE_USER],true))$role=ROLE_USER;
             if(!preg_match('/^[1-9][0-9]{0,14}$/D',$userNo)||strlen($name)<2||strlen($name)>150
                 ||strlen($password)<6||strlen($password)>1024) {
                 $error='Enter a unique numeric User No (1–15 digits), full name, and password of at least 6 characters.';
@@ -51,6 +60,8 @@ class Users extends Base {
     }
 
     public function edit($id) {
+        $id=(int)$id;
+        if($this->isScopedAdmin())$this->requireUserAccess($id);
         $user = $this->db->fetch("SELECT * FROM users WHERE id = :id", ['id' => $id]);
         
         if (!$user) {
@@ -58,7 +69,8 @@ class Users extends Base {
         }
         
         $monitors = $this->db->fetchAll("SELECT m.* FROM tbl_monitor_ips m WHERE m.owner_user_id=:uid ORDER BY COALESCE(m.type,''),COALESCE(m.platform,''),INET_ATON(COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address)),COALESCE(NULLIF(m.last_seen_ip,''),m.ip_address),m.id",['uid'=>$id]);
-        $accounts = $this->db->fetchAll('SELECT u.id,u.user_no,u.name,COUNT(m.id) AS device_count FROM users u LEFT JOIN tbl_monitor_ips m ON m.owner_user_id=u.id GROUP BY u.id,u.user_no,u.name ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id');
+        $accounts = $this->isScopedAdmin()? [] :
+            $this->db->fetchAll('SELECT u.id,u.user_no,u.name,COUNT(m.id) AS device_count FROM users u LEFT JOIN tbl_monitor_ips m ON m.owner_user_id=u.id GROUP BY u.id,u.user_no,u.name ORDER BY CAST(u.user_no AS UNSIGNED),u.name,u.id');
         require_once BASEPATH . 'app/services/StatusService.php';
         $statusService=StatusService::getInstance();
         foreach($monitors as &$monitor){$monitor['status_info']=$statusService->calculateClientStatus($monitor['last_monitor_tic']??null);}
@@ -66,8 +78,14 @@ class Users extends Base {
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $name=trim((string)($_POST['name']??''));
-            $role = $_POST['role'] ?? ROLE_USER;
-            if(!in_array($role,['admin','user'],true))$role='user';
+            $role=$this->isAdmin()?($_POST['role']??$user['role']):$user['role'];
+            if(!in_array($role,[ROLE_SUPER_ADMIN,ROLE_SCOPED_ADMIN,ROLE_USER],true)){
+                http_response_code(400);exit('Unknown role');
+            }
+            if($this->isScopedAdmin()&&($user['role']!==ROLE_USER
+                || (isset($_POST['role'])&&$_POST['role']!==ROLE_USER))){
+                http_response_code(403);exit('Role changes require Super Admin');
+            }
             $password = $_POST['password'] ?? '';
             $userNo=trim((string)($_POST['user_no']??''));
             // User No is a unique, administrator-managed numeric identifier.
@@ -96,10 +114,10 @@ class Users extends Base {
                         $data['must_change_password'] = 1;
                     }
                     
-                    if($user['role']==='admin' && $role!=='admin'){
-                        $admins=(int)$this->db->fetch("SELECT COUNT(*) AS n FROM users WHERE role='admin'")['n'];
+                    if($user['role']===ROLE_SUPER_ADMIN && $role!==ROLE_SUPER_ADMIN){
+                        $admins=(int)$this->db->fetch("SELECT COUNT(*) AS n FROM users WHERE role=:role",['role'=>ROLE_SUPER_ADMIN])['n'];
                         if($admins<=1){
-                            $this->view('users/edit',['user'=>$user,'error'=>'Cannot demote the last administrator.','monitors'=>$monitors,'accounts'=>$accounts]);
+                            $this->view('users/edit',['user'=>$user,'error'=>'Cannot demote the last Super Admin.','monitors'=>$monitors,'accounts'=>$accounts]);
                             return;
                         }
                     }
@@ -143,6 +161,46 @@ class Users extends Base {
         $this->view('users/edit', ['user' => $user, 'error' => $error ?? null, 'monitors'=>$monitors, 'accounts'=>$accounts]);
     }
     
+    /** Super Admin-only assignment of regular user accounts to a delegated Admin. */
+    public function assign_users($adminId) {
+        $this->requireSuperAdmin();
+        if(($_SERVER['REQUEST_METHOD']??'')!=='POST'){http_response_code(405);exit('POST required');}
+        $adminId=(int)$adminId;
+        $target=$this->db->fetch('SELECT id,role FROM users WHERE id=:id',['id'=>$adminId]);
+        if(!$target||$target['role']!==ROLE_SCOPED_ADMIN){http_response_code(400);exit('Target must be a delegated Admin');}
+        $requested=$_POST['managed_user_ids']??[];
+        if(!is_array($requested)||count($requested)>5000){http_response_code(400);exit('Invalid selection');}
+        $ids=[];
+        foreach($requested as $value){
+            $n=filter_var($value,FILTER_VALIDATE_INT);
+            if(!$n||$n<1){http_response_code(400);exit('Invalid user ID');}
+            $ids[$n]=$n;
+        }
+        if($ids){
+            $placeholders=implode(',',array_fill(0,count($ids),'?'));
+            $matches=$this->db->fetchAll(
+                "SELECT id FROM users WHERE role=? AND id IN ({$placeholders})",
+                array_merge([ROLE_USER],array_values($ids))
+            );
+            if(count($matches)!==count($ids)){http_response_code(400);exit('Only regular users may be assigned');}
+        }
+        $connection=$this->db->getConnection();
+        $connection->beginTransaction();
+        try{
+            $this->db->query('DELETE FROM admin_user_assignments WHERE admin_user_id=:admin',['admin'=>$adminId]);
+            foreach($ids as $id)$this->db->query(
+                'INSERT INTO admin_user_assignments (admin_user_id,managed_user_id) VALUES (:admin,:managed)',
+                ['admin'=>$adminId,'managed'=>$id]
+            );
+            $connection->commit();
+        }catch(Throwable $error){
+            if($connection->inTransaction())$connection->rollBack();
+            throw $error;
+        }
+        $_SESSION['success_message']='Assigned users updated.';
+        $this->redirect('users/edit/'.$adminId);
+    }
+
     /** Administrative reassignment independent of the monitor's client-side lock. */
     public function remap_monitor($id) {
         $this->requireAdmin();
@@ -163,6 +221,7 @@ class Users extends Base {
     }
 
     public function reset_password($id) {
+        $this->requireSuperAdmin();
         if (($_SERVER['REQUEST_METHOD']??'') !== 'POST') {
             http_response_code(405);exit('POST required');
         }
@@ -184,6 +243,7 @@ class Users extends Base {
     }
 
     public function delete($id) {
+        $this->requireSuperAdmin();
         if(($_SERVER['REQUEST_METHOD']??'GET')!=='POST'){http_response_code(405);exit('POST required');}
         if ($id == $_SESSION['user_id']) {
             $this->redirect('users');
@@ -191,9 +251,9 @@ class Users extends Base {
         
         $target=$this->db->fetch('SELECT role FROM users WHERE id=:id',['id'=>$id]);
         if(!$target){http_response_code(404);exit('User not found');}
-        if($target['role']==='admin'){
-            $admins=(int)$this->db->fetch("SELECT COUNT(*) AS n FROM users WHERE role='admin'")['n'];
-            if($admins<=1){http_response_code(409);exit('Cannot delete the last administrator');}
+        if($target['role']===ROLE_SUPER_ADMIN){
+            $admins=(int)$this->db->fetch("SELECT COUNT(*) AS n FROM users WHERE role=:role",['role'=>ROLE_SUPER_ADMIN])['n'];
+            if($admins<=1){http_response_code(409);exit('Cannot delete the last Super Admin');}
         }
         $this->db->delete('users', 'id = :id', ['id' => $id]);
         $this->redirect('users');
