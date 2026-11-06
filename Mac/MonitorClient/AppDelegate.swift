@@ -2138,9 +2138,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     @objc func TakeScreenShotsAndPost() {
+        captureAndPostScreenshot(manual:false)
+    }
+
+    // Reuses the periodic capture pipeline for a user-requested screenshot,
+    // with result feedback only after the server confirms storage.
+    private func captureAndPostScreenshot(manual:Bool) {
         guard isScreenRecordingEnabled() else {
             logError("Screen recording permission not granted", context: "Screenshot")
             requestScreenRecordingPermission()
+            if manual { reportManualScreenshot(false,"Screen Recording permission denied") }
             return
         }
         // ScreenCaptureKit replaces deprecated CGWindowListCreateImage.
@@ -2152,6 +2159,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     false, onScreenWindowsOnly: true).displays
                 guard !displays.isEmpty else {
                     self.logError("No capture displays found", context: "Screenshot")
+                    if manual { self.reportManualScreenshot(false,"No displays available to capture") }
                     return
                 }
                 let bounds = displays.reduce(CGRect.null) { $0.union($1.frame) }
@@ -2168,6 +2176,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
                       ) else {
                     self.logError("Invalid screenshot bitmap", context: "Screenshot")
+                    if manual { self.reportManualScreenshot(false,"Screenshot bitmap allocation failed") }
                     return
                 }
                 context.scaleBy(x: scale, y: scale)
@@ -2191,13 +2200,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                       let jpeg = NSBitmapImageRep(cgImage: result).representation(
                           using: .jpeg, properties: [.compressionFactor: 0.21]) else {
                     self.logError("Screenshot encoding failed", context: "Screenshot")
+                    if manual { self.reportManualScreenshot(false,"JPEG encoding failed") }
                     return
                 }
-                let filename = NSTemporaryDirectory() + "screenshot.jpg"
+                let filename = NSTemporaryDirectory() + "monitorclient-" + UUID().uuidString + ".jpg"
                 try jpeg.write(to: URL(fileURLWithPath: filename), options: .atomic)
-                self.postImage(path: filename)
+                self.postImage(path: filename, manual: manual)
             } catch {
                 self.logError("ScreenCaptureKit capture failed: \(error)", context: "Screenshot")
+                if manual { self.reportManualScreenshot(false,error.localizedDescription) }
             }
         }
     }
@@ -2209,8 +2220,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
     }
     
-    func postImage(path: String) {
-        guard !clientToken.isEmpty && selectedMonitorId > 0 else { return }
+    private func reportManualScreenshot(_ success:Bool,_ message:String) {
+        let notification=UNMutableNotificationContent()
+        notification.title=success ? "Screenshot stored on server" : "Screenshot upload failed"
+        notification.body=message
+        notification.sound=nil
+        deliverNotification(notification)
+    }
+
+    func postImage(path: String, manual:Bool = false) {
+        guard !clientToken.isEmpty && selectedMonitorId > 0 else {
+            if manual { reportManualScreenshot(false,"Select an authenticated monitor") }
+            return
+        }
         logMonitoringEvent("Uploading screenshot", details: "File: \(path)")
         
         // Build screenshot upload endpoint with correct query parameter
