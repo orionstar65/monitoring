@@ -542,9 +542,14 @@ void MonitorClient::sendScreensAsync(const QString &filePath, std::function<void
         const QByteArray raw=reply->readAll();
         const QJsonDocument json=QJsonDocument::fromJson(raw);
         const QJsonObject body=json.isObject()?json.object():QJsonObject();
-        const bool accepted=statusCode==200 && body.value("status").toString()=="success";
+        // HTTP 200 is not proof the screenshot was stored. The upload API
+        // confirms persistence by returning a non-empty stored filename.
+        const QString storedFile=body.value("data").toObject().value("filename").toString();
+        const bool accepted=statusCode==200 &&
+            body.value("status").toString()=="success" && !storedFile.isEmpty();
         int out=accepted?0:-1;
         if(accepted){
+            qInfo() << "[Screenshot] Stored on backend:" << storedFile;
             screenshotUploadError.clear();
             lastScreenshotSentTime=QDateTime::currentDateTime();
         }else{
