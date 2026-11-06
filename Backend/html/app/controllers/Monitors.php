@@ -162,6 +162,9 @@ class Monitors extends Base {
                         $this->db->query('UPDATE client_sessions SET revoked_at=NOW() WHERE monitor_id=:id AND revoked_at IS NULL',
                             ['id'=>$id]);
                     }
+                    if(($_POST['return_to']??'')==='monitoring'){
+                        $this->redirect('view?tab=settings&monitor_id='.(int)$id.'&saved=1');
+                    }
                     $this->redirect('monitors');
                 }
             }
