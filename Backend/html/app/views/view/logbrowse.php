@@ -1177,7 +1177,11 @@ document.addEventListener('pointerdown',event=>{
     const state=keyRulerState;
     if(!ruler||!state||event.button!==0)return;
     const time=keyRangePointerTime(event,ruler);
-    state.drag={pointerId:event.pointerId,mode:keyRangeHitMode(state,time,ruler),
+    const mode=keyRangeHitMode(state,time,ruler);
+    // Preserve click-to-extend from the old ruler, as well as drag gestures.
+    if(time<state.rangeStart)updateKeyTimeRange(Math.round(time/1000)*1000,state.rangeEnd,false);
+    else if(time>state.rangeEnd)updateKeyTimeRange(state.rangeStart,Math.round(time/1000)*1000,false);
+    state.drag={pointerId:event.pointerId,mode,
         anchor:time,from:state.rangeStart,to:state.rangeEnd};
     ruler.setPointerCapture(event.pointerId);
     ruler.classList.add('is-dragging');
