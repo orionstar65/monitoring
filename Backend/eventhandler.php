@@ -35,9 +35,6 @@ if ($mysqli->connect_error) {
 
 // Initialize database service
 $dbService = new DatabaseService($mysqli);
-$monitorId=requireClientMonitor($mysqli);
-$dbService->setAuthenticatedMonitorId($monitorId);
-
 // Validate request shape and bound ingest payload sizes before database writes.
 if(($_SERVER['REQUEST_METHOD']??'')!=='POST'){
     http_response_code(405);echo json_encode(['error'=>'POST required']);exit;
@@ -56,6 +53,11 @@ if (!is_array($data) || !isset($data['Event']) || !is_string($data['Event'])) {
     echo json_encode(['error' => 'Invalid JSON input']);
     exit;
 }
+
+// Resolve the authenticated v1.5 session, or an explicitly allowlisted
+// already-registered v1.3 device. No new monitor is created by telemetry.
+$monitorId=requireClientMonitorOrLegacy($mysqli,(string)($data['MacAddress']??''));
+$dbService->setAuthenticatedMonitorId($monitorId);
 
 // Explicit monitor ID must agree with the server-side authenticated selection.
 $claimedId=filter_var($data['MonitorId']??null,FILTER_VALIDATE_INT);
