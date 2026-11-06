@@ -2319,7 +2319,7 @@ static void layoutSettingsTabs(HWND dlg) {
 
         // Monitor: aligned, single-row labels and controls.
         {SETTINGS_MONITOR_HEADING,28,91,310,20},
-        {4400,28,123,85,20},{SETTINGS_MONITOR,122,118,264,220},
+        {4400,28,123,85,20},{SETTINGS_MONITOR,122,118,264,198},
         {SETTINGS_EDIT,394,118,86,25},
         {4402,28,156,85,20},{SETTINGS_OS,122,152,89,23},
         {SETTINGS_OS_MAC,218,152,62,23},{SETTINGS_OS_UBUNTU,288,152,102,23},
