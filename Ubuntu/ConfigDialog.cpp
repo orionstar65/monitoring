@@ -419,9 +419,9 @@ void ConfigDialog::updateMonitorList(const QJsonArray &items){
     const QSignalBlocker blocked(monitorSelector);
     monitorSelector->clear();
     for(const auto &m:ordered){
-        monitorSelector->addItem(QString("%1 · %2-%3").arg(
+        monitorSelector->addItem(QString("%1 · %2-%3 #%4").arg(
             m.value("ip_address").toString("—"),m.value("platform").toString("—"),
-            m.value("type").toString("Desktop")),
+            m.value("type").toString("Desktop")).arg(m.value("id").toInt()),
             m.value("id").toInt());
     }
     monitorSelector->addItem("Add new...",-1);
