@@ -37,15 +37,16 @@
 #include <QRadioButton>
 #include <QButtonGroup>
 #include <QStackedWidget>
+#include <QTabWidget>
 
 ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     setWindowTitle(QString("MonitorClient v%1 — Settings").arg(MONITORAPP_VERSION));
-    setMinimumSize(500,420);
-    resize(560,640);
+    setMinimumSize(520,375);
+    resize(590,475);
     setModal(true);
     auto *outer=new QVBoxLayout(this);
-    outer->setContentsMargins(14,10,14,12);
-    outer->setSpacing(10);
+    outer->setContentsMargins(16,12,16,12);
+    outer->setSpacing(8);
     auto *scroll=new QScrollArea(this);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
@@ -53,7 +54,7 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     auto *page=new QWidget(scroll);
     auto *content=new QVBoxLayout(page);
     content->setContentsMargins(2,0,2,2);
-    content->setSpacing(12);
+    content->setSpacing(9);
     content->setAlignment(Qt::AlignTop);
     scroll->setWidget(page);
     outer->addWidget(scroll);
@@ -66,11 +67,36 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     auto *brand=new QVBoxLayout();
     auto *name=new QLabel("MonitorClient");
     QFont font=name->font();font.setBold(true);font.setPointSize(15);name->setFont(font);
-    brand->addWidget(name);brand->addWidget(new QLabel("v1.5"));
+    brand->addWidget(name);brand->addWidget(new QLabel(QStringLiteral("v%1").arg(MONITORAPP_VERSION)));
     header->addLayout(brand);header->addStretch();
     content->addLayout(header);
+    // Group related settings on fixed-height tabs instead of one tall form.
+    auto *tabs=new QTabWidget(page);
+    tabs->setDocumentMode(true);
+    auto createPage=[&](const QString &title) {
+        auto *tab=new QWidget(tabs);
+        auto *layout=new QVBoxLayout(tab);
+        layout->setContentsMargins(12,14,12,10);
+        layout->setSpacing(12);
+        layout->setAlignment(Qt::AlignTop);
+        tabs->addTab(tab,title);
+        return std::make_pair(tab,layout);
+    };
+    const auto accountTab=createPage("Account & Server");
+    const auto monitorTab=createPage("Monitor");
+    const auto preferencesTab=createPage("Preferences");
+    const auto updatesTab=createPage("Updates");
+    auto *accountPage=accountTab.first;
+    auto *accountPageLayout=accountTab.second;
+    auto *monitorPage=monitorTab.first;
+    auto *monitorPageLayout=monitorTab.second;
+    auto *preferencesPage=preferencesTab.first;
+    auto *preferencesPageLayout=preferencesTab.second;
+    auto *updatesPage=updatesTab.first;
+    auto *updatesPageLayout=updatesTab.second;
+    content->addWidget(tabs,1);
 
-    auto *serverGroup=new QGroupBox("Server Settings",page);
+    auto *serverGroup=new QGroupBox("Server connection & sign-in",accountPage);
     auto *serverForm=new QFormLayout(serverGroup);
     serverIPEdit=new QLineEdit(serverGroup);
     serverPortEdit=new QSpinBox(serverGroup);
@@ -94,8 +120,8 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     testButton=new QPushButton("Sign In",serverGroup);
     connectionStatusLabel=new QLabel("● Not tested",serverGroup);
     serverForm->addRow(testButton,connectionStatusLabel);
-    content->addWidget(serverGroup);
-    auto *userGroup=new QWidget(page);
+    accountPageLayout->addWidget(serverGroup);
+    auto *userGroup=new QWidget(accountPage);
     auto *userForm=new QFormLayout(userGroup);
     userSelector=new QComboBox(userGroup);
     userSelector->setMinimumWidth(350);
@@ -109,8 +135,8 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     assignmentStatusLabel->setStyleSheet("color:#bf3838;");
     userForm->addRow("",assignmentStatusLabel);
     userGroup->setVisible(false); // Password sign-in replaces user directory selection.
-    content->addWidget(userGroup);
-    monitorGroup=new QGroupBox("Monitor Settings",page);
+    accountPageLayout->addWidget(userGroup);
+    monitorGroup=new QGroupBox("Selected monitor",monitorPage);
     auto *monitorForm=new QFormLayout(monitorGroup);
     monitorSelector=new QComboBox(monitorGroup);
     osRadios=new QButtonGroup(monitorGroup);
@@ -155,10 +181,15 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     monitorForm->addRow("Machine",machineStack);
     monitorForm->addRow("IP address",monitorIPLabel);
     monitorForm->addRow("Remark",remarkStack);
-    content->addWidget(monitorGroup);
-    notificationsCheck=new QCheckBox("Show status notifications",page);
-    content->addWidget(notificationsCheck);
-    auto *updatesGroup=new QGroupBox("Updates",page);
+    monitorPageLayout->addWidget(monitorGroup);
+    auto *notificationsGroup=new QGroupBox("Notifications",preferencesPage);
+    auto *notificationsLayout=new QVBoxLayout(notificationsGroup);
+    notificationsCheck=new QCheckBox("Show status notifications",notificationsGroup);
+    notificationsLayout->addWidget(notificationsCheck);
+    preferencesPageLayout->addWidget(notificationsGroup);
+    auto *maintenanceGroup=new QGroupBox("Maintenance",preferencesPage);
+    auto *maintenanceLayout=new QVBoxLayout(maintenanceGroup);
+    auto *updatesGroup=new QGroupBox("Client updates",updatesPage);
     auto *updateForm=new QFormLayout(updatesGroup);
     updateServerInput=new QLineEdit(updatesGroup);
     updateServerInput->setPlaceholderText("http://192.168.2.241:8765");
@@ -175,7 +206,7 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     updateStatus=new QLabel("Installed: "+QString(MONITORAPP_VERSION),updatesGroup);
     updateStatus->setWordWrap(true);
     updateForm->addRow("",updateStatus);
-    content->addWidget(updatesGroup);
+    updatesPageLayout->addWidget(updatesGroup);
     updateNetwork=new QNetworkAccessManager(this);
     connect(checkUpdateButton,&QPushButton::clicked,this,&ConfigDialog::onCheckUpdate);
     connect(installUpdateButton,&QPushButton::clicked,this,&ConfigDialog::onInstallUpdate);
@@ -184,11 +215,12 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
         installUpdateButton->setEnabled(false);
     });
     auto *toolsRow=new QHBoxLayout();
-    sendAllButton=new QPushButton("Send All Logs",page);
-    refreshConfigButton=new QPushButton("Refresh Configuration",page);
+    sendAllButton=new QPushButton("Send All Logs",maintenanceGroup);
+    refreshConfigButton=new QPushButton("Refresh Configuration",maintenanceGroup);
     toolsRow->addWidget(sendAllButton);
     toolsRow->addWidget(refreshConfigButton);
-    content->addLayout(toolsRow);
+    maintenanceLayout->addLayout(toolsRow);
+    preferencesPageLayout->addWidget(maintenanceGroup);
     connect(sendAllButton,&QPushButton::clicked,this,[this](){emit sendAllRequested();});
     connect(refreshConfigButton,&QPushButton::clicked,this,[this](){emit refreshConfigurationRequested();});
     auto *buttons=new QHBoxLayout();
@@ -546,8 +578,7 @@ void ConfigDialog::updateUI(){
     passwordFieldLabel->setVisible(!enrolled);
     accountFieldLabel->setVisible(enrolled);
     accountInfoLabel->setVisible(enrolled);
-    if(enrolled)accountInfoLabel->setText(QStringLiteral("User No: %1\nFull name: %2")
-        .arg(activeUserNo,activeUserName.isEmpty()?QStringLiteral("—"):activeUserName));
+    if(enrolled)accountInfoLabel->setText(QStringLiteral("User No: %1").arg(activeUserNo));
     logoutButton->setVisible(enrolled);
     logoutButton->setEnabled(enrolled);
     sendAllButton->setEnabled(enrolled&&monitorId>0);
