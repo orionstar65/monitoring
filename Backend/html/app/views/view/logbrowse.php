@@ -482,7 +482,7 @@ ob_start();
                     <option value="">All Devices</option>
                     <?php foreach ($monitors as $monitor): ?>
                         <option value="<?php echo $monitor['id']; ?>">
-                            <?= htmlspecialchars(($monitor['user_no']??'—').'('.($monitor['username']?:'Unassigned').'): '.($monitor['last_seen_ip']?:$monitor['ip_address']).' : '.($monitor['platform']??'Unknown OS').'-'.($monitor['type']??'Device'),ENT_QUOTES,'UTF-8') ?>
+                            <?= htmlspecialchars(($monitor['user_no']??'—').'('.($monitor['username']?:'Unassigned').'): '.($monitor['last_seen_ip']?:$monitor['ip_address']).' : '.($monitor['platform']??'Unknown OS').'-'.($monitor['type']??'Device').' #'.(int)$monitor['id'],ENT_QUOTES,'UTF-8') ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
@@ -630,7 +630,7 @@ function loadAvailableDevices() {
             window.sortMonitorOptions(devices).forEach(device => {
                 const option = document.createElement('option');
                 option.value = String(device.id);
-                option.textContent = `${device.user_no || '—'}(${device.username || 'Unassigned'}): ${device.last_seen_ip || device.ip_address || '—'} : ${device.platform || 'Unknown OS'}-${device.type || 'Device'}`;
+                option.textContent = `${device.user_no || '—'}(${device.username || 'Unassigned'}): ${device.last_seen_ip || device.ip_address || '—'} : ${device.platform || 'Unknown OS'}-${device.type || 'Device'} #${Number(device.id)}`;
                 fragment.appendChild(option);
             });
             select.replaceChildren(fragment);
@@ -1334,7 +1334,7 @@ function formatDate(dateString) {
 
 function formatDevice(log) {
     const statusClass = getDeviceStatus(log.heartbeat_age_seconds);
-    const label = `${log.user_no || '—'}(${log.username || 'Unassigned'}): ${log.ip_address || '—'} : ${log.platform || 'Unknown OS'}-${log.type || 'Device'}`;
+    const label = `${log.user_no || '—'}(${log.username || 'Unassigned'}): ${log.ip_address || '—'} : ${log.platform || 'Unknown OS'}-${log.type || 'Device'} #${Number(log.monitor_ip_id||log.id||0)}`;
     return `<div class="small">
         <div class="fw-semibold">${escapeHtml(label)}</div>
         <span class="status-badge ${statusClass}">${getStatusText(statusClass)}</span>
