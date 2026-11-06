@@ -86,7 +86,10 @@ class Users extends Base {
                 || (isset($_POST['role'])&&$_POST['role']!==ROLE_USER))){
                 http_response_code(403);exit('Role changes require Super Admin');
             }
-            $password = $_POST['password'] ?? '';
+            $password = (string)($_POST['password'] ?? '');
+            if($this->isScopedAdmin() && $password!==''){
+                http_response_code(403);exit('Password changes require Super Admin');
+            }
             $userNo=trim((string)($_POST['user_no']??''));
             // User No is a unique, administrator-managed numeric identifier.
             $validUserNo=preg_match('/^[1-9][0-9]{0,14}$/D',$userNo)===1;
