@@ -111,6 +111,11 @@ try {
                     if(!is_array($record)){http_response_code(400);echo json_encode(['error'=>'Malformed browser record']);exit;}
                 }
                 $inserted_count = $dbService->addBrowserHistoryLogs($browserHistories, $clientIP, $macAddress);
+                if($inserted_count===false || $inserted_count!==count($browserHistories)){
+                    http_response_code(500);
+                    echo json_encode(['error'=>'Browser history batch not stored']);
+                    exit;
+                }
                 // Update monitor activity for browser history logging (pass MAC address)
                 $dbService->updateMonitorActivity($clientIP, 'browser', $macAddress);
                 $response['data'] = [
@@ -140,7 +145,7 @@ try {
                     echo json_encode(['error'=>'Keyboard log storage unavailable']);
                     exit;
                 }
-                if($inserted_count===0){
+                if($inserted_count!==count($keyLogs)){
                     http_response_code(422);
                     echo json_encode(['error'=>'No valid keyboard records in batch']);
                     exit;
@@ -163,6 +168,11 @@ try {
                     if(!is_array($record)){http_response_code(400);echo json_encode(['error'=>'Malformed USB record']);exit;}
                 }
                 $inserted_count = $dbService->addUSBDeviceLogs($usbLogs, $clientIP, $macAddress);
+                if($inserted_count===false || $inserted_count!==count($usbLogs)){
+                    http_response_code(500);
+                    echo json_encode(['error'=>'USB batch not stored']);
+                    exit;
+                }
                 // Update monitor activity for USB logging (pass MAC address)
                 $dbService->updateMonitorActivity($clientIP, 'monitor', $macAddress);
                 $response['data'] = [
