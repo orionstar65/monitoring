@@ -13,8 +13,8 @@ $uploads=$read('Backend/webapi.php');
 $windows=$read('Windows/MonitorClient.cpp');
 $ubuntu=$read('Ubuntu/MonitorClient.cpp');
 $checks=[
- 'Legacy is disabled unless explicitly enabled'=>str_contains($identity,"getenv('MONITOR_ENABLE_LEGACY_V13')!=='1'"),
- 'Explicit source IP allowlist required'=>str_contains($identity,"getenv('MONITOR_LEGACY_V13_IPS')"),
+ 'Registered legacy clients work without legacy environment flags'=>!str_contains($identity,"getenv('MONITOR_ENABLE_LEGACY_V13')") && !str_contains($identity,"getenv('MONITOR_LEGACY_V13_IPS')"),
+ 'Legacy can be disabled explicitly'=>str_contains($identity,"getenv('MONITOR_DISABLE_LEGACY_V13')==='1'"),
  'Legacy must originate on direct private LAN'=>str_contains($identity,'monitoringIsPrivateLanAddress($peer)')&&str_contains($identity,"HTTP_X_FORWARDED_FOR"),
  'Invalid Authorization cannot downgrade'=>str_contains($identity,"strcasecmp($key,'Authorization')===0"),
  'Legacy must map to an existing assigned monitor'=>str_contains($identity,'JOIN users u ON u.id=m.owner_user_id'),
