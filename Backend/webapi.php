@@ -37,7 +37,7 @@ if ($mysqli->connect_error) {
 
 // Initialize database service
 $dbService = new DatabaseService($mysqli);
-$monitorId=requireClientMonitor($mysqli);
+$monitorId=requireClientMonitorOrLegacy($mysqli,(string)($_POST['mac_address']??''));
 $dbService->setAuthenticatedMonitorId($monitorId);
 
 // The monitor identity for every upload comes exclusively from the validated
@@ -252,6 +252,13 @@ function createThumbnail($source_path, $thumb_path, $max_width, $max_height) {
 
 // Handle different request types
 $request_type_param = $_GET['type'] ?? '';
+// v1.3 WinINet omitted ?type=upload from multipart requests. Accept that
+// exact historical shape only for a directly allowlisted, mapped legacy
+// sender, and only when an actual screenshot upload field is present.
+if($request_type_param==='' && isset($_FILES['imagefile']) &&
+   monitoringLegacyV13Monitor($mysqli,(string)($_POST['mac_address']??''))===$monitorId){
+    $request_type_param='upload';
+}
 $clientIP = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 $method = $_SERVER['REQUEST_METHOD'] ?? 'POST';
 $log_request_type = null; // Will be set based on the request type
