@@ -54,7 +54,16 @@ class DatabaseService {
                 $url=trim((string)($entry['url']??''));
                 if($browser===''||$url==='')throw new RuntimeException('Browser history record missing browser or URL');
                 $title=(string)($entry['title']??'');
-                $last=$this->normalizeDateTime($entry['last_visit']??$entry['date']??null);
+                // Safari stores visits as seconds since 2001-01-01.
+                // This is not a Unix microsecond timestamp; normalize the
+                // browser-specific epoch before storing the UTC visit time.
+                $rawVisit=$entry['last_visit']??$entry['date']??null;
+                if(strcasecmp($browser,'Safari')===0 && is_numeric($rawVisit)
+                   && (float)$rawVisit>100000000 && (float)$rawVisit<1000000000){
+                    $last=gmdate('Y-m-d H:i:s',(int)((float)$rawVisit+978307200));
+                }else{
+                    $last=$this->normalizeDateTime($rawVisit);
+                }
                 $date=$last;
                 $stmt->bind_param('isssss',$monitor_id,$browser,$url,$title,$last,$date);
                 if(!$stmt->execute())throw new RuntimeException('Browser history insert rejected');
@@ -283,7 +292,7 @@ class DatabaseService {
      * Handles race conditions by catching duplicate key errors and retrying with UPDATE
      */
     private function updateStorageStatistics($monitor_ip_id, $data_type, $date, $size) {
-        $month_year = date('Y-m', strtotime($date));
+        $month_year = substr((string)$date,0,7); // Stored datetimes use UTC
         
         $stmt = $this->mysqli->prepare("
             INSERT INTO storage_statistics (monitor_ip_id, data_type, month_year, record_count, total_size) 
