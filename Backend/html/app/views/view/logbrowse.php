@@ -1204,7 +1204,7 @@ document.addEventListener('pointermove',event=>{
         updateKeyTimeRange(next,next+duration,false);
     }else if(drag.mode==='start'){
         updateKeyTimeRange(Math.min(drag.to-minimum,Math.max(state.start,drag.from+delta)),drag.to,false);
-    }else{
+    }else if(drag.mode==='end'){
         updateKeyTimeRange(drag.from,Math.max(drag.from+minimum,Math.min(state.end,drag.to+delta)),false);
     }
 });
