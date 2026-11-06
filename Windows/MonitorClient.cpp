@@ -2253,7 +2253,8 @@ static void refreshUnifiedMonitors(HWND dlg) {
     for(const auto& m:settingsMonitors){
         const int id=m.get("id",0).asInt();
         const std::string label=m.get("ip_address","-").asString()+" | "+
-            m.get("platform","-").asString()+"-"+m.get("type","desktop").asString();
+            m.get("platform","-").asString()+"-"+m.get("type","desktop").asString()+
+            " #"+std::to_string(id);
         const std::wstring wide=utf8ToWide(label);
         const int ix=(int)SendMessageW(selector,CB_ADDSTRING,0,(LPARAM)wide.c_str());
         SendMessageW(selector,CB_SETITEMDATA,ix,id);
