@@ -537,25 +537,11 @@
                     <span>Monitor IPs</span>
                 </a>
             </div>
-            <?php if(($_SESSION['role']??'')!=='user'): ?>
-            <div class="nav-item">
-                <a class="nav-link <?php echo $active_page === 'merge' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>merge">
-                    <i class="fas fa-code-branch"></i>
-                    <span>Merge Logs</span>
-                </a>
-            </div>
-            <?php endif; ?>
             <?php if(($_SESSION['role']??'')===ROLE_ADMIN): ?>
             <div class="nav-item">
                 <a class="nav-link <?php echo $active_page === 'view' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>view">
                     <i class="fas fa-eye"></i>
-                    <span>Real-time Monitoring</span>
-                </a>
-            </div>
-            <div class="nav-item">
-                <a class="nav-link <?php echo $active_page === 'logbrowse' ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>logbrowse">
-                    <i class="fas fa-file-alt"></i>
-                    <span>Log Browse</span>
+                    <span>Monitoring</span>
                 </a>
             </div>
             <div class="nav-item">
