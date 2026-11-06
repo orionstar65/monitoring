@@ -1754,8 +1754,12 @@ function loadMonitors() {
             updateMonitorList(filteredMonitors);
             const selected=allMonitors.find(m=>m.id===selectedMonitors[0]);
             $('#unifiedSelectionSummary').text(selected?String(selected.user_no||'—')+': '+String(selected.username||'Unassigned')+' · #'+selected.id:'All devices');
-            if(window.unifiedLogs)window.unifiedLogs.selectMonitor(selected?.id||'');
-            updateStatusStats(allMonitors);
+            if(window.unifiedLogs&&unifiedSyncedMonitor!==(selected?.id||0)){
+                unifiedSyncedMonitor=selected?.id||0;
+                window.unifiedLogs.selectMonitor(unifiedSyncedMonitor);
+                if(unifiedActiveTab==='settings')unifiedLoadSettings();
+            }
+            updateStatusStats(selectedMonitors.length?allMonitors.filter(m=>selectedMonitors.includes(m.id)):allMonitors);
             $('#lastLiveRefresh').text('Updated '+new Date().toLocaleTimeString());
         },
         error: function(xhr, status, error) {
@@ -2324,7 +2328,7 @@ function navigateScreenshot(direction) {
 
 
 /* Unified workspace: one monitor selection, one filter/action bar, all log tabs. */
-let unifiedActiveTab='screenshots',unifiedSettingsRequest=0,unifiedInitialSelectionDone=false;
+let unifiedActiveTab='screenshots',unifiedSettingsRequest=0,unifiedInitialSelectionDone=false,unifiedSyncedMonitor=null;
 const unifiedBase = <?php echo json_encode(BASE_URL); ?>;
 function unifiedSelectTab(tab,persist=true){
     if(!['screenshots','key','browser','usb','settings'].includes(tab))tab='screenshots';
@@ -2356,10 +2360,12 @@ function unifiedUpdateUrl(){
 function unifiedSelectMonitor(id,persist=true){
     selectedMonitors=Number.isInteger(id)&&id>0?[id]:[];
     updateMonitorList(filteredMonitors);
+    updateStatusStats(selectedMonitors.length?allMonitors.filter(m=>selectedMonitors.includes(m.id)):allMonitors);
     const monitor=allMonitors.find(m=>m.id===id);
     $('#unifiedSelectionSummary').text(monitor?
         String(monitor.user_no||'—')+': '+String(monitor.username||'Unassigned')+' · #'+id:
         'All devices');
+    unifiedSyncedMonitor=id||0;
     window.unifiedLogs?.selectMonitor(id||'');
     if(unifiedActiveTab==='screenshots')loadScreenshotsForSelectedMonitor(1);
     else if(unifiedActiveTab==='settings')unifiedLoadSettings();
@@ -2453,7 +2459,7 @@ $(document).on('click','#unifiedMergeButton',async function(){
         else status.text('Merge complete. Source '+(data.source_deleted?'removed.':'retained.'));
         loadMonitors();
         if(data.source_deleted)unifiedSelectMonitor(target);
-        else unifiedLoadSettings();
+        else if(!data.partial)unifiedLoadSettings();
     }catch(error){status.text('Merge failed: '+error.message);}
     finally{button.prop('disabled',false);}
 });
