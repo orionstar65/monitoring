@@ -47,13 +47,14 @@ function monitorTranscriptKeyRows(keys,escapeHtml) {
     const applicationName = entry => String(entry?.application || '').trim() || 'Unknown app';
     const lines=[{time:keys[0]?.key_date||'',app:applicationName(keys[0]),tokens:[]}];
     let current=lines[0];
-    const addBadge=(raw,time)=>{
-        current.tokens.push({kind:'badge',raw,time});
+    const addBadge=(raw,time,eventId)=>{
+        current.tokens.push({kind:'badge',raw,time,eventId});
     };
     for(const entry of keys) {
         const raw=String(entry.key_pressed??'');
         const key=raw.trim().replace(/^\[(.*)\]$/,'$1').replace(/^<(.*)>$/,'$1');
         const time=String(entry.key_date||'');
+        const eventId=Number(entry.event_id)||0;
         const app=applicationName(entry);
         // Start a new transcript row when the active application changes.
         // Do not apply Backspace to characters typed in a different app.
@@ -74,7 +75,7 @@ function monitorTranscriptKeyRows(keys,escapeHtml) {
                 token.deleted=true;count++;started=true;
             }
             if(count)current.tokens.push({kind:'effect',value:'⌫ word',time});
-            else addBadge(raw||'Ctrl+Backspace',time);
+            else addBadge(raw||'Ctrl+Backspace',time,eventId);
         }else if(/^(backspace|back|bksp|vk_back)$/i.test(key)){
             let last=null;
             for(let k=current.tokens.length-1;k>=0;k--){
@@ -83,7 +84,7 @@ function monitorTranscriptKeyRows(keys,escapeHtml) {
             if(last){
                 last.deleted=true;
                 current.tokens.push({kind:'effect',value:'⌫',time});
-            }else addBadge(raw||'Backspace',time);
+            }else addBadge(raw||'Backspace',time,eventId);
         }else if(/^(space|spacebar)$/i.test(key)||raw===' '){
             current.tokens.push({kind:'char',value:' ',time,deleted:false});
         }else if(/^tab$/i.test(key)||raw==='\t'){
@@ -93,7 +94,7 @@ function monitorTranscriptKeyRows(keys,escapeHtml) {
         }else{
             // Modifiers and navigation shortcuts are not inferable text edits.
             // Preserve the event without inventing a caret position.
-            addBadge(raw||'Unknown',time);
+            addBadge(raw||'Unknown',time,eventId);
         }
     }
     const transcript=lines.map(line=>{
@@ -101,7 +102,7 @@ function monitorTranscriptKeyRows(keys,escapeHtml) {
             if(token.kind==='char')return `<span class="${token.deleted?'key-deleted':''}" title="${escapeHtml(token.time)}">${escapeHtml(token.value)}</span>`;
             if(token.kind==='newline')return '<span class="key-control-symbol" title="Enter">↵</span>';
             if(token.kind==='effect')return `<span class="key-control-symbol" title="Backspace at ${escapeHtml(token.time)}">${token.value}</span>`;
-            return `<span class="key-special-badge" title="${escapeHtml(token.time)}">${escapeHtml(token.raw)}</span>`;
+            return `<span class="key-special-badge" title="${escapeHtml(token.time+(token.eventId?' · recorded event #'+token.eventId:''))}">${escapeHtml(token.raw)}</span>`;
         }).join('');
         return `<div class="key-transcript-time" title="${escapeHtml(line.time||'')}">${escapeHtml((line.time||'').split(' ').pop())}</div>
             <div class="key-transcript-app" title="${escapeHtml(line.app)}">${escapeHtml(line.app)}</div>
