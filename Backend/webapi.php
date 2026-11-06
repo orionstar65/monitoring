@@ -68,15 +68,16 @@ function uploadCacheScreenWithMetadata($com_name, $ctime, $screenfile) {
     }
     
     // Create directories if they don't exist
-    foreach ($monitor_paths as $path) {
-        if (!is_dir($path) && !@mkdir($path, 0755, true) && !is_dir($path)) {
-            error_log('Screenshot storage directory could not be created');
-            return failScreenshotUpload('Screenshot storage directory unavailable',503);
-        }
-        if (!is_writable($path)) {
-            error_log('Screenshot storage directory is not writable');
-            return failScreenshotUpload('Screenshot storage directory is not writable',503);
-        }
+    // Screenshot uploads write only to the screenshots subtree. Log storage
+    // permissions must not block an otherwise valid screenshot upload.
+    $screensRoot=$monitor_paths['screens'];
+    if (!is_dir($screensRoot) && !@mkdir($screensRoot,0755,true) && !is_dir($screensRoot)) {
+        error_log('Screenshot storage directory could not be created');
+        return failScreenshotUpload('Screenshot storage directory unavailable',503);
+    }
+    if (!is_writable($screensRoot)) {
+        error_log('Screenshot storage directory is not writable');
+        return failScreenshotUpload('Screenshot storage directory is not writable',503);
     }
     
     if (!DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $ctime))
