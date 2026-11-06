@@ -84,10 +84,11 @@ class Databasemanagement extends Base {
             $this->json(['success'=>true,'done'=>true,'deleted'=>0,'next_table'=>$index]);
         }
         $table=$tables[$index];
-        $cutoff=(string)$this->db->fetch(
-            'SELECT DATE_FORMAT(DATE_SUB(NOW(),INTERVAL :months MONTH),'.
-            "'%Y-%m-%d %H:%i:%s' AS cutoff",['months'=>$months]
-        )['cutoff'];
+        $cutoffRow=$this->db->fetch(
+            "SELECT DATE_FORMAT(DATE_SUB(NOW(),INTERVAL :months MONTH), '%Y-%m-%d %H:%i:%s') AS cutoff",
+            ['months'=>$months]
+        );
+        $cutoff=(string)$cutoffRow['cutoff'];
         // Select and lock a bounded batch so monthly storage summaries can
         // be decremented accurately in the same transaction as row deletion.
         // Screenshot metadata is intentionally excluded; it must be deleted
@@ -105,7 +106,7 @@ class Databasemanagement extends Base {
             $pdo->beginTransaction();
             $rows=$this->db->fetchAll(
                 'SELECT id,monitor_ip_id,DATE_FORMAT('.$this->quoteIdentifier($spec['date']).
-                ','.("'".'%Y-%m'."'").') AS month_year,('.$spec['bytes'].') AS payload_size '.
+                ", '%Y-%m') AS month_year,(".$spec['bytes'].') AS payload_size '.
                 'FROM '.$this->quoteIdentifier($table).
                 ' WHERE created_at < :cutoff ORDER BY created_at ASC,id ASC LIMIT '.
                 self::BATCH_SIZE.' FOR UPDATE',
