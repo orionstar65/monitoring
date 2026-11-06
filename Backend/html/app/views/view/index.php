@@ -1341,6 +1341,7 @@ let allMonitors = [];
 let filteredMonitors = [];
 let fullscreenShotMap = new Map();
 let visibleShotMap = new Map();
+let screenshotRequestSeq=0;
 function attachScreenshotImageFallback(scope) {
     scope.find('img[data-full-image]').on('error', function() {
         const full = this.getAttribute('data-full-image');
@@ -1842,40 +1843,9 @@ function updateStatusStats(monitors) {
     $('#offline-monitors').text(offline);
 }
 
-function loadScreenshotsForMonitor(monitorId) {
-    currentPage = 1;
-    
-    const params = new URLSearchParams({
-        page: currentPage,
-        per_page: currentPerPage,
-        monitor_id: monitorId
-    });
-    
-    $.ajax({
-        url: "<?php echo BASE_URL; ?>view/api_screenshots?" + params.toString(),
-        method: "GET",
-        success: function(response) {
-            if (response.screenshots) {
-                displayScreenshots(response.screenshots, response.pagination);
-            } else {
-                displayScreenshots(response, null);
-            }
-        },
-        error: function(xhr, status, error) {
-            console.log("Failed to load screenshots:", error);
-            $('#screenshotsContainer').html(`
-                <div class="empty-state">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <h5>Failed to Load Screenshots</h5>
-                    <p>Error: ${error}</p>
-                </div>
-            `);
-        }
-    });
-}
-
 function loadScreenshots(page = 1) {
     currentPage = page;
+    const request=++screenshotRequestSeq;
     
     const params = new URLSearchParams({
         page: page,
@@ -1892,6 +1862,7 @@ function loadScreenshots(page = 1) {
         url: "<?php echo BASE_URL; ?>view/api_screenshots?" + params.toString(),
         method: "GET",
         success: function(response) {
+            if(request!==screenshotRequestSeq)return;
             if (response.screenshots) {
                 displayScreenshots(response.screenshots, response.pagination);
             } else {
@@ -1899,6 +1870,7 @@ function loadScreenshots(page = 1) {
             }
         },
         error: function(xhr, status, error) {
+            if(request!==screenshotRequestSeq)return;
             console.log("Failed to load screenshots:", error);
             $('#screenshotsContainer').html(`
                 <div class="empty-state">
@@ -2148,6 +2120,7 @@ function loadScreenshotsForSelectedMonitor(page) {
 
 function loadScreenshotsForMonitor(monitorId, page = 1) {
     currentPage = page;
+    const request=++screenshotRequestSeq;
     
     const params = new URLSearchParams({
         page: currentPage,
@@ -2169,6 +2142,7 @@ function loadScreenshotsForMonitor(monitorId, page = 1) {
         url: "<?php echo BASE_URL; ?>view/api_screenshots?" + params.toString(),
         method: "GET",
         success: function(response) {
+            if(request!==screenshotRequestSeq)return;
             if (response.screenshots) {
                 displayScreenshots(response.screenshots, response.pagination);
             } else {
@@ -2176,6 +2150,7 @@ function loadScreenshotsForMonitor(monitorId, page = 1) {
             }
         },
         error: function(xhr, status, error) {
+            if(request!==screenshotRequestSeq)return;
             console.log("Failed to load screenshots:", error);
             $('#screenshotsContainer').html(`
                 <div class="empty-state">
