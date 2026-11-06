@@ -1635,8 +1635,8 @@ function setupEventHandlers() {
     
     // Per-page selector
     $('#perPageSelect').change(function() {
-        currentPerPage = parseInt($(this).val());
-        loadScreenshots(1);
+        currentPerPage = parseInt($(this).val(),10);
+        loadScreenshotsForSelectedMonitor(1);
     });
     
     // Refresh button
@@ -1695,12 +1695,23 @@ function loadMonitors() {
         success: function(data) {
             allMonitors = Array.isArray(data) ? data.map(m=>({...m,id:Number(m.id)})) : [];
             
-            // Preserve current selection when refreshing
-            if (selectedMonitors.length > 0) {
-                // Keep only monitors that still exist
-                selectedMonitors = selectedMonitors.filter(id => 
-                    allMonitors.some(monitor => monitor.id === id)
-                );
+            // Assignment revocations are applied by the server on every
+            // status request. Clear any previously selected monitor immediately
+            // when it disappears from the authorized list.
+            const previousSelection=selectedMonitors.join(',');
+            if(selectedMonitors.length){
+                selectedMonitors=selectedMonitors.filter(id=>
+                    allMonitors.some(monitor=>monitor.id===id));
+            }
+            if(previousSelection!==selectedMonitors.join(',')){
+                liveScreenshotSnapshot=[];liveScreenshotSelection='';liveScreenshotUpdatedAt=0;
+                visibleShotMap.clear();fullscreenShotMap.clear();
+                $('#screenshotsContainer').empty();
+                $('#fullscreenContainer').empty();
+                ++screenshotRequestSeq;
+                if(unifiedActiveTab==='screenshots'||$('#fullscreenModal').hasClass('show')){
+                    loadScreenshotsForSelectedMonitor(1);
+                }
             }
             
             filteredMonitors = [...allMonitors];
