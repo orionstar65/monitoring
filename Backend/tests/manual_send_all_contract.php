@@ -53,7 +53,7 @@ $checks=[
     str_contains($mac,'reportManualScreenshot(true,"Saved as'),
  'Backend stores screenshot metadata and returns the file name to callers'=>
     str_contains($webapi,'addScreenshotMetadata(') &&
-    str_contains($webapi,"'filename' => $img_name") &&
+    str_contains($webapi,"'filename' => \$img_name") &&
     str_contains($webapi,"'status' => 'success'"),
  'Portal refreshes screenshot tiles promptly while visible'=>
     str_contains($portal,'}, 10000);') &&
