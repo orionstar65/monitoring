@@ -33,16 +33,19 @@ $checks=[
     'Explorer restart restores the persistent tray icon'=>
         str_contains($source,'RegisterWindowMessageA("TaskbarCreated")') &&
         str_contains($source,'Shell_NotifyIconA(NIM_ADD,&restore)'),
-    'Settings use a compact 520x387 dialog with a shorter tab frame'=>
-        str_contains($source,'{SETTINGS_TABS,10,52,500,278}') &&
-        str_contains($source,'SetWindowPos(dlg,nullptr,0,0,520,387,'),
-    'Settings keep a consistent shared label and field alignment'=>
-        str_contains($source,'{4504,28,122,85,20},{SETTINGS_IP,122,118,358,25}') &&
-        str_contains($source,'{4400,28,123,85,20},{SETTINGS_MONITOR,122,118,264,198}') &&
-        str_contains($source,'{4509,28,130,85,20},{SETTINGS_UPDATE_URL,122,125,358,25}'),
-    'Compact layout keeps the save and close buttons inside the dialog'=>
-        str_contains($source,'{SETTINGS_SAVE,286,340,104,28}') &&
-        str_contains($source,'{SETTINGS_CLOSE,400,340,104,28}'),
+    'Settings size each tab to its content rather than tallest tab'=>
+        str_contains($source,'{SETTINGS_TABS,8,44,464,244}') &&
+        str_contains($source,'settingsActiveTab<2?244:settingsActiveTab==2?175:197') &&
+        str_contains($source,'layoutSettingsTabs(dlg);'.PHP_EOL.'            updateUnifiedVisibility(dlg);'),
+    'Settings use a consistent 82px label column and dense form rows'=>
+        str_contains($source,'{4504,22,104,75,19},{SETTINGS_IP,104,100,350,24}') &&
+        str_contains($source,'{4400,22,104,75,19},{SETTINGS_MONITOR,104,100,254,174}') &&
+        str_contains($source,'{4509,22,108,75,19},{SETTINGS_UPDATE_URL,104,104,350,24}'),
+    'Settings account for window decorations and preserve footer controls'=>
+        str_contains($source,'AdjustWindowRectEx(&outer,style,FALSE,exStyle)') &&
+        str_contains($source,'const int footerY=44+tabHeight+8') &&
+        str_contains($source,'{SETTINGS_SAVE,258,0,99,26}') &&
+        str_contains($source,'{SETTINGS_CLOSE,366,0,99,26}'),
 ];
 $failed=0;
 foreach($checks as $name=>$result){
