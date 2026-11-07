@@ -1,0 +1,10 @@
+Options -Indexes
+DirectoryIndex index.php
+RewriteEngine On
+# No static release files are stored in the webroot. All GETs are validated
+# against the manifest in index.php and served from the fixed release root.
+RewriteRule ^index\.php$ - [L]
+RewriteRule ^.*$ index.php [L]
+<IfModule mod_headers.c>
+ Header always set X-Content-Type-Options nosniff
+</IfModule>
