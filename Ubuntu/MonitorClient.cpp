@@ -220,6 +220,7 @@ MonitorClient::MonitorClient()
             }
             qInfo() << "[Screenshot] User-approved portal image captured:"
                     << frame.width() << "x" << frame.height();
+            m_captureTimeUtc=QDateTime::currentDateTimeUtc();
             uploadCapturedScreenshot(base);
         });
         connect(screenCastPortal, &ScreenCastPortal::screenshotFailed, this,
@@ -445,6 +446,7 @@ int MonitorClient::captureScreen(bool manual)
     bool captured=false;
     grabScreen(filePath,captured);
     if(captured){
+        m_captureTimeUtc=QDateTime::currentDateTimeUtc();
         uploadCapturedScreenshot(filePath);
         return 0;
     }
