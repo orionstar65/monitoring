@@ -201,7 +201,7 @@ private:
     QAction *sendAllAction;
     QAction *configureAction;
     QAction *screenshotAction;
-    bool serverConnected;
+    bool serverConnected = false;
     QString lastError;
     QString screenshotUploadError;
     QString clientName;
@@ -209,11 +209,11 @@ private:
     QString signedUserName;
 
     // Status tracking
-    bool screenshotEnabled;
-    bool keylogEnabled;
-    bool browserHistoryEnabled;
-    bool usbMonitoringEnabled;
-    bool screenshotInProgress;
+    bool screenshotEnabled = true;
+    bool keylogEnabled = true;
+    bool browserHistoryEnabled = true;
+    bool usbMonitoringEnabled = true;
+    bool screenshotInProgress = false;
     bool m_manualScreenshotRequested = false;
     bool m_manualCaptureIntent = false;
     QString m_lastCaptureError;
