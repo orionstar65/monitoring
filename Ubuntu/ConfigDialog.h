@@ -28,6 +28,8 @@ public:
     QString getActiveUserName() const { return authToken.isEmpty() ? QString() : activeUserName; }
     QString getAuthToken() const { return authToken; }
     int getMonitorId() const { return monitorId; }
+    QString getActiveUserNo() const { return authToken.isEmpty() ? QString() : activeUserNo; }
+    QString getActiveUserName() const { return authToken.isEmpty() ? QString() : activeUserName; }
     bool hasSession() const { return !authToken.isEmpty(); }
     bool notificationsEnabled() const { return notificationsCheck->isChecked(); }
     bool didLogout() const { return logoutPerformed; }
@@ -62,6 +64,7 @@ private:
     QString readRememberedToken() const;
     void rememberToken(const QString &value);
     void loadRememberedSession();
+    void rememberVerifiedUserIdentity();
     void refreshDirectory();
     void refreshMonitors();
     void updateUI();
@@ -71,6 +74,8 @@ private:
     QString authToken;
     QString activeUserNo;
     QString activeUserName;
+    QString lastKnownUserNo;
+    QString lastKnownUserName;
     QString pendingUserNo;
     QString directoryError;
     QJsonArray assignedMonitors;
