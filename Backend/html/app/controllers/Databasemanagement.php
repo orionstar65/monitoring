@@ -1,5 +1,6 @@
 <?php
 require_once BASEPATH.'app/controllers/Base.php';
+require_once dirname(__DIR__,3).'/config/AppSettings.php';
 
 /**
  * Super Admin-only database status, bounded retention and native MySQL backup.
@@ -66,7 +67,8 @@ class Databasemanagement extends Base {
             'tables'=>$rows,
             'cleanable'=>$eligible,
             'totalBytes'=>$totalBytes,
-            'databaseName'=>DB_NAME
+            'databaseName'=>DB_NAME,
+            'defaultRetentionMonths'=>AppSettings::value($this->db->getConnection(),'retention.default_months')??3
         ]);
     }
 
