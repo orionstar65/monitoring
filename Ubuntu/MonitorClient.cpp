@@ -1954,11 +1954,10 @@ void MonitorClient::updateStatusDisplay()
 
 void MonitorClient::notifyRunningInstance()
 {
-    if (trayIcon) {
-        notifyTray(QStringLiteral("MonitorClient"),
-                              QStringLiteral("MonitorClient is already running in the system tray."),
-                              QSystemTrayIcon::Information, 4000);
-    }
+    // Launching MonitorClient again must restore the existing Settings window.
+    // Otherwise a desktop without a visible tray host has no way to reopen it.
+    qInfo() << "[Tray] Existing instance activated; opening Settings";
+    onConfigureAction();
 }
 
 void MonitorClient::enableScreenshot(bool enabled)
