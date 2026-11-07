@@ -220,9 +220,10 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     updateForm->setHorizontalSpacing(10);
     updateForm->setLabelAlignment(Qt::AlignLeft|Qt::AlignVCenter);
     updateServerInput=new QLineEdit(updatesGroup);
-    updateServerInput->setPlaceholderText("http://192.168.2.241:8765");
-    updateServerInput->setToolTip("URL serving manifest.json and versioned packages via python -m http.server");
-    updateForm->addRow("Update server",updateServerInput);
+    updateServerInput->setText(QStringLiteral("/upgrades/"));
+    updateServerInput->setReadOnly(true);
+    updateServerInput->setToolTip("Fixed backend update API path. The configured Server IP and Port are reused automatically.");
+    updateForm->addRow("Update API path",updateServerInput);
     auto *updateActions=new QHBoxLayout();
     updateActions->setSpacing(7);
     checkUpdateButton=new QPushButton("Check new version",updatesGroup);
@@ -316,7 +317,7 @@ void ConfigDialog::loadSettings(){
     serverIPEdit->setText(cfg.value("Server/ip","192.168.1.45").toString());
     serverPortEdit->setValue(cfg.value("Server/port",8924).toInt());
     notificationsCheck->setChecked(cfg.value("Notifications/enabled",true).toBool());
-    updateServerInput->setText(cfg.value("Updates/url","").toString());
+    updateServerInput->setText(QStringLiteral("/upgrades/"));
     // These are display fields only. The token remains in Secret Service,
     // and the backend must validate it before the account is considered signed in.
     rememberedUserNo=cfg.value("User/no").toString().trimmed();
@@ -346,7 +347,6 @@ void ConfigDialog::saveSettings(){
         cfg.setValue("User/no",activeUserNo);
         cfg.setValue("User/name",activeUserName);
     }
-    cfg.setValue("Updates/url",updateServerInput->text().trimmed());
     cfg.sync();
     if(cfg.status()!=QSettings::NoError)
         qWarning() << "[Settings] Failed to persist server configuration at" << settingsPath();
@@ -950,6 +950,13 @@ QUrl monitorUpdateBase(const QString &text) {
     url.setPath(p);
     return url;
 }
+QUrl monitorBackendUpdateBase(const QString &host,int port) {
+    const QString ip=host.trimmed();
+    if(ip.isEmpty() || ip.contains('/') || ip.contains('@') || port<1 || port>65535)return {};
+    const QString scheme=port==8924 ? QStringLiteral("http") : QStringLiteral("https");
+    return monitorUpdateBase(QStringLiteral("%1://%2:%3/upgrades/")
+        .arg(scheme,ip,QString::number(port)));
+}
 bool monitorNewerVersion(const QString &remote,const QString &installed) {
     const QRegularExpression re(R"(^[0-9]+(\.[0-9]+){1,2}$)");
     if(!re.match(remote).hasMatch() || !re.match(installed).hasMatch())return false;
@@ -965,15 +972,11 @@ bool monitorNewerVersion(const QString &remote,const QString &installed) {
 void ConfigDialog::onCheckUpdate(){
     availableUpdateUrl.clear();
     installUpdateButton->setEnabled(false);
-    const QUrl base=monitorUpdateBase(updateServerInput->text());
+    const QUrl base=monitorBackendUpdateBase(getServerIP(),getServerPort());
     if(!base.isValid()){
-        updateStatus->setText("Enter an http(s) update server URL.");
+        updateStatus->setText("Configure a valid Server IP and Port in the Account tab.");
         return;
     }
-    QDir().mkpath(QFileInfo(settingsPath()).absolutePath());
-    QSettings cfg(settingsPath(),QSettings::IniFormat);
-    cfg.setValue("Updates/url",base.toString());
-    cfg.sync();
     checkUpdateButton->setEnabled(false);
     updateStatus->setText("Checking for an Ubuntu update...");
     QNetworkRequest req(base.resolved(QUrl("manifest.json")));
@@ -1021,7 +1024,7 @@ void ConfigDialog::onCheckUpdate(){
 void ConfigDialog::onInstallUpdate(){
     if(availableUpdateUrl.isEmpty())return;
     const QUrl remote(availableUpdateUrl);
-    const QUrl base=monitorUpdateBase(updateServerInput->text());
+    const QUrl base=monitorBackendUpdateBase(getServerIP(),getServerPort());
     if(!base.isValid()||remote.host()!=base.host()||
        remote.port()!=base.port()||remote.scheme()!=base.scheme()){
         updateStatus->setText("Update server changed; check again.");return;
