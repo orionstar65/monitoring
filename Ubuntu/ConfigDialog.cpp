@@ -46,6 +46,7 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     // desktop environments. Closing it only dismisses the dialog.
     setWindowFlag(Qt::Tool, true);
     setAttribute(Qt::WA_QuitOnClose, false);
+    setAttribute(Qt::WA_DeleteOnClose, false);
     setWindowTitle(QString("MonitorClient v%1 — Settings").arg(MONITORAPP_VERSION));
     setMinimumSize(500,340);
     resize(540,380);
@@ -268,7 +269,10 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     connect(saveButton,&QPushButton::clicked,this,&ConfigDialog::onSaveClicked);
     connect(editButton,&QPushButton::clicked,this,&ConfigDialog::onEditClicked);
     connect(lockSettingsButton,&QPushButton::clicked,this,&ConfigDialog::onLockSettingsClicked);
-    connect(closeButton,&QPushButton::clicked,this,[this](){ hide(); });
+    connect(closeButton,&QPushButton::clicked,this,[this](){
+        hide();
+        qInfo() << "[Lifecycle] Settings hidden via Close; tray service remains active";
+    });
     loadSettings();
     // Apply immediately: a disabled toggle must suppress system tray
     // notifications without waiting for a separate Save click.
@@ -289,11 +293,13 @@ void ConfigDialog::closeEvent(QCloseEvent *event) {
     // running tray client and is reused across opens, including the titlebar X.
     event->ignore();
     hide();
+    qInfo() << "[Lifecycle] Settings hidden via window close; tray service remains active";
 }
 
 void ConfigDialog::reject() {
     // Escape and any explicit QDialog rejection dismiss Settings only.
     hide();
+    qInfo() << "[Lifecycle] Settings hidden via Escape; tray service remains active";
 }
 
 QString ConfigDialog::settingsPath() const {
