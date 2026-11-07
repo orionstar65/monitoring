@@ -692,18 +692,20 @@ class View extends Base {
         );
         $current_position = $position_result['position'];
         
-        // Check if there are more screenshots in each direction
+        // The API uses newest-first ordering: next = older and prev = newer.
+        // Match these availability flags to their actual query directions,
+        // otherwise the viewer disables the wrong arrow at the edges.
         $has_next = $this->db->fetch(
-            "SELECT COUNT(*) as count FROM screenshot_metadata 
-             WHERE monitor_ip_id = :monitor_id 
-             AND capture_datetime > :target_datetime",
+            "SELECT COUNT(*) as count FROM screenshot_metadata
+             WHERE monitor_ip_id = :monitor_id
+             AND capture_datetime < :target_datetime",
             ['monitor_id' => $monitor_id, 'target_datetime' => $target_screenshot['capture_datetime']]
         )['count'] > 0;
-        
+
         $has_prev = $this->db->fetch(
-            "SELECT COUNT(*) as count FROM screenshot_metadata 
-             WHERE monitor_ip_id = :monitor_id 
-             AND capture_datetime < :target_datetime",
+            "SELECT COUNT(*) as count FROM screenshot_metadata
+             WHERE monitor_ip_id = :monitor_id
+             AND capture_datetime > :target_datetime",
             ['monitor_id' => $monitor_id, 'target_datetime' => $target_screenshot['capture_datetime']]
         )['count'] > 0;
         
