@@ -4930,33 +4930,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         
 
         
-        // Settings
+        // Primary actions
+        menu.addItem(NSMenuItem.separator())
+        let sendAllItem = NSMenuItem(title: "Send All Logs", action: #selector(sendAllLogs), keyEquivalent: "")
+        sendAllItem.target = self
+        menu.addItem(sendAllItem)
+
         let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettingsDialog), keyEquivalent: ",")
         settingsItem.keyEquivalentModifierMask = [.command]
         menu.addItem(settingsItem)
-        
-        // Configuration section
-        menu.addItem(NSMenuItem.separator())
-        
-        // Configuration refresh
-        // Refresh Configuration is available in Settings.
-        
-        // Configuration display
+
+        // Keep the current configuration visible, without extra empty sections.
         let configDisplayItem = NSMenuItem(title: "Configuration: Loading...", action: nil, keyEquivalent: "")
         configDisplayItem.tag = 300
         configDisplayItem.isEnabled = false
         menu.addItem(configDisplayItem)
-        
-        // Grant permissions (unified button for both accessibility and screen recording)
-        // Permissions are managed from Settings.
-        
+
         menu.addItem(NSMenuItem.separator())
-        
-        // Manual test actions
-        // Manual uploads are managed from Settings.
-        
-        menu.addItem(NSMenuItem.separator())
-        
         // Quit
         let quitItem = NSMenuItem(title: "Quit MonitorClient", action: #selector(quitApp), keyEquivalent: "q")
         quitItem.keyEquivalentModifierMask = [.command]
