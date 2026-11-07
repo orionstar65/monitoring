@@ -55,6 +55,10 @@ ob_start();
               $row=$stored[$key]??null;
               $value=$row ? $row['setting_value'] : ($type==='optional_int'?'':($type==='bool'?($default?'1':'0'):(string)$default));
               $formId='setting-'.substr(hash('sha256',$key),0,12);
+              $unit=$key==='retention.default_months'?' months'
+                  :(in_array($key,['server.max_retry_attempts','server.chunk_size'],true)?'':' seconds');
+              $defaultLabel=$type==='bool' ? ($default?'Enabled':'Disabled')
+                  :($default===null?'Inherit global':$default.$unit);
           ?>
             <tr>
               <td><code><?= $e($key) ?></code></td>
@@ -77,7 +81,7 @@ ob_start();
                 </form>
               </td>
               <td class="small text-muted">
-                <?= $type==='bool'?($default?'Enabled':'Disabled'):($default===null?'Inherit global':$e($default).($key==='retention.default_months'?' months':($key==='server.max_retry_attempts'||$key==='server.chunk_size'?'':' seconds'))) ?>
+                <?= $e($defaultLabel) ?>
                 <?php if($min!==null): ?><span class="text-nowrap">(<?= (int)$min ?>–<?= (int)$max ?>)</span><?php endif; ?>
               </td>
               <td class="text-muted small">
