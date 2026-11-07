@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <functional>
 #include <atomic>
 
@@ -96,6 +97,7 @@ private:
     QString getDeviceInfo(struct udev_device* dev);
     void processUsbEvent(struct udev_device* dev);
     void grabEntireDesktop(QString path, QPixmap& res, bool& ok);
+    int captureScreen(bool manual);
     void uploadCapturedScreenshot(const QString &basePath);
     void reportScreenshotCaptureError(const QString &reason);
     void grabScreen(QString filePath, bool& ok);
@@ -214,8 +216,10 @@ private:
     bool browserHistoryEnabled = true;
     bool usbMonitoringEnabled = true;
     bool screenshotInProgress = false;
-    bool m_manualScreenshotRequested = false;
-    bool m_manualCaptureIntent = false;
+    bool m_screenshotUploadStarted = false;
+    // Monotonic cooldown prevents duplicate scheduled/manual captures in a burst.
+    QElapsedTimer m_captureCooldown;
+    QDateTime m_captureTimeUtc;
     QString m_lastCaptureError;
     
     // Last sent times
