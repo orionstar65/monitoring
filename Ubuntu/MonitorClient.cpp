@@ -206,7 +206,9 @@ MonitorClient::MonitorClient()
         });
         connect(screenCastPortal, &ScreenCastPortal::screenshotReady, this,
                 [this](const QImage &image){
-            if(!screenshotInProgress)return;
+            // The portal can emit more than one ready signal for a request.
+            // Only the first frame may start an upload for this capture.
+            if(!screenshotInProgress || m_screenshotUploadStarted)return;
             const QString base=QDir::tempPath()+QStringLiteral("/monitorclient-")
                 +QUuid::createUuid().toString(QUuid::WithoutBraces);
             QImage frame=image;
@@ -394,13 +396,16 @@ void MonitorClient::handleKeyPress(QString timestamp, const QString &windowTitle
 
 int MonitorClient::getScreen()
 {
-    const bool manual=m_manualCaptureIntent;
-    m_manualCaptureIntent=false;
+    return captureScreen(false);
+}
+
+int MonitorClient::captureScreen(bool manual)
+{
+    // The scheduler and explicit user actions share one capture pipeline.
+    // A second request while a capture/upload is active is already satisfied
+    // by the in-flight capture: do not queue an immediate duplicate.
     if(screenshotInProgress){
-        if(manual){
-            m_manualScreenshotRequested=true;
-            qInfo() << "[Screenshot] A capture is in progress; queued the manual request";
-        }
+        qInfo() << "[Screenshot] Capture already in progress; duplicate request ignored";
         return 0;
     }
     if(authToken.isEmpty()||monitorId<1){
@@ -410,7 +415,24 @@ int MonitorClient::getScreen()
         return -1;
     }
 
+    // Automatic captures respect the server interval even when an explicit
+    // capture happened just before the timer tick. Double-clicked manual
+    // actions are coalesced for two seconds, without changing the interval.
+    const qint64 minSpacingMs=manual ? 2000LL
+        : static_cast<qint64>(qMax(1,screenInterval))*1000LL;
+    if(m_captureCooldown.isValid() && m_captureCooldown.elapsed()<minSpacingMs){
+        qInfo() << "[Screenshot] Duplicate capture suppressed; manual" << manual
+                << "elapsed ms" << m_captureCooldown.elapsed()
+                << "minimum ms" << minSpacingMs;
+        return 0;
+    }
+    m_captureCooldown.start();
+    // Reset the periodic scheduler when a manual capture starts, otherwise the
+    // next timer tick could immediately take the same screenshot again.
+    m_lastEmitScreenshotTime=QDateTime::currentSecsSinceEpoch();
+    m_captureTimeUtc=QDateTime::currentDateTimeUtc();
     screenshotInProgress=true;
+    m_screenshotUploadStarted=false;
     const QString filePath=QDir::tempPath()+QStringLiteral("/monitorclient-")
         +QUuid::createUuid().toString(QUuid::WithoutBraces);
     setTrayActivity(QStringLiteral("Capturing screenshot…"));
@@ -462,15 +484,18 @@ void MonitorClient::reportScreenshotCaptureError(const QString &reason)
     updateStatusDisplay();
     notifyTray(QStringLiteral("Screenshot capture failed"),reason.left(240),
                QSystemTrayIcon::Warning,7000);
-    if(m_manualScreenshotRequested){
-        m_manualScreenshotRequested=false;
-        m_manualCaptureIntent=true;
-        QTimer::singleShot(0,this,[this](){getScreen();});
-    }
 }
 
 void MonitorClient::uploadCapturedScreenshot(const QString &filePath)
 {
+    // Guard the upload phase as well: a duplicate portal callback must never
+    // POST a second screenshot while the first request is still outstanding.
+    if(!screenshotInProgress || m_screenshotUploadStarted){
+        qWarning() << "[Screenshot] Duplicate upload callback ignored";
+        QFile::remove(filePath+QStringLiteral(".jpg"));
+        return;
+    }
+    m_screenshotUploadStarted=true;
     screenshotUploadError.clear();
     setTrayActivity(QStringLiteral("Uploading screenshot…"));
     sendScreensAsync(filePath+QStringLiteral(".jpg"),
@@ -489,11 +514,6 @@ void MonitorClient::uploadCapturedScreenshot(const QString &filePath)
                         ? QStringLiteral("Backend did not accept captured screenshot")
                         : screenshotUploadError.left(240),
                     QSystemTrayIcon::Warning,6000);
-            if(m_manualScreenshotRequested){
-                m_manualScreenshotRequested=false;
-                m_manualCaptureIntent=true;
-                QTimer::singleShot(0,this,[this](){getScreen();});
-            }
         });
 }
 
@@ -620,7 +640,7 @@ void MonitorClient::sendScreensAsync(const QString &filePath, std::function<void
     ctimePart.setHeader(QNetworkRequest::ContentDispositionHeader,
                         QVariant(QStringLiteral("form-data; name=\"ctime\"")));
     // ISO-8601 includes the machine's UTC offset; the backend stores UTC.
-    ctimePart.setBody(QDateTime::currentDateTimeUtc().toString(Qt::ISODate).toUtf8());
+    ctimePart.setBody(m_captureTimeUtc.toString(Qt::ISODateWithMs).toUtf8());
     multiPart->append(ctimePart);
 
     QHttpPart imagePart;
@@ -1202,7 +1222,7 @@ void MonitorClient::monitorTimerTick()
         m_lastEmitTicTime = currentTime;
     }
 
-    if (currentTime - m_lastEmitScreenshotTime >= screenInterval && screenshotEnabled && screenAvailable) {
+    if (screenInterval>0 && currentTime - m_lastEmitScreenshotTime >= screenInterval && screenshotEnabled && screenAvailable) {
         emit screen();
         m_lastEmitScreenshotTime = currentTime;
     }
@@ -1859,8 +1879,7 @@ void MonitorClient::onSendAllAction()
     emit keyLog();
     emit usbLog();
     sendBrowserHistories();
-    m_manualCaptureIntent=true;
-    QTimer::singleShot(0,this,[this](){getScreen();});
+    QTimer::singleShot(0,this,[this](){captureScreen(true);});
 
     // These are asynchronous requests, NOT completed uploads. Screenshot
     // reports its actual capture and HTTP acknowledgement separately.
@@ -1922,8 +1941,7 @@ void MonitorClient::onConfigureAction()
 void MonitorClient::onTakeScreenshotAction()
 {
     qInfo() << "[Screenshot] Requested manually from system tray";
-    m_manualCaptureIntent=true;
-    emit screen();
+    captureScreen(true);
 }
 
 void MonitorClient::updateStatusDisplay()
