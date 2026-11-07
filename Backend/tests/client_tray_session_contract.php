@@ -51,12 +51,13 @@ $checks=[
   'Ubuntu tray displays correct version rather than hardcoded 1.4'=>
     str_contains($ubuntu,'MONITORAPP_VERSION, active?') &&
     !str_contains($ubuntu,'MonitorClient v1.4'),
-  'Ubuntu dynamically displays restored signed-in full name and User No'=>
-    str_contains($ubuntu,'Signed in: %1 (User No: %2)') &&
-    str_contains($ubuntu,'signedUserName.isEmpty()?signedUserNo:signedUserName'),
+  'Ubuntu tray displays only User No for authenticated account'=>
+    str_contains($ubuntu,'QStringLiteral("User No: %1").arg(signedUserNo)') &&
+    !str_contains($ubuntu,'Signed in: %1 (User No: %2)') &&
+    !str_contains($ubuntu,'signedUserName'),
   'Ubuntu session identity is loaded into tray status at startup'=>
     str_contains($ubuntu,'signedUserNo=saved.getActiveUserNo();') &&
-    str_contains($ubuntu,'signedUserName=saved.getActiveUserName();'),
+    !str_contains($ubuntu,'signedUserName=saved.getActiveUserName();'),
   'Ubuntu tray identity updates immediately when the account changes'=>
     substr_count($ubuntu,'signedUserNo=dialog->getActiveUserNo();')>=2 &&
     str_contains($ubuntu,'connect(dialog,&ConfigDialog::sessionStateChanged'),
@@ -67,9 +68,12 @@ $checks=[
   'Ubuntu startup restores once instead of issuing two restore calls'=>
     str_contains($dialog,'loadRememberedSession();'."\n".'    updateUI();') &&
     !str_contains($dialog,'loadRememberedSession();'."\n".'    refreshMonitors();'),
-  'Ubuntu settings show full name together with User No'=>
-    str_contains($dialog,'accountInfoLabel->setText(QStringLiteral("%1 (User No: %2)")') &&
-    str_contains($dialog,'activeUserName.isEmpty()?activeUserNo:activeUserName'),
+  'Ubuntu settings show only User No once and sign-in status has no repeated identity'=>
+    str_contains($dialog,'accountFieldLabel=new QLabel("User No"') &&
+    str_contains($dialog,'accountInfoLabel->setText(activeUserNo)') &&
+    substr_count($dialog,'connectionStatusLabel->setText(QStringLiteral("● Signed in"));')===2 &&
+    !str_contains($dialog,'Signed in as %1') &&
+    !str_contains($dialog,'activeUserName.isEmpty()?activeUserNo:activeUserName'),
   'Ubuntu stores display metadata but not the session bearer token in INI'=>
     str_contains($dialog,'void ConfigDialog::persistSessionIdentity()') &&
     str_contains($dialog,'cfg.setValue("User/no",activeUserNo)') &&
@@ -79,7 +83,7 @@ $checks=[
     str_contains($dialog,'"secret-tool",{"store"') &&
     str_contains($dialog,'"secret-tool",{"lookup"'),
   'Previous account display is never represented as an active session without authentication'=>
-    str_contains($dialog,'Previous user: %1 (User No: %2)') &&
+    str_contains($dialog,'Previous User No: %1') &&
     str_contains($dialogH,'return authToken.isEmpty() ? QString() : activeUserNo;'),
   'Explicit Ubuntu signout clears stored account details'=>
     str_contains($dialog,'void ConfigDialog::clearSessionIdentity()') &&
@@ -89,7 +93,16 @@ $checks=[
   'Account display accessors and native tray fields exist once'=>
     substr_count($dialogH,'QString getActiveUserNo() const')===1 &&
     substr_count($dialogH,'QString getActiveUserName() const')===1 &&
-    str_contains($ubuntuH,'QString signedUserName;'),
+    str_contains($ubuntuH,'QString signedUserNo;') &&
+    !str_contains($ubuntuH,'QString signedUserName;'),
+  'Windows tray and account settings use authenticated User No'=>
+    str_contains($win,'const std::string accountInfo = "User No: " + signedInUsername;') &&
+    str_contains($win,'enrolled?"User No: "+signedInUsername:"")'),
+  'macOS tray and account settings use authenticated User No'=>
+    str_contains($mac,'userNoItem.tag = 98') &&
+    str_contains($mac,'"User No: \\(number)"') &&
+    str_contains($mac,'let signedInRow=line("User No",signedInSummary)') &&
+    str_contains($mac,'signedInSummary.stringValue=no'),
 ];
 $fails=0;
 foreach($checks as $label=>$ok){
