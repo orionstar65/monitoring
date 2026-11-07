@@ -1877,7 +1877,7 @@ void MonitorClient::onConfigureAction()
         authToken=dialog->getAuthToken();
         monitorId=dialog->getMonitorId();
         signedUserNo=dialog->getActiveUserNo();
-                clientName=dialog->getClientName();
+        clientName=dialog->getClientName();
         if(authToken.isEmpty() || monitorId<1) {
             if(keyboardMonitor)keyboardMonitor->stopMonitoring();
         } else if(keyboardMonitor && !keyboardMonitor->startMonitoring()) {
@@ -1891,8 +1891,8 @@ void MonitorClient::onConfigureAction()
             clientName=dialog->getClientName();
             authToken=dialog->getAuthToken();
             monitorId=dialog->getMonitorId();
-           signedUserNo=dialog->getActiveUserNo();
-                        if(!authToken.isEmpty() && monitorId>0){
+            signedUserNo=dialog->getActiveUserNo();
+            if(!authToken.isEmpty() && monitorId>0){
                 if(keyboardMonitor && !keyboardMonitor->startMonitoring())
                     qWarning() << "[KeyLog] startMonitoring failed; check input permissions";
                 scheduleConnectionTest(QStringLiteral("Verifying server…"), [this](bool ok) {
