@@ -35,6 +35,14 @@ if [[ $EUID -eq 0 ]]; then
    exit 1
 fi
 
+# Never let the legacy direct installer overwrite a package-managed release
+# with its separately configured (possibly older) source-build version.
+if command -v dpkg-query >/dev/null 2>&1 && \
+   dpkg-query -W -f='${Status}' monitorclient 2>/dev/null | grep -Fxq 'install ok installed'; then
+    print_error "MonitorClient is managed by dpkg. Upgrade with: sudo apt install ./monitorclient_VERSION_amd64.deb"
+    exit 2
+fi
+
 print_status "Starting Ubuntu MonitorClient Installation..."
 
 # Get the directory where this script is located
