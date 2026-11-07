@@ -32,11 +32,12 @@ $checks=[
     str_contains($ubuntu,'connect(dialog,&ConfigDialog::sendAllRequested,this,&MonitorClient::onSendAllAction);'),
  'Ubuntu starts key, USB, heartbeat and browser uploads independently of screenshot capture'=>
     str_contains($ubuntu,'emit tic();'.PHP_EOL.'    emit keyLog();'.PHP_EOL.'    emit usbLog();'.PHP_EOL.'    sendBrowserHistories();') &&
-    str_contains($ubuntu,'QTimer::singleShot(0,this,[this](){getScreen();});'),
- 'Ubuntu capture uses unique temporary file and handles a concurrent manual request'=>
+    str_contains($ubuntu,'QTimer::singleShot(0,this,[this](){captureScreen(true);});'),
+ 'Ubuntu capture uses unique temporary file and coalesces concurrent requests'=>
     str_contains($ubuntu,'QUuid::createUuid().toString(QUuid::WithoutBraces)') &&
-    str_contains($ubuntuHeader,'m_manualScreenshotRequested = false;') &&
-    str_contains($ubuntu,'QTimer::singleShot(0,this,[this](){getScreen();});'),
+    str_contains($ubuntuHeader,'QElapsedTimer m_captureCooldown;') &&
+    str_contains($ubuntu,'Capture already in progress; duplicate request ignored') &&
+    str_contains($ubuntu,'QTimer::singleShot(0,this,[this](){captureScreen(true);});'),
  'Ubuntu X11 screenshot fallback and capture failures are visible'=>
     str_contains($ubuntu,'screen->grabWindow(0)') &&
     str_contains($ubuntu,'Capture failed. Check screen-sharing permission') &&
