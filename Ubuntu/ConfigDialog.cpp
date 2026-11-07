@@ -114,7 +114,7 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     passwordFieldLabel=new QLabel("Password",serverGroup);
     serverForm->addRow(userNoFieldLabel,userNoInput);
     serverForm->addRow(passwordFieldLabel,passwordInput);
-    accountFieldLabel=new QLabel("Signed-in user",serverGroup);
+    accountFieldLabel=new QLabel("User No",serverGroup);
     accountInfoLabel=new QLabel("—",serverGroup);
     accountInfoLabel->setWordWrap(true);
     accountInfoLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -294,12 +294,11 @@ void ConfigDialog::loadSettings(){
     // These are display fields only. The token remains in Secret Service,
     // and the backend must validate it before the account is considered signed in.
     const QString previousNo=cfg.value("User/no").toString().trimmed();
-    const QString previousName=cfg.value("User/name").toString().trimmed();
     if(!previousNo.isEmpty()){
         userNoInput->setText(previousNo);
         connectionStatusLabel->setText(
-            QStringLiteral("Previous user: %1 (User No: %2) · Sign in if the secure session cannot be restored")
-                .arg(previousName.isEmpty()?previousNo:previousName,previousNo));
+            QStringLiteral("Previous User No: %1 · Sign in if the secure session cannot be restored")
+                .arg(previousNo));
         connectionStatusLabel->setWordWrap(true);
     }
 }
@@ -412,8 +411,7 @@ void ConfigDialog::onSignInClicked(){
         return;
     }
     persistSessionIdentity();
-    connectionStatusLabel->setText(QStringLiteral("● Signed in as %1 (User No: %2)")
-        .arg(activeUserName.isEmpty()?activeUserNo:activeUserName,activeUserNo));
+    connectionStatusLabel->setText(QStringLiteral("● Signed in"));
     updateMonitorList(result.value("monitors").toArray());
     updateUI();
     emit sessionStateChanged();
@@ -471,8 +469,7 @@ void ConfigDialog::loadRememberedSession(){
     assignmentLocked=state.value("assignment_locked").toBool();
     settingsLocked=state.value("settings_locked").toBool();
     persistSessionIdentity();
-    connectionStatusLabel->setText(QStringLiteral("● Signed in as %1 (User No: %2)")
-        .arg(activeUserName.isEmpty()?activeUserNo:activeUserName,activeUserNo));
+    connectionStatusLabel->setText(QStringLiteral("● Signed in"));
     // Restore monitor details from this same verified response.
     updateMonitorList(state.value("monitors").toArray());
 }
@@ -520,8 +517,8 @@ void ConfigDialog::refreshDirectory(){
         const QString number=user.value("user_no").toString();
         if(number.isEmpty())continue;
         const int n=user.value("device_count").toInt();
-        const QString label=QString("%1: %2 (%3 Devices)")
-            .arg(number,user.value("full_name").toString()).arg(n);
+        const QString label=QStringLiteral("User No %1 · %2 devices")
+            .arg(number).arg(n);
         userSelector->addItem(label,number);
     }
     const int ix=userSelector->findData(current);
@@ -648,8 +645,7 @@ void ConfigDialog::updateUI(){
     passwordFieldLabel->setVisible(!enrolled);
     accountFieldLabel->setVisible(enrolled);
     accountInfoLabel->setVisible(enrolled);
-    if(enrolled)accountInfoLabel->setText(QStringLiteral("%1 (User No: %2)")
-        .arg(activeUserName.isEmpty()?activeUserNo:activeUserName,activeUserNo));
+    if(enrolled)accountInfoLabel->setText(activeUserNo);
     logoutButton->setVisible(enrolled);
     logoutButton->setEnabled(enrolled);
     sendAllButton->setEnabled(enrolled&&monitorId>0);
