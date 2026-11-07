@@ -904,7 +904,7 @@ void ConfigDialog::onCheckUpdate(){
     checkUpdateButton->setEnabled(false);
     updateStatus->setText("Checking for an Ubuntu update...");
     QNetworkRequest req(base.resolved(QUrl("manifest.json")));
-    req.setAttribute(QNetworkRequest::FollowRedirectsAttribute,false);
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
     auto *reply=updateNetwork->get(req);
     connect(reply,&QNetworkReply::finished,this,[this,reply,base](){
         checkUpdateButton->setEnabled(true);
@@ -967,7 +967,7 @@ void ConfigDialog::onInstallUpdate(){
     checkUpdateButton->setEnabled(false);
     updateStatus->setText("Downloading "+availableUpdateVersion+"...");
     QNetworkRequest req(remote);
-    req.setAttribute(QNetworkRequest::FollowRedirectsAttribute,false);
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
     auto *reply=updateNetwork->get(req);
     const qint64 expectedSize=availableUpdateSize;
     const QString expectedHash=availableUpdateSha;
