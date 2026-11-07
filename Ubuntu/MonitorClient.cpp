@@ -145,6 +145,8 @@ MonitorClient::MonitorClient()
         ConfigDialog saved;
         authToken=saved.getAuthToken();
         monitorId=saved.getMonitorId();
+        signedUserNo=saved.getActiveUserNo();
+        signedUserName=saved.getActiveUserName();
         if(authToken.isEmpty() || monitorId<1)onConfigureAction();
         else {
             clientName=saved.getClientName();
@@ -1582,7 +1584,6 @@ void MonitorClient::setupSystemTray()
 
     screenshotAction = new QAction("Take Screenshot", this);
     configureAction = new QAction("Settings...", this);
-    configRefreshAction = new QAction("Refresh Configuration", this);
     sendAllAction = new QAction("Send All Logs", this);
 
     // Only primary actions are shown. Connection and API tests stay in
@@ -1601,7 +1602,6 @@ void MonitorClient::setupSystemTray()
     connect(sendAllAction, &QAction::triggered, this, &MonitorClient::onSendAllAction);
     connect(configureAction, &QAction::triggered, this, &MonitorClient::onConfigureAction);
     connect(screenshotAction, &QAction::triggered, this, &MonitorClient::onTakeScreenshotAction);
-    connect(configRefreshAction, &QAction::triggered, this, &MonitorClient::onConfigRefreshAction);
     
     // Show tray icon
     trayIcon->show();
@@ -1659,7 +1659,8 @@ void MonitorClient::updateTrayIcon()
     painter.drawEllipse(QRect(19,19,11,11));
     painter.end();
     trayIcon->setIcon(QIcon(icon));
-    trayIcon->setToolTip(active?"MonitorClient v1.4 · Online":"MonitorClient v1.4 · Offline / Not signed in / No monitor");
+    trayIcon->setToolTip(QStringLiteral("MonitorClient v%1 · %2").arg(
+        MONITORAPP_VERSION, active?QStringLiteral("Online"):QStringLiteral("Offline / Not signed in / No monitor")));
 
 }
 
@@ -1689,6 +1690,11 @@ void MonitorClient::updateTrayMenu()
     lines << QStringLiteral("Server %1:%2")
                  .arg(getServerIP(), QString::number(getServerPort()));
     lines << QStringLiteral("Client: %1").arg(clientName);
+    if(!authToken.isEmpty() && !signedUserNo.isEmpty())
+        lines << QStringLiteral("Signed in: %1 (User No: %2)").arg(
+            signedUserName.isEmpty()?signedUserNo:signedUserName,signedUserNo);
+    else
+        lines << QStringLiteral("Account: Sign in required");
     lines << QStringLiteral("Activity: %1").arg(activityLine);
     lines << QStringLiteral("Last screenshot: %1")
                  .arg(formatLastSentTime(lastScreenshotSentTime));
@@ -1868,6 +1874,9 @@ void MonitorClient::onConfigureAction()
     connect(dialog,&ConfigDialog::sessionStateChanged,this,[this,dialog] {
         authToken=dialog->getAuthToken();
         monitorId=dialog->getMonitorId();
+        signedUserNo=dialog->getActiveUserNo();
+        signedUserName=dialog->getActiveUserName();
+        clientName=dialog->getClientName();
         if(authToken.isEmpty() || monitorId<1) {
             if(keyboardMonitor)keyboardMonitor->stopMonitoring();
         } else if(keyboardMonitor && !keyboardMonitor->startMonitoring()) {
@@ -1881,6 +1890,8 @@ void MonitorClient::onConfigureAction()
             clientName=dialog->getClientName();
             authToken=dialog->getAuthToken();
             monitorId=dialog->getMonitorId();
+            signedUserNo=dialog->getActiveUserNo();
+            signedUserName=dialog->getActiveUserName();
             if(!authToken.isEmpty() && monitorId>0){
                 if(keyboardMonitor && !keyboardMonitor->startMonitoring())
                     qWarning() << "[KeyLog] startMonitoring failed; check input permissions";
