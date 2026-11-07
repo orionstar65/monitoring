@@ -35,6 +35,16 @@ private enum MonitorUpdates {
         return "macos-x64"
         #endif
     }
+    static let apiPath="/upgrades/"
+    static func configuredBaseURL(host: String, port: String) -> URL? {
+        let cleanHost=host.trimmingCharacters(in:.whitespacesAndNewlines)
+        let cleanPort=port.trimmingCharacters(in:.whitespacesAndNewlines)
+        guard !cleanHost.isEmpty, !cleanHost.contains("/"),
+              !cleanHost.contains("@"),
+              let numericPort=Int(cleanPort), numericPort>0, numericPort<=65535 else { return nil }
+        let scheme=cleanPort=="8924" ? "http" : "https"
+        return baseURL("\(scheme)://\(cleanHost):\(cleanPort)\(apiPath)")
+    }
     static func baseURL(_ raw: String) -> URL? {
         guard var c=URLComponents(string:raw.trimmingCharacters(in:.whitespacesAndNewlines)),
               ["http","https"].contains(c.scheme?.lowercased() ?? ""),
@@ -3022,9 +3032,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let notificationsPane = section("Notifications")
         notificationsPane.addArrangedSubview(notifications)
         let updatePane = section("Client updates")
-        let updateServer = entry("http://192.168.2.241:8765",
-            value:storage.string(forKey:"update-server-url") ?? "")
-        updatePane.addArrangedSubview(line("Update server",updateServer))
+        let updateServer = entry("/upgrades/",value:MonitorUpdates.apiPath)
+        updateServer.isEditable=false
+        updatePane.addArrangedSubview(line("Update API path",updateServer))
         let checkUpdate = action("Check new version","check-update")
         let installUpdate = action("Update","install-update")
         installUpdate.isEnabled=false
@@ -3337,13 +3347,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             switch command {
             case "check-update":
                 invalidateUpdate()
-                guard let base=MonitorUpdates.baseURL(updateServer.stringValue),
+                guard let base=MonitorUpdates.configuredBaseURL(
+                        host:self.storage.string(forKey:"server-ip") ?? "",
+                        port:self.storage.string(forKey:"server-port") ?? "8924"),
                       let manifest=URL(string:"manifest.json",relativeTo:base)?.absoluteURL else {
-                    updateMessage.stringValue="Enter an HTTP or HTTPS update server URL."
+                    updateMessage.stringValue="Configure a valid Server IP and Port first."
                     return
                 }
-                self.storage.set(updateServer.stringValue.trimmingCharacters(in:.whitespacesAndNewlines),
-                                 forKey:"update-server-url")
                 checkUpdate.isEnabled=false
                 updateMessage.stringValue="Checking \(MonitorUpdates.platform)…"
                 URLSession.shared.dataTask(with:manifest){data,response,error in
@@ -3365,7 +3375,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 }.resume()
             case "install-update":
                 guard let entry=pendingRelease,
-                      let base=MonitorUpdates.baseURL(updateServer.stringValue),
+                      let base=MonitorUpdates.configuredBaseURL(
+                          host:self.storage.string(forKey:"server-ip") ?? "",
+                          port:self.storage.string(forKey:"server-port") ?? "8924"),
                       base.host==entry.url.host && base.port==entry.url.port &&
                       base.scheme==entry.url.scheme else {
                     invalidateUpdate()
