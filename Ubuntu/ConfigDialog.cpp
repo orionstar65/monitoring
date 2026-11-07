@@ -12,6 +12,7 @@
 #include <vector>
 #include <QCheckBox>
 #include <QCloseEvent>
+#include <QDebug>
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
