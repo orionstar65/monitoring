@@ -62,7 +62,6 @@ private:
     QString readRememberedToken() const;
     void rememberToken(const QString &value);
     void loadRememberedSession();
-    void rememberVerifiedUserIdentity();
     void refreshDirectory();
     void refreshMonitors();
     void updateUI();
@@ -72,8 +71,6 @@ private:
     QString authToken;
     QString activeUserNo;
     QString activeUserName;
-    QString lastKnownUserNo;
-    QString lastKnownUserName;
     QString pendingUserNo;
     QString directoryError;
     QJsonArray assignedMonitors;
