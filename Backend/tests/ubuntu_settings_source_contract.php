@@ -29,7 +29,10 @@ $checks=[
         str_contains($dialog,'QSettings cfg(settingsPath(),QSettings::IniFormat);') &&
         str_contains($dialog,'cfg.sync();'),
     'Failure to write sign-in server settings is visible'=>
-        str_contains($dialog,'Server settings could not be saved')
+        str_contains($dialog,'Server settings could not be saved'),
+    'Updater explicitly forbids redirects using the current Qt attribute'=>
+        substr_count($dialog,'QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy')===2 &&
+        !str_contains($dialog,'QNetworkRequest::FollowRedirectsAttribute')
 ];
 $failed=0;
 foreach($checks as $label=>$pass){
