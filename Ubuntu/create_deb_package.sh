@@ -269,10 +269,14 @@ cat > "${PACKAGE_DIR}/DEBIAN/postinst" << 'EOF'
 #!/bin/bash
 set -e
 
-# Set proper permissions
-chmod +x /opt/monitorclient/MonitorClient
-chmod +x /opt/monitorclient/launch.sh
-chmod +x /opt/monitorclient/uninstall.sh
+# Old direct installs gave /opt/monitorclient to the desktop user.
+# Restore root ownership BEFORE running any root-level upgrade helper, so an
+# unprivileged user cannot replace package-managed scripts or the setgid reader.
+chown root:root /opt/monitorclient
+chmod 0755 /opt/monitorclient
+chown root:root /opt/monitorclient/MonitorClient /opt/monitorclient/upgrade-restart.sh
+chmod 0755 /opt/monitorclient/MonitorClient /opt/monitorclient/upgrade-restart.sh
+chmod +x /opt/monitorclient/launch.sh /opt/monitorclient/uninstall.sh
 
 # Create logs directory
 mkdir -p /opt/monitorclient/logs
