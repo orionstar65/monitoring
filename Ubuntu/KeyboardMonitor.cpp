@@ -75,6 +75,13 @@ bool KeyboardMonitor::startMonitoring()
         return false;
     }
 
+    // waitForStarted() only confirms exec succeeded: a process can still
+    // terminate immediately (for example when no input devices are accessible).
+    if (m_helper->state() != QProcess::Running) {
+        qWarning() << "[KeyLog] helper exited immediately after starting";
+        emit monitoringStatusChanged(false, QStringLiteral("Reader exited immediately after start"));
+        return false;
+    }
     qInfo() << "[KeyLog] helper running, pid" << m_helper->processId();
     emit monitoringStatusChanged(true, QStringLiteral("Reader process started"));
     return true;
