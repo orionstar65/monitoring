@@ -27,9 +27,12 @@ $checks=[
       str_contains($endpoint,"'manifest.json'") &&
       str_contains($endpoint,'dirname($file)!==$root'),
   'Endpoint only allows GET/HEAD and sets content type and size'=>
-      str_contains($endpoint,"$".'method!=='."'GET'") &&
+      str_contains($endpoint,'$method!==\'GET\'') &&
       str_contains($endpoint,"'Content-Length: '") &&
       str_contains($endpoint,"'X-Content-Type-Options: nosniff'"),
+  'Backend release helper preserves a shared multi-OS manifest'=>
+      str_contains($read('Backend/publish_upgrade.sh'),'scripts/publish_update.py') &&
+      str_contains($read('Backend/publish_upgrade.sh'),'release-updates'),
   'Apache rewrite sends manifest and package paths to PHP'=>
       str_contains($rewrite,'RewriteEngine On') &&
       str_contains($rewrite,'RewriteRule ^.*$ index.php [L]'),
