@@ -24,6 +24,8 @@ public:
     QString getServerIP() const;
     int getServerPort() const;
     QString getClientName() const;
+    QString getActiveUserNo() const { return authToken.isEmpty() ? QString() : activeUserNo; }
+    QString getActiveUserName() const { return authToken.isEmpty() ? QString() : activeUserName; }
     QString getAuthToken() const { return authToken; }
     int getMonitorId() const { return monitorId; }
     bool hasSession() const { return !authToken.isEmpty(); }
@@ -53,6 +55,8 @@ private:
     QString settingsPath() const;
     void loadSettings();
     void saveSettings();
+    void persistSessionIdentity();
+    void clearSessionIdentity();
     bool saveServerIfChanged();
     void clearStoredToken(const QString &host,int port);
     QString readRememberedToken() const;
