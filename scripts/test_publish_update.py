@@ -52,6 +52,25 @@ class ReleasePublisherTests(unittest.TestCase):
             self.assertEqual(json.loads((out / "manifest.json").read_text())
                              ["platforms"]["ubuntu-amd64"]["version"], "1.5.2")
 
+    def test_same_version_is_idempotent_but_cannot_change_release_bytes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            out = root / "served"
+            package = root / "MonitorClient-1.5.1-ubuntu-amd64.deb"
+            package.write_bytes(b"version one contents")
+            first = module.publish("ubuntu-amd64", "1.5.1", package, out)
+            # An identical retry is safe and should keep the same checksum.
+            second = module.publish("ubuntu-amd64", "1.5.1", package, out)
+            self.assertEqual(first["sha256"], second["sha256"])
+            package.write_bytes(b"new contents but accidentally old version")
+            with self.assertRaisesRegex(ValueError, "increment the patch version"):
+                module.publish("ubuntu-amd64", "1.5.1", package, out)
+            self.assertEqual((out / package.name).read_bytes(), b"version one contents")
+            self.assertEqual(
+                json.loads((out / "manifest.json").read_text())
+                ["platforms"]["ubuntu-amd64"]["sha256"], first["sha256"]
+            )
+
     def test_refuse_missing_empty_and_unsupported(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
