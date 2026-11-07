@@ -1021,20 +1021,33 @@ void ConfigDialog::onInstallUpdate(){
             updateStatus->setText("Could not save downloaded update.");reply->deleteLater();return;
         }
         reply->deleteLater();
-        // pkexec supplies the system authorization prompt. Do not claim success
-        // before dpkg has actually installed the package.
-        if(!QProcess::startDetached("pkexec",{"/usr/bin/dpkg","-i",output})){
-            updateStatus->setText("Cannot start package installer (pkexec required).");
-            installUpdateButton->setEnabled(true);return;
-        }
-        // The old build quit unconditionally 200 ms after starting pkexec,
-        // even when the authorization prompt was cancelled. Keep it alive
-        // until dpkg succeeds: postinst will replace a verified running
-        // client process and relaunch it in the same desktop session.
-        updateStatus->setText("Installer launched. Authorize the update; the running client will restart after a successful install.");
-        QMessageBox::information(this,"Update started",
-            "Approve the package installation prompt. MonitorClient remains running if "
-            "authorization is cancelled or the installation fails. Once installed, "
-            "the upgraded package restarts active desktop clients.");
+        // Keep the current app alive throughout pkexec authorization and
+        // installation. The old detached flow quit before knowing whether
+        // installation had succeeded, leaving no session to restart.
+        auto *installer=new QProcess(this);
+        connect(installer,&QProcess::errorOccurred,this,[this,installer](QProcess::ProcessError error){
+            if(error!=QProcess::FailedToStart)return;
+            checkUpdateButton->setEnabled(true);
+            installUpdateButton->setEnabled(true);
+            updateStatus->setText("Cannot start privileged installer: "+installer->errorString());
+            installer->deleteLater();
+        });
+        connect(installer,QOverload<int,QProcess::ExitStatus>::of(&QProcess::finished),
+                this,[this,installer](int exitCode,QProcess::ExitStatus exitStatus){
+            checkUpdateButton->setEnabled(true);
+            if(exitStatus!=QProcess::NormalExit || exitCode!=0){
+                installUpdateButton->setEnabled(true);
+                updateStatus->setText(QString("Package installation failed or was cancelled (exit code %1). Current MonitorClient is still running.")
+                                          .arg(exitCode));
+            }else{
+                // Normally postinst already replaced/restarted the old app.
+                // If its desktop session was unavailable, show a truthful
+                // installed-but-not-yet-active state instead of claiming success.
+                updateStatus->setText("Package installed. If the tray did not restart, quit and relaunch MonitorClient.");
+            }
+            installer->deleteLater();
+        });
+        updateStatus->setText("Waiting for installation authorization. Current MonitorClient remains active.");
+        installer->start(QStringLiteral("pkexec"),{"/usr/bin/dpkg","-i",output});
     });
 }
