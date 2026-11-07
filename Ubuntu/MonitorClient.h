@@ -206,6 +206,7 @@ private:
     QString screenshotUploadError;
     QString clientName;
     QString signedUserNo;
+    QString keyboardReaderStatus = QStringLiteral("Not started");
 
     // Status tracking
     bool screenshotEnabled = true;
