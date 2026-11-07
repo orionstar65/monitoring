@@ -49,6 +49,7 @@ php Backend/tests/portal_timeline_and_account_actions_contract.php
 php Backend/tests/monitor_selector_sort_contract.php
 php Backend/tests/client_tray_session_contract.php
 php Backend/tests/ubuntu_keyboard_helper_status_contract.php
+php Backend/tests/ubuntu_remembered_user_no_contract.php
 php Backend/tests/ubuntu_tray_lifecycle_contract.php
 php Backend/tests/ubuntu_upgrade_contract.php
 node Backend/tests/timeline_geometry_test.js
@@ -258,3 +259,26 @@ python3 scripts/test_publish_update.py
 
 Native Qt builds and real Ubuntu desktop upgrades remain required; these
 source contracts alone cannot prove process handoff on the target machine.
+
+## Ubuntu remembered User No on startup
+
+Ubuntu reads the last authenticated `User/no` from
+`~/.config/monitorclient/settings.ini` before the tray appears. This is
+**display-only** metadata, never an authentication credential. The secure
+session token still lives in the Secret Service keyring. If the keyring is
+locked, the backend is offline, or a request times out, the account number
+remains visible in Settings and the tray. Without a token, the UI explicitly
+labels the account as previously signed in / sign-in required; only a valid
+session permits monitoring uploads.
+
+A temporary backend failure no longer clears an otherwise usable token or
+its saved monitor assignment. A definite 401/403 authorization failure
+requires signing in again, but retains the saved number for identification.
+Normal Settings saves never overwrite `User/no` with an empty value. A user
+sign-out or explicit server change clears the remembered identity.
+
+Run `php Backend/tests/ubuntu_remembered_user_no_contract.php` to check the
+source contracts. On Ubuntu, also verify startup in three cases: backend
+reachable with unlocked keyring; backend offline with saved token; and locked
+keyring with saved User No. Then sign out and verify the number disappears.
+This test does not replace native Qt/UI execution.
