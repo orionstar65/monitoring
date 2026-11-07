@@ -1027,10 +1027,14 @@ void ConfigDialog::onInstallUpdate(){
             updateStatus->setText("Cannot start package installer (pkexec required).");
             installUpdateButton->setEnabled(true);return;
         }
-        updateStatus->setText("Installer launched. Authorize installation, then restart MonitorClient.");
+        // The old build quit unconditionally 200 ms after starting pkexec,
+        // even when the authorization prompt was cancelled. Keep it alive
+        // until dpkg succeeds: postinst will replace a verified running
+        // client process and relaunch it in the same desktop session.
+        updateStatus->setText("Installer launched. Authorize the update; the running client will restart after a successful install.");
         QMessageBox::information(this,"Update started",
-            "The Ubuntu package installer has been launched. Approve the system prompt. "
-            "If it fails, reinstall the saved .deb from your cache.");
-        QTimer::singleShot(200,this,[](){QApplication::quit();});
+            "Approve the package installation prompt. MonitorClient remains running if "
+            "authorization is cancelled or the installation fails. Once installed, "
+            "the upgraded package restarts active desktop clients.");
     });
 }
