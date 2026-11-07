@@ -24,6 +24,10 @@ int main(int argc, char *argv[])
     // not stop monitoring, destroy the tray icon, or end the event loop.
     // The explicit Quit action, an approved update, or shutdown can still exit.
     app.setQuitOnLastWindowClosed(false);
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, []() {
+        qInfo() << "[Lifecycle] Qt event loop exiting; background monitoring stopping";
+    });
+    qInfo() << "[Lifecycle] Tray mode initialized: closing Settings will not quit";
 
     const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
     QDir().mkpath(cacheDir);
