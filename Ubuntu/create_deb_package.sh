@@ -66,7 +66,13 @@ cmake .. -DCMAKE_BUILD_TYPE=Release -DMONITORCLIENT_VERSION="$PACKAGE_VERSION"
 cmake --build . -j"$(nproc)"
 cd ..
 
-print_success "MonitorClient built successfully!"
+# A release must embed the same version as dpkg's package metadata.
+BUILT_VERSION="$(./build/MonitorClient --version)"
+if [[ "$BUILT_VERSION" != "MonitorClient $PACKAGE_VERSION" ]]; then
+    print_error "Built binary version mismatch: $BUILT_VERSION (package $PACKAGE_VERSION)"
+    exit 1
+fi
+print_success "MonitorClient built successfully: $BUILT_VERSION"
 
 # Create package structure
 print_status "Creating package structure..."
@@ -86,7 +92,10 @@ print_status "Copying files to package..."
 cp build/MonitorClient "${PACKAGE_DIR}/opt/monitorclient/"
 cp settings.ini "${PACKAGE_DIR}/opt/monitorclient/config/"
 cp build/monitorclient-keyreader "${PACKAGE_DIR}/opt/monitorclient/"
-chmod +x "${PACKAGE_DIR}/opt/monitorclient/MonitorClient"
+cp upgrade-restart.sh "${PACKAGE_DIR}/opt/monitorclient/upgrade-restart.sh"
+printf '%s\n' "$PACKAGE_VERSION" > "${PACKAGE_DIR}/opt/monitorclient/VERSION"
+chmod 755 "${PACKAGE_DIR}/opt/monitorclient/MonitorClient" \
+          "${PACKAGE_DIR}/opt/monitorclient/upgrade-restart.sh"
 
 # Create desktop file
 cat > "${PACKAGE_DIR}/usr/share/applications/MonitorClient.desktop" << EOF
@@ -251,6 +260,10 @@ Description: ${PACKAGE_DESCRIPTION}
  system integration.
 EOF
 
+# Preserve any machine-local settings in /opt when replacing an older .deb.
+# User sessions/authentication remain in each user's home directory.
+printf '%s\n' '/opt/monitorclient/config/settings.ini' > "${PACKAGE_DIR}/DEBIAN/conffiles"
+
 # Create postinst script
 cat > "${PACKAGE_DIR}/DEBIAN/postinst" << 'EOF'
 #!/bin/bash
@@ -276,10 +289,19 @@ getent group input >/dev/null 2>&1 || groupadd --system input
 chown root:input /opt/monitorclient/monitorclient-keyreader
 chmod 2755 /opt/monitorclient/monitorclient-keyreader
 
+# When dpkg replaces an executable, the old process keeps running the old
+# inode until restarted. Perform a bounded, same-user desktop handoff only
+# for verified old package-managed processes. Never block package success if
+# the user is logged out or the graphical session is unavailable.
+if [ "${1:-}" = configure ]; then
+    /opt/monitorclient/upgrade-restart.sh configure || true
+fi
+
 echo ""
 echo "MonitorClient installed successfully!"
-echo "To start: systemctl --user enable monitorclient.service"
-echo "To configure: edit /opt/monitorclient/config/settings.ini"
+echo "To start: launch MonitorClient from your desktop session."
+echo "Installed binary: $(/opt/monitorclient/MonitorClient --version)"
+echo "To configure: use Settings from the tray or desktop launcher."
 EOF
 
 chmod +x "${PACKAGE_DIR}/DEBIAN/postinst"
@@ -325,6 +347,13 @@ chmod +x "${PACKAGE_DIR}/DEBIAN/postrm"
 print_status "Building Debian package..."
 cd package
 dpkg-deb --build "${PACKAGE_NAME}_${PACKAGE_VERSION}_${PACKAGE_ARCH}"
+
+# Inspect dpkg metadata before releasing any artifact.
+ACTUAL_PACKAGE_VERSION="$(dpkg-deb -f "${PACKAGE_NAME}_${PACKAGE_VERSION}_${PACKAGE_ARCH}.deb" Version)"
+if [[ "$ACTUAL_PACKAGE_VERSION" != "$PACKAGE_VERSION" ]]; then
+    print_error "Package metadata version mismatch: $ACTUAL_PACKAGE_VERSION"
+    exit 1
+fi
 
 # Move to parent directory
 mv "${PACKAGE_NAME}_${PACKAGE_VERSION}_${PACKAGE_ARCH}.deb" ..
