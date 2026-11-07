@@ -382,7 +382,6 @@ void updateTrayMenu() {
     }
     
     // Add client information section
-    AppendMenuA(hTrayMenu, MF_SEPARATOR, 0, NULL);
     AppendMenuA(hTrayMenu, MF_STRING | MF_DISABLED, ID_TRAY_CLIENT_INFO, "=== CLIENT INFO ===");
     
     // Client IP and MAC
@@ -424,18 +423,10 @@ void updateTrayMenu() {
     std::string usbStatus = "USB Logs: " + connectionStatus.lastUSBLogStatus;
     AppendMenuA(hTrayMenu, MF_STRING | MF_DISABLED, ID_TRAY_USB_STATUS, usbStatus.c_str());
     
-    // Configuration section
+    // Primary actions; no redundant blank separator groups.
     AppendMenuA(hTrayMenu, MF_SEPARATOR, 0, NULL);
-    AppendMenuA(hTrayMenu, MF_STRING | MF_DISABLED, ID_TRAY_STATUS, "=== CONFIGURATION ===");
-    
-    // Configuration refresh button
-    // Configuration refresh is now in the Settings window.
+    AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SEND_ALL, "Send All Logs");
     AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_SETTINGS, "Settings...");
-    // Notification preference is saved from Settings.
-    
-    // Actions section
-    AppendMenuA(hTrayMenu, MF_SEPARATOR, 0, NULL);
-    // Manual log upload is now in Settings.
     AppendMenuA(hTrayMenu, MF_SEPARATOR, 0, NULL);
     AppendMenuA(hTrayMenu, MF_STRING, ID_TRAY_EXIT, "Quit MonitorClient");
 }
