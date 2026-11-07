@@ -49,6 +49,7 @@ php Backend/tests/portal_timeline_and_account_actions_contract.php
 php Backend/tests/monitor_selector_sort_contract.php
 php Backend/tests/client_tray_session_contract.php
 php Backend/tests/ubuntu_keyboard_helper_status_contract.php
+php Backend/tests/ubuntu_tray_lifecycle_contract.php
 node Backend/tests/timeline_geometry_test.js
 node Backend/tests/monitoring_date_transcript_test.js
 node Backend/tests/screenshot_navigation_range_test.js
@@ -170,3 +171,32 @@ client or a different OS user/session is also uploading to the same monitor:
 the per-user single-instance lock cannot block a process under another UID.
 These are source contracts, not substitutes for native Qt compilation or a live
 backend/browser smoke test. Do not run GitHub Actions.
+
+## Ubuntu background/tray window lifecycle
+
+The Qt application sets `app.setQuitOnLastWindowClosed(false)`. The Settings
+`ConfigDialog` is a `Qt::Tool` window with `Qt::WA_QuitOnClose` disabled:
+its Close button or title-bar X dismisses only Settings, not the application.
+The monitor timer, network uploads and tray icon continue running without a
+taskbar window. Use the tray's **Settings...** entry or double-click the icon
+to reopen Settings; use **Quit MonitorClient** to stop the application.
+
+On GNOME desktops where the tray icon is absent, ensure a compatible
+AppIndicator/StatusNotifier host or shell extension is enabled. The client logs
+`[Tray] No system tray host detected` if Qt cannot find one. Running the
+MonitorClient launcher again now reopens Settings in the original process
+rather than creating another monitor process; the original process remains
+protected by its single-instance lock.
+
+```bash
+php Backend/tests/ubuntu_tray_lifecycle_contract.php
+pgrep -af '/opt/monitorclient/MonitorClient'
+```
+
+Manually verify on Ubuntu X11 and Wayland: open Settings, click Close; confirm
+MonitorClient stays running and background heartbeats continue. Reopen Settings
+from the tray and via the application launcher; close using title-bar X too.
+Confirm that Settings does not create a taskbar entry on the target desktop.
+Finally use the tray's explicit Quit to exit and verify that the process stops.
+Qt window decorations/taskbar behavior depend on the desktop compositor; source
+contracts cannot establish native behavior without a running Ubuntu session.
