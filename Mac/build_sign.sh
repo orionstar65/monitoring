@@ -518,7 +518,7 @@ main() {
     create_notarization_script
     cleanup
 
-    # A plain python -m http.server serves this manifest and its packages.
+    # The existing PHP backend serves these releases at /upgrades/; no separate HTTP daemon.
     # Keep the usual Installer.pkg artifact, and publish an arch-specific copy.
     local os_arch
     case "$(uname -m)" in
