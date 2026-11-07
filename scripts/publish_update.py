@@ -60,6 +60,13 @@ def publish(platform: str, version: str, package: Path, output: Path) -> dict:
             return tuple(map(int, value.split(".")))
         if parts(version) < parts(str(current["version"])):
             raise ValueError("Refusing to publish a downgrade of the current latest version")
+        # Releasing different bytes under the same version silently strands
+        # existing clients: their update check sees no newer version.
+        if parts(version) == parts(str(current["version"])) and current.get("sha256") != digest.hexdigest():
+            raise ValueError(
+                "Refusing to overwrite a release with different bytes at the same version; "
+                "increment the patch version for every new build"
+            )
     destination = output / expected
     if package.resolve() != destination.resolve():
         # Atomic release publication; manifest is changed only after package is complete.
