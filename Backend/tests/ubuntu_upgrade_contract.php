@@ -55,10 +55,13 @@ $tests=[
         str_contains($helper,'runuser -u "$user_name"') &&
         str_contains($helper,'/usr/bin/env -i') &&
         str_contains($helper,'setsid "$target"'),
-    'GUI updater stays open if pkexec authorization is declined'=>
-        str_contains($dialog,'QProcess::startDetached("pkexec"') &&
-        !str_contains($dialog,'QTimer::singleShot(200,this,[](){QApplication::quit();});') &&
-        str_contains($dialog,'MonitorClient remains running if'),
+    'GUI updater waits for dpkg and leaves current version running on failure'=>
+        str_contains($dialog,'installer->start(QStringLiteral("pkexec")') &&
+        str_contains($dialog,'&QProcess::errorOccurred') &&
+        str_contains($dialog,'QProcess::ExitStatus>::of(&QProcess::finished)') &&
+        str_contains($dialog,'Current MonitorClient is still running.') &&
+        !str_contains($dialog,'QProcess::startDetached("pkexec"') &&
+        !str_contains($dialog,'QTimer::singleShot(200,this,[](){QApplication::quit();});'),
     'Direct install upgrades use atomic rename and same safe restart helper'=>
         str_contains($install,'sudo mv -f /opt/monitorclient/.MonitorClient.new /opt/monitorclient/MonitorClient') &&
         str_contains($install,'upgrade-restart.sh --restart-running') &&
