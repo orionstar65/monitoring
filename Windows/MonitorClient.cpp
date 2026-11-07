@@ -388,6 +388,11 @@ void updateTrayMenu() {
     std::string clientIP = getLocalIPAddress();
     std::string clientInfo = "IP: " + clientIP + " | MAC: " + macAddress;
     AppendMenuA(hTrayMenu, MF_STRING | MF_DISABLED, ID_TRAY_CLIENT_INFO, clientInfo.c_str());
+    if (!signedInUsername.empty()) {
+        // signedInUsername is the authenticated User No returned by client_auth.
+        const std::string accountInfo = "User No: " + signedInUsername;
+        AppendMenuA(hTrayMenu, MF_STRING | MF_DISABLED, ID_TRAY_CLIENT_INFO, accountInfo.c_str());
+    }
     
     // Server information section
     AppendMenuA(hTrayMenu, MF_SEPARATOR, 0, NULL);
