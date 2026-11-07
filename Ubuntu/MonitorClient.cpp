@@ -150,7 +150,6 @@ MonitorClient::MonitorClient()
         authToken=saved.getAuthToken();
         monitorId=saved.getMonitorId();
         signedUserNo=saved.getActiveUserNo();
-        signedUserName=saved.getActiveUserName();
         if(authToken.isEmpty() || monitorId<1)onConfigureAction();
         else {
             clientName=saved.getClientName();
@@ -1695,8 +1694,7 @@ void MonitorClient::updateTrayMenu()
                  .arg(getServerIP(), QString::number(getServerPort()));
     lines << QStringLiteral("Client: %1").arg(clientName);
     if(!authToken.isEmpty() && !signedUserNo.isEmpty())
-        lines << QStringLiteral("Signed in: %1 (User No: %2)").arg(
-            signedUserName.isEmpty()?signedUserNo:signedUserName,signedUserNo);
+        lines << QStringLiteral("User No: %1").arg(signedUserNo);
     else
         lines << QStringLiteral("Account: Sign in required");
     lines << QStringLiteral("Activity: %1").arg(activityLine);
@@ -1879,8 +1877,7 @@ void MonitorClient::onConfigureAction()
         authToken=dialog->getAuthToken();
         monitorId=dialog->getMonitorId();
         signedUserNo=dialog->getActiveUserNo();
-        signedUserName=dialog->getActiveUserName();
-        clientName=dialog->getClientName();
+                clientName=dialog->getClientName();
         if(authToken.isEmpty() || monitorId<1) {
             if(keyboardMonitor)keyboardMonitor->stopMonitoring();
         } else if(keyboardMonitor && !keyboardMonitor->startMonitoring()) {
@@ -1894,9 +1891,8 @@ void MonitorClient::onConfigureAction()
             clientName=dialog->getClientName();
             authToken=dialog->getAuthToken();
             monitorId=dialog->getMonitorId();
-            signedUserNo=dialog->getActiveUserNo();
-            signedUserName=dialog->getActiveUserName();
-            if(!authToken.isEmpty() && monitorId>0){
+           signedUserNo=dialog->getActiveUserNo();
+                        if(!authToken.isEmpty() && monitorId>0){
                 if(keyboardMonitor && !keyboardMonitor->startMonitoring())
                     qWarning() << "[KeyLog] startMonitoring failed; check input permissions";
                 scheduleConnectionTest(QStringLiteral("Verifying server…"), [this](bool ok) {
