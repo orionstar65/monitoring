@@ -55,7 +55,7 @@ public:
     MonitorClient();
     ~MonitorClient();
 
-    /// Brief notification when a second process tried to start (single-instance IPC).
+    /// Reopen Settings in the original process when the launcher is invoked again.
     void notifyRunningInstance();
 
 public slots:
