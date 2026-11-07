@@ -165,9 +165,9 @@ ob_start();
             <div class="modal-body">
                 <label class="form-label fw-semibold" for="dbRetentionMonths">Keep the latest (months)</label>
                 <input class="form-control form-control-sm" type="number" min="1" max="120"
-                    step="1" value="3" name="months" id="dbRetentionMonths" required>
+                    step="1" value="<?= (int)($defaultRetentionMonths??3) ?>" name="months" id="dbRetentionMonths" required>
                 <p class="small mt-2 mb-2" id="dbRetentionDescription">
-                    Data received more than 3 months ago will be permanently removed from
+                    Data received more than the selected retention period will be permanently removed from
                     eligible keyboard, browser and USB log tables. Newer records remain available.
                 </p>
                 <p class="small text-muted mb-2">Only historical log records are affected.
