@@ -7,7 +7,9 @@ does not update an already-running Qt process.
 ## Canonical release process
 
 Use the Debian package, not the legacy source installer, for production
-deployments. Bump the PATCH version on **every new release**; 1.5.1 is only
+deployments. The legacy `install.sh` now refuses to overwrite an installed
+dpkg-managed package, preventing accidental source-build downgrades. Bump the
+PATCH version on **every new release**; 1.5.1 is only
 an example and must be replaced with a version newer than the one currently
 published/installed.
 
