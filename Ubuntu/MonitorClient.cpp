@@ -236,6 +236,11 @@ MonitorClient::MonitorClient()
 
 MonitorClient::~MonitorClient()
 {
+    // Settings is reused while monitoring; release it only on explicit exit.
+    if (activeSettingsDialog) {
+        delete activeSettingsDialog.data();
+        activeSettingsDialog.clear();
+    }
     if (monitorTimer)
         monitorTimer->stop();
     if (screenCastPortal) {
@@ -1896,52 +1901,39 @@ void MonitorClient::onSendAllAction()
 
 void MonitorClient::onConfigureAction()
 {
-    // The tray may be activated while a modal dialog's event loop is running.
-    // Raise the existing window instead of constructing a second instance.
-    if(activeSettingsDialog) {
+    // Keep exactly one Settings dialog for the lifetime of the tray client.
+    // Hiding it must not tear down the network manager, capture timers or the
+    // authenticated session, and must not trigger QApplication's exit path.
+    if (activeSettingsDialog) {
         activeSettingsDialog->showNormal();
         activeSettingsDialog->raise();
         activeSettingsDialog->activateWindow();
         return;
     }
-    auto *dialog=new ConfigDialog();
-    activeSettingsDialog=dialog;
-    connect(dialog,&ConfigDialog::sendAllRequested,this,&MonitorClient::onSendAllAction);
-    connect(dialog,&ConfigDialog::refreshConfigurationRequested,this,&MonitorClient::onConfigRefreshAction);
-    connect(dialog,&ConfigDialog::sessionStateChanged,this,[this,dialog] {
-        authToken=dialog->getAuthToken();
-        monitorId=dialog->getMonitorId();
-        signedUserNo=dialog->getActiveUserNo();
-        clientName=dialog->getClientName();
-        if(authToken.isEmpty() || monitorId<1) {
-            if(keyboardMonitor)keyboardMonitor->stopMonitoring();
-        } else if(keyboardMonitor && !keyboardMonitor->startMonitoring()) {
+
+    auto *dialog = new ConfigDialog();
+    activeSettingsDialog = dialog;
+    connect(dialog, &ConfigDialog::sendAllRequested,
+            this, &MonitorClient::onSendAllAction);
+    connect(dialog, &ConfigDialog::refreshConfigurationRequested,
+            this, &MonitorClient::onConfigRefreshAction);
+    connect(dialog, &ConfigDialog::sessionStateChanged, this, [this, dialog]() {
+        // Apply sign-in, sign-out and monitor changes when explicitly saved;
+        // closing the window does not change any capture/upload service.
+        authToken = dialog->getAuthToken();
+        monitorId = dialog->getMonitorId();
+        signedUserNo = dialog->getActiveUserNo();
+        clientName = dialog->getClientName();
+        if (authToken.isEmpty() || monitorId < 1) {
+            if (keyboardMonitor) keyboardMonitor->stopMonitoring();
+        } else if (keyboardMonitor && !keyboardMonitor->startMonitoring()) {
             qWarning() << "[KeyLog] startMonitoring failed after user selection";
         }
         updateStatusDisplay();
     });
-    connect(dialog,&QDialog::finished,this,[this,dialog](int result) {
-        // Logout is applied on signal even when user dismisses the settings.
-        if(result==QDialog::Accepted) {
-            clientName=dialog->getClientName();
-            authToken=dialog->getAuthToken();
-            monitorId=dialog->getMonitorId();
-            signedUserNo=dialog->getActiveUserNo();
-            if(!authToken.isEmpty() && monitorId>0){
-                if(keyboardMonitor && !keyboardMonitor->startMonitoring())
-                    qWarning() << "[KeyLog] startMonitoring failed; check input permissions";
-                scheduleConnectionTest(QStringLiteral("Verifying server…"), [this](bool ok) {
-                    notifyTray("Configuration", ok ? "Saved and verified." :
-                        "Saved; server check failed.",
-                        ok ? QSystemTrayIcon::Information : QSystemTrayIcon::Warning,4000);
-                });
-            }
-        }
-        updateStatusDisplay();
-        activeSettingsDialog.clear();
-        dialog->deleteLater();
-    });
-    dialog->open(); // asynchronous modal; event loop never stacks settings dialogs
+    // A modeless tool window stays out of the application taskbar. Both the
+    // Close button and the window-manager X now hide it without QDialog::done.
+    dialog->show();
 }
 
 void MonitorClient::onTakeScreenshotAction()
