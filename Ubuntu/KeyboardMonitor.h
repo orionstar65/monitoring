@@ -18,6 +18,8 @@ public:
 
 signals:
     void keyPressed(QString timestamp, const QString &windowTitle, const QString &keyText);
+    // Status metadata only: never expose or include captured key contents.
+    void monitoringStatusChanged(bool running, const QString &description);
 
 private slots:
     void onReadyRead();
