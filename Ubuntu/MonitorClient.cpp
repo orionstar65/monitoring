@@ -401,7 +401,11 @@ int MonitorClient::getScreen()
     const QString filePath=QDir::tempPath()+QStringLiteral("/monitorclient-")
         +QUuid::createUuid().toString(QUuid::WithoutBraces);
     setTrayActivity(QStringLiteral("Capturing screenshot…"));
-    m_lastCaptureError.clear();
+    // Preserve the most recent ScreenCast error when the Wayland stream has
+    // failed, so a manual failure can show the actual permission/service
+    // problem. Successful frames clear stale errors below.
+    if(!screenCastPortal || screenCastPortal->isStreaming())
+        m_lastCaptureError.clear();
 
     bool captured=false;
     grabScreen(filePath,captured);
@@ -522,7 +526,8 @@ void MonitorClient::grabScreen(QString filePath, bool& ok)
     if(screenCastPortal){
         // Wayland screen pixels must come from a portal-approved stream.
         if(!screenCastPortal->isStreaming()){
-            m_lastCaptureError=QStringLiteral("Screen sharing has not been approved or PipeWire is not streaming");
+            if(m_lastCaptureError.isEmpty())
+                m_lastCaptureError=QStringLiteral("ScreenCast not ready. Approve sharing in the desktop permission dialog.");
             return;
         }
         QImage frame=screenCastPortal->captureFrame();
