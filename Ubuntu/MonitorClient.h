@@ -206,7 +206,6 @@ private:
     QString screenshotUploadError;
     QString clientName;
     QString signedUserNo;
-    QString signedUserName;
 
     // Status tracking
     bool screenshotEnabled = true;
