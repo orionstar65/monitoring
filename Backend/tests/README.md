@@ -200,3 +200,31 @@ Confirm that Settings does not create a taskbar entry on the target desktop.
 Finally use the tray's explicit Quit to exit and verify that the process stops.
 Qt window decorations/taskbar behavior depend on the desktop compositor; source
 contracts cannot establish native behavior without a running Ubuntu session.
+
+### Persistent Settings and verifying the actual installed build
+
+Settings is now a single modeless, persistent `ConfigDialog`: Close, Escape,
+and the titlebar X hide it without running `QDialog::finished`, releasing
+network callbacks, or deleting the dialog. The only normal shutdown is the
+tray's explicit **Quit MonitorClient** (or an approved updater/system shutdown).
+The app logs `[Lifecycle] Settings hidden ...` on window dismissal and
+`[Lifecycle] Qt event loop exiting ...` only when the process is exiting.
+
+Rebuild and install the new source on the Ubuntu **client machine**, not just
+the backend host. For an existing source checkout with dependencies installed:
+
+```bash
+cd /path/to/monitoring
+ git pull --ff-only origin main
+ cmake -S Ubuntu -B Ubuntu/build -DCMAKE_BUILD_TYPE=Release
+ cmake --build Ubuntu/build -j"$(nproc)"
+ sudo install -m 755 Ubuntu/build/MonitorClient /opt/monitorclient/MonitorClient
+```
+
+Then quit any **old** MonitorClient process and start the rebuilt binary
+from the interactive desktop session; do not use `sudo` to launch a GUI
+monitor client. Check that the process PID survives closing the Settings
+window and that API heartbeats continue. The direct `Ubuntu/install.sh` path
+now correctly copies its input-reader helper from the active build directory.
+Run `php Backend/tests/ubuntu_tray_lifecycle_contract.php` to verify source
+contracts; a native build and GUI test are still necessary.
