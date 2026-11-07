@@ -215,13 +215,14 @@ the backend host. For an existing source checkout with dependencies installed:
 
 ```bash
 cd /path/to/monitoring
- git pull --ff-only origin main
- cmake -S Ubuntu -B Ubuntu/build -DCMAKE_BUILD_TYPE=Release
- cmake --build Ubuntu/build -j"$(nproc)"
- sudo install -m 755 Ubuntu/build/MonitorClient /opt/monitorclient/MonitorClient
+git pull --ff-only origin main
+cmake -S Ubuntu -B Ubuntu/build -DCMAKE_BUILD_TYPE=Release
+cmake --build Ubuntu/build -j"$(nproc)"
+# Quit MonitorClient from the tray before replacing a running executable.
+sudo install -m 755 Ubuntu/build/MonitorClient /opt/monitorclient/MonitorClient
 ```
 
-Then quit any **old** MonitorClient process and start the rebuilt binary
+Then start the rebuilt binary
 from the interactive desktop session; do not use `sudo` to launch a GUI
 monitor client. Check that the process PID survives closing the Settings
 window and that API heartbeats continue. The direct `Ubuntu/install.sh` path
