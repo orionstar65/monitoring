@@ -982,6 +982,10 @@ class DatabaseService {
      * @return bool Success status
      */
     public function logApiRequest($endpoint, $method, $ip_address, $status_code, $response_time_ms, $request_type = null, $mac_address = null) {
+        // A Super Admin can disable per-request metadata writes in Settings.
+        // Failure to read the setting must not disable existing API logging.
+        require_once dirname(__DIR__,3).'/config/AppSettings.php';
+        if(AppSettings::value($this->mysqli,'logging.api_requests.enabled')===false)return true;
         // Log metadata only: never store request bodies, credentials, keys,
         // screenshots or bearer tokens in API request history.
         try {
