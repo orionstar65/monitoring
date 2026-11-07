@@ -25,6 +25,12 @@ $tests=[
     'Debian metadata version is verified before publishing'=>
         str_contains($pack,'dpkg-deb -f') &&
         str_contains($pack,'"$ACTUAL_PACKAGE_VERSION" != "$PACKAGE_VERSION"'),
+    'Package supports both old and t64 Qt/PipeWire runtime dependencies'=>
+        str_contains($pack,'libqt5core5a | libqt5core5t64') &&
+        str_contains($pack,'libqt5widgets5 | libqt5widgets5t64') &&
+        str_contains($pack,'libqt5network5 | libqt5network5t64') &&
+        str_contains($pack,'libqt5concurrent5 | libqt5concurrent5t64') &&
+        str_contains($pack,'libpipewire-0.3-0 | libpipewire-0.3-0t64'),
     'Package includes upgrade helper and a version file'=>
         str_contains($pack,'cp upgrade-restart.sh') &&
         str_contains($pack,'/opt/monitorclient/upgrade-restart.sh') &&
