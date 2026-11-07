@@ -21,6 +21,9 @@ public:
     bool start();
     void stop();
     QImage captureFrame();
+    // Explicit, user-initiated fallback via the public desktop screenshot
+    // portal; the compositor controls approval and delivers a file URI.
+    bool requestScreenshot();
     bool isStreaming() const { return m_streaming.load(); }
 
     void loadRestoreToken();
@@ -29,11 +32,14 @@ public:
 signals:
     void streamReady();
     void streamFailed(const QString &error);
+    void screenshotReady(const QImage &image);
+    void screenshotFailed(const QString &error);
 
 private slots:
     void onCreateSessionResponse(const QDBusMessage &msg);
     void onSelectSourcesResponse(const QDBusMessage &msg);
     void onStartResponse(const QDBusMessage &msg);
+    void onScreenshotResponse(const QDBusMessage &msg);
 
 private:
     void createSession();
@@ -51,6 +57,8 @@ private:
 
     QString m_sessionHandle;
     QString m_restoreToken;
+    QString m_screenshotRequestPath;
+    bool m_screenshotRequestPending = false;
     uint32_t m_pipewireNode;
     std::atomic<bool> m_streaming;
     int m_tokenCounter;
