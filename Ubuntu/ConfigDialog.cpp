@@ -271,8 +271,10 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
         settings.setValue("Notifications/enabled",enabled);
         settings.sync();
     });
+    // Restore identity, monitor selection and user-visible account details
+    // from a single validated session response. A redundant second restore
+    // could fail transiently and erase the account just restored on startup.
     loadRememberedSession();
-    refreshMonitors();
     updateUI();
 }
 QString ConfigDialog::settingsPath() const {
@@ -289,6 +291,17 @@ void ConfigDialog::loadSettings(){
     serverPortEdit->setValue(cfg.value("Server/port",8924).toInt());
     notificationsCheck->setChecked(cfg.value("Notifications/enabled",true).toBool());
     updateServerInput->setText(cfg.value("Updates/url","").toString());
+    // These are display fields only. The token remains in Secret Service,
+    // and the backend must validate it before the account is considered signed in.
+    const QString previousNo=cfg.value("User/no").toString().trimmed();
+    const QString previousName=cfg.value("User/name").toString().trimmed();
+    if(!previousNo.isEmpty()){
+        userNoInput->setText(previousNo);
+        connectionStatusLabel->setText(
+            QStringLiteral("Previous user: %1 (User No: %2) · Sign in if the secure session cannot be restored")
+                .arg(previousName.isEmpty()?previousNo:previousName,previousNo));
+        connectionStatusLabel->setWordWrap(true);
+    }
 }
 void ConfigDialog::saveSettings(){
     QDir().mkpath(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)+"/monitorclient");
@@ -300,11 +313,32 @@ void ConfigDialog::saveSettings(){
     cfg.setValue("Notifications/enabled",notificationsCheck->isChecked());
     cfg.setValue("Monitor/id",monitorId);
     cfg.setValue("User/no",activeUserNo);
+    cfg.setValue("User/name",activeUserName);
     cfg.setValue("Updates/url",updateServerInput->text().trimmed());
     cfg.sync();
     if(cfg.status()!=QSettings::NoError)
         qWarning() << "[Settings] Failed to persist server configuration at" << settingsPath();
 }
+// Save only display metadata in INI. The device bearer token is kept in
+// Secret Service and is never written to this file.
+void ConfigDialog::persistSessionIdentity(){
+    if(authToken.isEmpty() || activeUserNo.isEmpty())return;
+    QDir().mkpath(QFileInfo(settingsPath()).absolutePath());
+    QSettings cfg(settingsPath(),QSettings::IniFormat);
+    cfg.setValue("User/no",activeUserNo);
+    cfg.setValue("User/name",activeUserName);
+    cfg.setValue("Monitor/id",monitorId);
+    cfg.sync();
+}
+
+void ConfigDialog::clearSessionIdentity(){
+    QSettings cfg(settingsPath(),QSettings::IniFormat);
+    cfg.remove("User/no");
+    cfg.remove("User/name");
+    cfg.remove("Monitor/id");
+    cfg.sync();
+}
+
 QJsonObject ConfigDialog::authRequest(const QJsonObject &payload,bool authenticated){
     QNetworkAccessManager manager;
     const QUrl url(QString("%1://%2:%3/client_auth.php")
@@ -377,7 +411,9 @@ void ConfigDialog::onSignInClicked(){
         connectionStatusLabel->setText("Server settings could not be saved");
         return;
     }
-    connectionStatusLabel->setText("Signed in");
+    persistSessionIdentity();
+    connectionStatusLabel->setText(QStringLiteral("● Signed in as %1 (User No: %2)")
+        .arg(activeUserName.isEmpty()?activeUserNo:activeUserName,activeUserNo));
     updateMonitorList(result.value("monitors").toArray());
     updateUI();
     emit sessionStateChanged();
@@ -433,8 +469,12 @@ void ConfigDialog::loadRememberedSession(){
     activeUserNo=account.value("user_no").toString();
     activeUserName=account.value("name").toString();
     assignmentLocked=state.value("assignment_locked").toBool();
-    connectionStatusLabel->setText("Signed in as "+activeUserNo);
-    // An authenticated session may exist before a monitor is selected.
+    settingsLocked=state.value("settings_locked").toBool();
+    persistSessionIdentity();
+    connectionStatusLabel->setText(QStringLiteral("● Signed in as %1 (User No: %2)")
+        .arg(activeUserName.isEmpty()?activeUserNo:activeUserName,activeUserNo));
+    // Restore monitor details from this same verified response.
+    updateMonitorList(state.value("monitors").toArray());
 }
 bool ConfigDialog::saveServerIfChanged(){
     if(getServerIP().isEmpty()){QMessageBox::warning(this,"Server","Enter a valid server IP.");return false;}
@@ -500,6 +540,7 @@ void ConfigDialog::refreshMonitors(){
     const QJsonObject account=result.value("user").toObject();
     activeUserNo=account.value("user_no").toString();
     activeUserName=account.value("name").toString();
+    persistSessionIdentity();
     if(userNoInput)userNoInput->setText(activeUserNo);
     updateMonitorList(result.value("monitors").toArray());
 }
@@ -607,7 +648,8 @@ void ConfigDialog::updateUI(){
     passwordFieldLabel->setVisible(!enrolled);
     accountFieldLabel->setVisible(enrolled);
     accountInfoLabel->setVisible(enrolled);
-    if(enrolled)accountInfoLabel->setText(QStringLiteral("User No: %1").arg(activeUserNo));
+    if(enrolled)accountInfoLabel->setText(QStringLiteral("%1 (User No: %2)")
+        .arg(activeUserName.isEmpty()?activeUserNo:activeUserName,activeUserNo));
     logoutButton->setVisible(enrolled);
     logoutButton->setEnabled(enrolled);
     sendAllButton->setEnabled(enrolled&&monitorId>0);
@@ -717,6 +759,7 @@ void ConfigDialog::onLogoutClicked(){
         serverPortEdit->setValue(draftPort);
     }
     clearStoredToken(oldHost,oldPort);
+    clearSessionIdentity();
     authToken.clear();monitorId=0;assignmentLocked=false;activeUserNo.clear();activeUserName.clear();pendingUserNo.clear();logoutPerformed=true;
     connectionStatusLabel->setText("Signed out");
     updateMonitorList({});updateUI();
