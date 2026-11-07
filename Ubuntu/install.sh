@@ -125,7 +125,8 @@ sudo cp MonitorClient.desktop /etc/xdg/autostart/
 
 # Install the setgid keyreader helper for keyboard monitoring
 print_status "Setting up keyboard monitoring helper..."
-sudo cp build/monitorclient-keyreader /opt/monitorclient/
+# The build script already entered Ubuntu/build above.
+sudo cp monitorclient-keyreader /opt/monitorclient/
 sudo getent group input >/dev/null 2>&1 || sudo groupadd --system input
 sudo chown root:input /opt/monitorclient/monitorclient-keyreader
 sudo chmod 2755 /opt/monitorclient/monitorclient-keyreader
