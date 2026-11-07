@@ -96,6 +96,8 @@ private:
     QString getDeviceInfo(struct udev_device* dev);
     void processUsbEvent(struct udev_device* dev);
     void grabEntireDesktop(QString path, QPixmap& res, bool& ok);
+    void uploadCapturedScreenshot(const QString &basePath);
+    void reportScreenshotCaptureError(const QString &reason);
     void grabScreen(QString filePath, bool& ok);
     void sendScreensAsync(const QString &filePath, std::function<void(int)> onDone);
     void sendDataChunkAsync(const QString &serverIP, int serverPort,
@@ -214,6 +216,8 @@ private:
     bool usbMonitoringEnabled;
     bool screenshotInProgress;
     bool m_manualScreenshotRequested = false;
+    bool m_manualCaptureIntent = false;
+    QString m_lastCaptureError;
     
     // Last sent times
     QDateTime lastKeySentTime;
