@@ -54,7 +54,7 @@ $checks=[
         str_contains($client,'if(reason==QSystemTrayIcon::DoubleClick)') &&
         str_contains($client,'onConfigureAction();'),
     'Existing Settings dialog is raised rather than duplicated'=>
-        str_contains($client,'if(activeSettingsDialog) {') &&
+        str_contains($client,'if (activeSettingsDialog) {') &&
         str_contains($client,'activeSettingsDialog->showNormal();') &&
         str_contains($client,'activeSettingsDialog->raise();'),
     'Second launcher activation restores existing Settings even without tray host'=>
