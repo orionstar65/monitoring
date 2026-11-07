@@ -126,6 +126,10 @@ MonitorClient::MonitorClient()
     // Initialize USB monitoring
     setupUsbMonitoring();
     
+    // The tray renders immediately; show the saved machine label even before
+    // the secure session restoration finishes.
+    clientName=getClientName();
+
     // Initialize system tray
     setupSystemTray();
 
