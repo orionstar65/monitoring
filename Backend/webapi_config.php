@@ -60,14 +60,11 @@ try {
         $status_code = 200; // Default to 200 if not set
     }
     
-    // Log API request if database service is available
-    // Disabled: daily API log table was for debugging only
-    /*
+    // The DB-backed logging flag is evaluated inside logApiRequest().
     if ($dbService) {
         $log_request_type = ($method === 'GET') ? 'config' : 'config_update';
         $dbService->logApiRequest('/webapi_config.php', $method, $clientIP, $status_code, $response_time_ms, $log_request_type);
     }
-    */
     
     // Close database connection if opened
     if ($mysqli && !$mysqli->connect_error) {
@@ -89,7 +86,8 @@ function handleGetConfig() {
     }
     
     // Get configuration
-    $config = ClientConfig::getConfig($platform);
+    global $mysqli;
+    $config = ClientConfig::getConfig($platform,$mysqli && !$mysqli->connect_error ? $mysqli : null);
     
     // Add client-specific information
     $config['client_info'] = [
