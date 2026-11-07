@@ -1439,11 +1439,11 @@ ob_start();
                 </h5>
                 <div class="modal-actions">
                     <div class="d-flex align-items-center gap-2">
-                        <button type="button" class="btn btn-outline-secondary" id="prevScreenshotBtn" title="Previous Screenshot" disabled>
+                        <button type="button" class="btn btn-outline-secondary" id="prevScreenshotBtn" title="Older screenshot (Left arrow)" aria-label="Older screenshot" disabled>
                             <i class="fas fa-chevron-left"></i>
                         </button>
                         <span id="screenshotCounter" class="text-muted small">1 / 1</span>
-                        <button type="button" class="btn btn-outline-secondary" id="nextScreenshotBtn" title="Next Screenshot" disabled>
+                        <button type="button" class="btn btn-outline-secondary" id="nextScreenshotBtn" title="Newer screenshot (Right arrow)" aria-label="Newer screenshot" disabled>
                             <i class="fas fa-chevron-right"></i>
                         </button>
                     </div>
@@ -2270,17 +2270,18 @@ function viewScreenshot(imageUrl, monitorName, ipAddress, screenshotId = null, t
 
 // Navigation functionality for screenshot modal
 function setupNavigationButtons() {
-    // Previous button
+    // Screenshot rows are newest-first. Moving left means going backward
+    // in real time (older = API "next"); right means newer (API "prev").
+    // Keep both the visible chevrons and keyboard arrows consistent.
     $('#prevScreenshotBtn').off('click').on('click', function() {
         if (window.currentScreenshotId) {
-            navigateScreenshot('prev');
+            navigateScreenshot('next');
         }
     });
-    
-    // Next button
+
     $('#nextScreenshotBtn').off('click').on('click', function() {
         if (window.currentScreenshotId) {
-            navigateScreenshot('next');
+            navigateScreenshot('prev');
         }
     });
     
@@ -2345,8 +2346,9 @@ function navigateScreenshot(direction) {
                 historySelectExternalScreenshot(screenshot);
                 
                 // Update navigation buttons
-                $('#prevScreenshotBtn').prop('disabled', !response.has_prev);
-                $('#nextScreenshotBtn').prop('disabled', !response.has_next);
+                // Left seeks older shots (API next), right seeks newer (API prev).
+                $('#prevScreenshotBtn').prop('disabled', !response.has_next);
+                $('#nextScreenshotBtn').prop('disabled', !response.has_prev);
                 
                 // Update counter
                 $('#screenshotCounter').text(`${response.current_position} / ${response.total_screenshots}`);
