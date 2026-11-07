@@ -191,6 +191,13 @@ ScreenCastPortal::~ScreenCastPortal()
 
 bool ScreenCastPortal::start()
 {
+    if(m_streaming.load() || m_sessionRequestPending || !m_sessionHandle.isEmpty())
+        return true;
+    if(!QDBusConnection::sessionBus().isConnected()){
+        emit streamFailed(QStringLiteral("No desktop D-Bus session. Launch MonitorClient as the logged-in desktop user."));
+        return false;
+    }
+    m_sessionRequestPending=true;
     loadRestoreToken();
     createSession();
     return true;
@@ -204,6 +211,7 @@ void ScreenCastPortal::stop()
             this,SLOT(onScreenshotResponse(QDBusMessage)));
         m_screenshotRequestPending=false;
         m_screenshotRequestPath.clear();
+        m_screenshotRequestToken.clear();
     }
     cleanupPipeWire();
 
@@ -215,6 +223,7 @@ void ScreenCastPortal::stop()
     }
 
     m_streaming.store(false);
+    m_sessionRequestPending=false;
 }
 
 QImage ScreenCastPortal::captureFrame()
@@ -245,6 +254,7 @@ bool ScreenCastPortal::requestScreenshot()
 
     m_screenshotRequestPending=true;
     m_screenshotRequestPath=requestPath;
+    m_screenshotRequestToken=token;
     QDBusMessage call=QDBusMessage::createMethodCall(
         PORTAL_SERVICE,PORTAL_PATH,PORTAL_SCREENSHOT_IF,"Screenshot");
     QVariantMap options;
@@ -262,6 +272,7 @@ bool ScreenCastPortal::requestScreenshot()
                     this,SLOT(onScreenshotResponse(QDBusMessage)));
                 m_screenshotRequestPending=false;
                 m_screenshotRequestPath.clear();
+                m_screenshotRequestToken.clear();
                 emit screenshotFailed(QStringLiteral("Desktop screenshot portal request failed: ")+reply.error().message());
                 return;
             }
@@ -279,15 +290,15 @@ bool ScreenCastPortal::requestScreenshot()
             }
         });
 
-    QTimer::singleShot(45000,this,[this,requestPath](){
+    QTimer::singleShot(45000,this,[this,token](){
         // A granted capture clears the request before this timer fires.
-        if(!m_screenshotRequestPending)return;
-        if(m_screenshotRequestPath!=requestPath)return;
+        if(!m_screenshotRequestPending || m_screenshotRequestToken!=token)return;
         QDBusConnection::sessionBus().disconnect(
             "",m_screenshotRequestPath,PORTAL_REQUEST_IF,"Response",
             this,SLOT(onScreenshotResponse(QDBusMessage)));
         m_screenshotRequestPending=false;
         m_screenshotRequestPath.clear();
+        m_screenshotRequestToken.clear();
         emit screenshotFailed(QStringLiteral("Desktop permission dialog timed out. Approve screenshot sharing and try again."));
     });
     return true;
@@ -301,6 +312,7 @@ void ScreenCastPortal::onScreenshotResponse(const QDBusMessage &msg)
         this,SLOT(onScreenshotResponse(QDBusMessage)));
     m_screenshotRequestPending=false;
     m_screenshotRequestPath.clear();
+    m_screenshotRequestToken.clear();
 
     if(msg.arguments().size()<2){
         emit screenshotFailed(QStringLiteral("Desktop screenshot portal returned an incomplete response"));
@@ -355,16 +367,29 @@ void ScreenCastPortal::createSession()
     options["session_handle_token"] = sessToken;
     msg << QVariant::fromValue(options);
 
-    QDBusPendingCall pending = bus.asyncCall(msg);
-    Q_UNUSED(pending);
+    auto *watcher=new QDBusPendingCallWatcher(bus.asyncCall(msg),this);
+    connect(watcher,&QDBusPendingCallWatcher::finished,this,
+        [this](QDBusPendingCallWatcher *finished){
+            QDBusPendingReply<QDBusObjectPath> reply=*finished;
+            finished->deleteLater();
+            if(reply.isError()){
+                m_sessionRequestPending=false;
+                emit streamFailed(QStringLiteral("CreateSession failed: ")+reply.error().message());
+            }
+        });
 }
 
 void ScreenCastPortal::onCreateSessionResponse(const QDBusMessage &msg)
 {
+    m_sessionRequestPending=false;
     QDBusConnection::sessionBus().disconnect(
         "", msg.path(), PORTAL_REQUEST_IF, "Response",
         this, SLOT(onCreateSessionResponse(QDBusMessage)));
 
+    if(msg.arguments().size()<2){
+        emit streamFailed(QStringLiteral("Desktop ScreenCast portal returned an incomplete response"));
+        return;
+    }
     uint response = msg.arguments().at(0).toUInt();
     if (response != 0) {
         emit streamFailed(QString("CreateSession denied (code %1)").arg(response));
@@ -431,6 +456,10 @@ void ScreenCastPortal::onSelectSourcesResponse(const QDBusMessage &msg)
         "", msg.path(), PORTAL_REQUEST_IF, "Response",
         this, SLOT(onSelectSourcesResponse(QDBusMessage)));
 
+    if(msg.arguments().size()<2){
+        emit streamFailed(QStringLiteral("Desktop ScreenCast portal returned an incomplete response"));
+        return;
+    }
     uint response = msg.arguments().at(0).toUInt();
     if (response != 0) {
         emit streamFailed(QString("SelectSources denied (code %1)").arg(response));
@@ -470,6 +499,10 @@ void ScreenCastPortal::onStartResponse(const QDBusMessage &msg)
         "", msg.path(), PORTAL_REQUEST_IF, "Response",
         this, SLOT(onStartResponse(QDBusMessage)));
 
+    if(msg.arguments().size()<2){
+        emit streamFailed(QStringLiteral("Desktop ScreenCast portal returned an incomplete response"));
+        return;
+    }
     uint response = msg.arguments().at(0).toUInt();
     if (response != 0) {
         emit streamFailed(QString("Start denied by user (code %1)").arg(response));
@@ -506,6 +539,10 @@ void ScreenCastPortal::onStartResponse(const QDBusMessage &msg)
         }
     }
 
+    if(m_pipewireNode==0){
+        emit streamFailed(QStringLiteral("Desktop portal granted sharing but returned no PipeWire stream"));
+        return;
+    }
     qDebug() << "Portal started, PipeWire node:" << m_pipewireNode;
     openPipeWireRemote();
 }
@@ -525,6 +562,10 @@ void ScreenCastPortal::openPipeWireRemote()
         return;
     }
 
+    if(reply.arguments().isEmpty()){
+        emit streamFailed(QStringLiteral("Desktop portal returned no PipeWire file descriptor"));
+        return;
+    }
     QDBusUnixFileDescriptor unixFd =
         reply.arguments().at(0).value<QDBusUnixFileDescriptor>();
     if (!unixFd.isValid()) {
@@ -584,6 +625,7 @@ void ScreenCastPortal::initPipeWire(int fd, uint32_t nodeId)
     m_pwCore = pw_context_connect_fd(m_pwContext, fd, nullptr, 0);
     if (!m_pwCore) {
         pw_thread_loop_unlock(m_pwLoop);
+        cleanupPipeWire();
         emit streamFailed("Failed to connect PipeWire core via fd");
         return;
     }
@@ -596,9 +638,8 @@ void ScreenCastPortal::initPipeWire(int fd, uint32_t nodeId)
 
     m_pwStream = pw_stream_new(m_pwCore, "MonitorClient Screen Capture", props);
     if (!m_pwStream) {
-        pw_core_disconnect(m_pwCore);
-        m_pwCore = nullptr;
         pw_thread_loop_unlock(m_pwLoop);
+        cleanupPipeWire();
         emit streamFailed("Failed to create PipeWire stream");
         return;
     }
@@ -643,6 +684,7 @@ void ScreenCastPortal::initPipeWire(int fd, uint32_t nodeId)
     pw_thread_loop_unlock(m_pwLoop);
 
     if (ret < 0) {
+        cleanupPipeWire();
         emit streamFailed(QString("pw_stream_connect failed: %1")
                               .arg(spa_strerror(ret)));
     } else {
