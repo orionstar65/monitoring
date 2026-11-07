@@ -33,10 +33,7 @@ for proc in /proc/[0-9]*; do
     [[ "$uid" =~ ^[0-9]+$ && "$uid" -gt 0 ]] || continue
     passwd_record=$(getent passwd "$uid") || continue
     user_name=${passwd_record%%:*}
-    user_home=${passwd_record#*:}
-    user_home=${user_home#*:}; user_home=${user_home#*:}
-    user_home=${user_home#*:}; user_home=${user_home#*:}
-    user_home=${user_home%%:*}
+    IFS=: read -r _ _ _ _ _ user_home _ <<< "$passwd_record"
     [[ -n "$user_name" && -n "$user_home" ]] || continue
 
     # Read *only* GUI/session parameters from the already-running app. Never
@@ -47,10 +44,7 @@ for proc in /proc/[0-9]*; do
         while IFS= read -r -d '' entry; do
             case "$entry" in
                 DISPLAY=?*|WAYLAND_DISPLAY=?*) graphical=true; session_env+=("$entry");;
-                XDG_RUNTIME_DIR=?*|DBUS_SESSION_BUS_ADDRESS=?*|XAUTHORITY=?*|
-                XDG_SESSION_TYPE=?*|XDG_CURRENT_DESKTOP=?*|XDG_SESSION_DESKTOP=?*|
-                XDG_CACHE_HOME=?*|XDG_CONFIG_HOME=?*|XDG_DATA_HOME=?*|
-                XDG_STATE_HOME=?*|LANG=?*|LC_ALL=?*) session_env+=("$entry");;
+                XDG_RUNTIME_DIR=?*|DBUS_SESSION_BUS_ADDRESS=?*|XAUTHORITY=?*|XDG_SESSION_TYPE=?*|XDG_CURRENT_DESKTOP=?*|XDG_SESSION_DESKTOP=?*|XDG_CACHE_HOME=?*|XDG_CONFIG_HOME=?*|XDG_DATA_HOME=?*|XDG_STATE_HOME=?*|LANG=?*|LC_ALL=?*) session_env+=("$entry");;
             esac
         done < "$proc/environ"
     fi
