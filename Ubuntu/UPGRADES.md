@@ -91,6 +91,7 @@ successful install, allowing automatic restart.
 ## Verification
 
 ```bash
+bash Ubuntu/tests/check-upgrade-scripts.sh
 php Backend/tests/ubuntu_upgrade_contract.php
 python3 scripts/test_publish_update.py
 php Backend/tests/ubuntu_tray_lifecycle_contract.php
