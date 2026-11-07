@@ -26,10 +26,14 @@ ob_start();
     <div class="alert alert-success py-2"><?= $e($notice) ?></div>
   <?php endif; ?>
   <div class="alert alert-light border py-2 small">
-    Settings are validated against supported keys. Changes to client intervals and features take effect
-    when each client next refreshes <code>/webapi_config.php</code>. The logging flag applies to
-    new API requests. No credentials, tokens or server-side release paths are stored here.
-    <strong>All intervals are in seconds.</strong>
+    Settings are validated against supported keys. Global and OS-specific client
+    <strong>intervals</strong> take effect when each client next refreshes
+    <code>/webapi_config.php</code>. API feature flags and network defaults are returned
+    by that endpoint but are not yet uniformly enforced by all client versions.
+    Do not rely on a feature flag alone to disable collection.
+    The API logging flag applies to new requests, and the retention default changes
+    the initial cleanup form value. Credentials, tokens and release paths are excluded.
+    <strong>Intervals are in seconds; retention is in months.</strong>
   </div>
   <?php foreach($groups as $group=>$entries): ?>
     <div class="card shadow-sm mb-3">
@@ -73,7 +77,7 @@ ob_start();
                 </form>
               </td>
               <td class="small text-muted">
-                <?= $type==='bool'?($default?'Enabled':'Disabled'):($default===null?'Inherit global':$e($default).' seconds') ?>
+                <?= $type==='bool'?($default?'Enabled':'Disabled'):($default===null?'Inherit global':$e($default).($key==='retention.default_months'?' months':($key==='server.max_retry_attempts'||$key==='server.chunk_size'?'':' seconds'))) ?>
                 <?php if($min!==null): ?><span class="text-nowrap">(<?= (int)$min ?>–<?= (int)$max ?>)</span><?php endif; ?>
               </td>
               <td class="text-muted small">
