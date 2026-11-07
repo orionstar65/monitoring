@@ -28,8 +28,6 @@ public:
     QString getActiveUserName() const { return authToken.isEmpty() ? QString() : activeUserName; }
     QString getAuthToken() const { return authToken; }
     int getMonitorId() const { return monitorId; }
-    QString getActiveUserNo() const { return authToken.isEmpty() ? QString() : activeUserNo; }
-    QString getActiveUserName() const { return authToken.isEmpty() ? QString() : activeUserName; }
     bool hasSession() const { return !authToken.isEmpty(); }
     bool notificationsEnabled() const { return notificationsCheck->isChecked(); }
     bool didLogout() const { return logoutPerformed; }
