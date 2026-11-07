@@ -62,6 +62,10 @@ $tests=[
         str_contains($dialog,'Current MonitorClient is still running.') &&
         !str_contains($dialog,'QProcess::startDetached("pkexec"') &&
         !str_contains($dialog,'QTimer::singleShot(200,this,[](){QApplication::quit();});'),
+    'Legacy installer never overwrites an existing Debian-managed release'=>
+        str_contains($install,'dpkg-query -W -f=') &&
+        str_contains($install,'install ok installed') &&
+        str_contains($install,'MonitorClient is managed by dpkg. Upgrade with:'),
     'Direct install upgrades use atomic rename and same safe restart helper'=>
         str_contains($install,'sudo mv -f /opt/monitorclient/.MonitorClient.new /opt/monitorclient/MonitorClient') &&
         str_contains($install,'upgrade-restart.sh --restart-running') &&
