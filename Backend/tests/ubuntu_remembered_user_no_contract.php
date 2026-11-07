@@ -18,7 +18,7 @@ $checks=[
         str_contains($header,'QString rememberedUserNo;'),
     'Remembered account accessor does not require an active session'=>
         str_contains($header,'QString getRememberedUserNo() const') &&
-        str_contains($header,'return activeUserNo.isEmpty() ? rememberedUserNo : activeUserNo;'),
+        str_contains($header,'return (authToken.isEmpty() || activeUserNo.isEmpty()) ? rememberedUserNo : activeUserNo;'),
     'Authenticated accessor still requires an actual secure token'=>
         str_contains($header,'return authToken.isEmpty() ? QString() : activeUserNo;'),
     'Settings User No field is visible even if token restoration failed'=>
