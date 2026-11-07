@@ -9,12 +9,13 @@ $portal=(string)file_get_contents($root.'/Ubuntu/ScreenCastPortal.cpp');
 $portalHeader=(string)file_get_contents($root.'/Ubuntu/ScreenCastPortal.h');
 $main=(string)file_get_contents($root.'/Ubuntu/main.cpp');
 $checks=[
-    'Manual screenshot is explicitly marked as a user gesture'=>
-        str_contains($client,'m_manualCaptureIntent=true;') &&
-        str_contains($client,'void MonitorClient::onTakeScreenshotAction()'),
+    'Manual screenshot uses a distinct explicit capture entry point'=>
+        str_contains($client,'void MonitorClient::onTakeScreenshotAction()') &&
+        str_contains($client,'captureScreen(true);') &&
+        str_contains($client,'return captureScreen(false);'),
     'Settings Send All screenshot is also marked as manual'=>
         str_contains($client,'void MonitorClient::onSendAllAction()') &&
-        str_contains($client,'QTimer::singleShot(0,this,[this](){getScreen();});'),
+        str_contains($client,'QTimer::singleShot(0,this,[this](){captureScreen(true);});'),
     'Wayland manual capture invokes the public consent-aware screenshot portal'=>
         str_contains($client,'if(manual && screenCastPortal)') &&
         str_contains($client,'screenCastPortal->requestScreenshot();') &&
@@ -57,9 +58,23 @@ $checks=[
         str_contains($portal,'CreateSession failed: ') &&
         str_contains($portal,'SelectSources failed: ') &&
         str_contains($portal,'ScreenCast Start failed: '),
-    'Queued manual screenshot requests survive an in-progress capture'=>
-        str_contains($header,'m_manualScreenshotRequested = false') &&
-        str_contains($client,'if(m_manualScreenshotRequested)'),
+    'Overlapping screenshot triggers are coalesced instead of queued twice'=>
+        str_contains($client,'if(screenshotInProgress)') &&
+        str_contains($client,'Capture already in progress; duplicate request ignored') &&
+        !str_contains($header,'m_manualScreenshotRequested') &&
+        !str_contains($header,'m_manualCaptureIntent'),
+    'Capture cooldown enforces server interval without blocking manual requests'=>
+        str_contains($header,'QElapsedTimer m_captureCooldown;') &&
+        str_contains($client,'const qint64 minSpacingMs=manual ? 2000LL') &&
+        str_contains($client,'qMax(1,screenInterval))*1000LL') &&
+        str_contains($client,'m_captureCooldown.elapsed()<minSpacingMs'),
+    'Only one portal frame may start the upload'=>
+        str_contains($header,'m_screenshotUploadStarted = false;') &&
+        str_contains($client,'if(!screenshotInProgress || m_screenshotUploadStarted)') &&
+        str_contains($client,'m_screenshotUploadStarted=true;'),
+    'Capture time is sent in UTC with millisecond precision'=>
+        str_contains($client,'m_captureTimeUtc=QDateTime::currentDateTimeUtc();') &&
+        str_contains($client,'m_captureTimeUtc.toString(Qt::ISODateWithMs)'),
     'Monitor signal connections are not installed a second time in main'=>
         !str_contains($main,'QObject::connect(&client, &MonitorClient::screen') &&
         !str_contains($main,'QObject::connect(&client, &MonitorClient::keyLog') &&
