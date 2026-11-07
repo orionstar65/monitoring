@@ -2413,6 +2413,12 @@ static void layoutSettingsTabs(HWND dlg) {
 static std::mutex updateResultMutex;
 static Json::Value updateResult;
 static std::string selectedUpdateVersion;
+static std::string backendUpdateServer(){
+    if(serverIP.empty() || serverPort.empty())return {};
+    const std::string url=(serverPort=="8924"?"http://":"https://")
+        +serverIP+":"+serverPort+"/upgrades/";
+    return url;
+}
 static bool validUpdateServer(const std::string& raw){
     if(raw.size()>512 ||
        (raw.rfind("http://",0)!=0 && raw.rfind("https://",0)!=0))return false;
@@ -2565,8 +2571,8 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"STATIC","—",0,108,542,310,21,SETTINGS_INFO_REMARK);
         addControl(dlg,"BUTTON","Show status notifications",BS_AUTOCHECKBOX|WS_TABSTOP,108,572,250,24,SETTINGS_NOTIFY);
         addControl(dlg,"STATIC","Client updates",0,13,609,220,22,SETTINGS_UPDATE_HEADING);
-        addControl(dlg,"EDIT",readClientSetting("Update","url","").c_str(),
-                   WS_BORDER|WS_TABSTOP|ES_AUTOHSCROLL,108,636,310,25,SETTINGS_UPDATE_URL);
+        addControl(dlg,"EDIT","/upgrades/",
+                   WS_BORDER|ES_READONLY,108,636,310,25,SETTINGS_UPDATE_URL);
         addControl(dlg,"BUTTON","Check new version",WS_TABSTOP,108,671,160,27,SETTINGS_UPDATE_CHECK);
         addControl(dlg,"BUTTON","Update",WS_TABSTOP,277,671,120,27,SETTINGS_UPDATE_INSTALL);
         EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_INSTALL),FALSE);
@@ -2833,13 +2839,12 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             return TRUE;
         }
         if(id==SETTINGS_UPDATE_CHECK){
-            const std::string url=editText(dlg,SETTINGS_UPDATE_URL);
+            const std::string url=backendUpdateServer();
             if(!validUpdateServer(url)){
                 setDlgUtf8Text(dlg,SETTINGS_UPDATE_STATUS,
-                    "Enter a valid http(s) update server URL (no spaces or query).");
+                    "Configure a valid Server IP and Port first.");
                 return TRUE;
             }
-            saveClientSetting("Update","url",url);
             selectedUpdateVersion.clear();
             EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_INSTALL),FALSE);
             EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_CHECK),FALSE);
@@ -2851,7 +2856,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
             return TRUE;
         }
         if(id==SETTINGS_UPDATE_INSTALL){
-            const std::string url=editText(dlg,SETTINGS_UPDATE_URL);
+            const std::string url=backendUpdateServer();
             if(!validUpdateServer(url)||selectedUpdateVersion.empty())return TRUE;
             EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_INSTALL),FALSE);
             EnableWindow(GetDlgItem(dlg,SETTINGS_UPDATE_CHECK),FALSE);
