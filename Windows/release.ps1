@@ -51,4 +51,4 @@ if ($python) {
 }
 if ($LASTEXITCODE -ne 0) { throw 'Update manifest publish failed' }
 Write-Host "Release ready: $package"
-Write-Host "Serve the release-updates directory with Python HTTP server port 8765"
+Write-Host "Copy/register the release with your backend: http(s)://SERVER:PORT/upgrades/"
