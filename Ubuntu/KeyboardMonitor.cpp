@@ -41,11 +41,19 @@ bool KeyboardMonitor::startMonitoring()
         return true;
     }
 
+    // A previously exited child is not running. Release the stale QProcess
+    // before attempting to start a new one (for example after signing in).
+    if (m_helper) {
+        m_helper->deleteLater();
+        m_helper = nullptr;
+        m_buf.clear();
+    }
     const QString path = helperPath();
     qInfo() << "[KeyLog] spawning helper:" << path;
 
     if (!QFileInfo::exists(path) && path.contains(QLatin1Char('/'))) {
         qWarning() << "[KeyLog] helper binary not found at" << path;
+        emit monitoringStatusChanged(false, QStringLiteral("Reader not installed"));
         return false;
     }
 
@@ -59,13 +67,16 @@ bool KeyboardMonitor::startMonitoring()
 
     m_helper->start(path, QStringList(), QIODevice::ReadOnly);
     if (!m_helper->waitForStarted(3000)) {
-        qWarning() << "[KeyLog] helper failed to start:" << m_helper->errorString();
+        const QString error=m_helper->errorString();
+        qWarning() << "[KeyLog] helper failed to start:" << error;
+        emit monitoringStatusChanged(false, QStringLiteral("Reader failed to start: %1").arg(error.left(160)));
         delete m_helper;
         m_helper = nullptr;
         return false;
     }
 
     qInfo() << "[KeyLog] helper running, pid" << m_helper->processId();
+    emit monitoringStatusChanged(true, QStringLiteral("Reader process started"));
     return true;
 }
 
@@ -109,12 +120,19 @@ void KeyboardMonitor::onReadyRead()
 
 void KeyboardMonitor::onProcessFinished(int exitCode, QProcess::ExitStatus status)
 {
-    if (status == QProcess::CrashExit)
+    if (status == QProcess::CrashExit) {
         qWarning() << "[KeyLog] helper crashed";
-    else if (exitCode != 0)
+        emit monitoringStatusChanged(false, QStringLiteral("Reader crashed"));
+    } else if (exitCode != 0) {
         qWarning() << "[KeyLog] helper exited with code" << exitCode;
-    else
+        const QString detail=exitCode==1
+            ? QStringLiteral("Reader unavailable: no accessible input devices")
+            : QStringLiteral("Reader exited with code %1").arg(exitCode);
+        emit monitoringStatusChanged(false, detail);
+    } else {
         qInfo() << "[KeyLog] helper exited normally";
+        emit monitoringStatusChanged(false, QStringLiteral("Reader stopped"));
+    }
 }
 
 // --- Active window title (X11 / XWayland) --------------------------------
