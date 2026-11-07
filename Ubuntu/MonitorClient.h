@@ -201,14 +201,14 @@ private:
     QAction *sendAllAction;
     QAction *configureAction;
     QAction *screenshotAction;
-    QAction *testConnectionAction;
-    QAction *testAPIEndpointsAction;
     QAction *configRefreshAction;
     bool serverConnected;
     QString lastError;
     QString screenshotUploadError;
     QString clientName;
-    
+    QString signedUserNo;
+    QString signedUserName;
+
     // Status tracking
     bool screenshotEnabled;
     bool keylogEnabled;
