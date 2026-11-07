@@ -243,7 +243,7 @@ Package: ${PACKAGE_NAME}
 Version: ${PACKAGE_VERSION}
 Architecture: ${PACKAGE_ARCH}
 Maintainer: ${PACKAGE_MAINTAINER}
-Depends: libc6, libqt5core5a, libqt5widgets5, libqt5network5, libqt5sql5-sqlite, libqt5dbus5, libudev1, libx11-6, libxext6, libxrandr2, libsqlite3-0, libdbus-1-3
+Depends: libc6, libqt5core5a | libqt5core5t64, libqt5widgets5 | libqt5widgets5t64, libqt5network5 | libqt5network5t64, libqt5dbus5 | libqt5dbus5t64, libqt5concurrent5 | libqt5concurrent5t64, libqt5sql5-sqlite, libpipewire-0.3-0 | libpipewire-0.3-0t64, libudev1, libx11-6, libxext6, libxrandr2, libsqlite3-0, libdbus-1-3, libsecret-tools, util-linux, passwd
 Section: utils
 Priority: optional
 Description: ${PACKAGE_DESCRIPTION}
