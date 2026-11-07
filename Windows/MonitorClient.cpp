@@ -2582,7 +2582,7 @@ static INT_PTR CALLBACK settingsDialogProc(HWND dlg,UINT msg,WPARAM wp,LPARAM lp
         addControl(dlg,"BUTTON","Refresh Configuration",WS_TABSTOP,174,625,210,28,SETTINGS_REFRESH_CONFIG);
         addControl(dlg,"STATIC","Notifications",0,13,578,240,22,4506);
         addControl(dlg,"STATIC","Maintenance",0,13,607,240,22,4507);
-        addControl(dlg,"STATIC","Update server",0,13,633,104,21,4509);
+        addControl(dlg,"STATIC","Update API path",0,13,633,104,21,4509);
         CheckDlgButton(dlg,SETTINGS_NOTIFY,notificationsEnabled?BST_CHECKED:BST_UNCHECKED);
         addControl(dlg,"BUTTON","Lock Settings",WS_TABSTOP,214,607,112,30,SETTINGS_LOCK_SETTINGS);
         addControl(dlg,"BUTTON","Save Monitor",WS_TABSTOP|BS_DEFPUSHBUTTON,108,607,96,30,SETTINGS_SAVE);
