@@ -134,9 +134,16 @@ MonitorClient::MonitorClient()
     // Initialize USB monitoring
     setupUsbMonitoring();
     
-    // The tray renders immediately; show the saved machine label even before
-    // the secure session restoration finishes.
+    // Render the last signed-in User No immediately; Secret Service and the
+    // backend may take several seconds to restore the actual device session.
+    // This local identity is display-only, never used to authorize uploads.
     clientName=getClientName();
+    const QString savedConfig=QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
+        +QStringLiteral("/monitorclient/settings.ini");
+    if(QFile::exists(savedConfig)){
+        QSettings savedIdentity(savedConfig,QSettings::IniFormat);
+        signedUserNo=savedIdentity.value("User/no").toString().trimmed();
+    }
 
     // Initialize system tray
     setupSystemTray();
@@ -157,14 +164,14 @@ MonitorClient::MonitorClient()
         ConfigDialog saved;
         authToken=saved.getAuthToken();
         monitorId=saved.getMonitorId();
-        signedUserNo=saved.getActiveUserNo();
+        signedUserNo=saved.getRememberedUserNo();
         if(authToken.isEmpty() || monitorId<1)onConfigureAction();
         else {
             clientName=saved.getClientName();
             if(keyboardMonitor)keyboardMonitor->startMonitoring();
             scheduleConnectionTest("Checking remembered session...");
         }
-        updateTrayIcon();
+        updateStatusDisplay();
     });
     // Fetch configuration from API
     fetchConfigurationFromAPI();
@@ -1732,10 +1739,14 @@ void MonitorClient::updateTrayMenu()
     lines << QStringLiteral("Server %1:%2")
                  .arg(getServerIP(), QString::number(getServerPort()));
     lines << QStringLiteral("Client: %1").arg(clientName);
-    if(!authToken.isEmpty() && !signedUserNo.isEmpty())
-        lines << QStringLiteral("User No: %1").arg(signedUserNo);
-    else
+    if(!signedUserNo.isEmpty()){
+        if(!authToken.isEmpty())
+            lines << QStringLiteral("User No: %1").arg(signedUserNo);
+        else
+            lines << QStringLiteral("User No: %1 (sign-in required)").arg(signedUserNo);
+    }else{
         lines << QStringLiteral("Account: Sign in required");
+    }
     if (!authToken.isEmpty() && monitorId>0)
         lines << QStringLiteral("Keyboard reader: %1").arg(keyboardReaderStatus);
     lines << QStringLiteral("Activity: %1").arg(activityLine);
@@ -1922,7 +1933,7 @@ void MonitorClient::onConfigureAction()
         // closing the window does not change any capture/upload service.
         authToken = dialog->getAuthToken();
         monitorId = dialog->getMonitorId();
-        signedUserNo = dialog->getActiveUserNo();
+        signedUserNo = dialog->getRememberedUserNo();
         clientName = dialog->getClientName();
         if (authToken.isEmpty() || monitorId < 1) {
             if (keyboardMonitor) keyboardMonitor->stopMonitoring();
