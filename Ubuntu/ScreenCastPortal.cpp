@@ -396,9 +396,12 @@ void ScreenCastPortal::onCreateSessionResponse(const QDBusMessage &msg)
         return;
     }
 
-    QDBusArgument resultsArg = msg.arguments().at(1).value<QDBusArgument>();
     QVariantMap results;
-    resultsArg >> results;
+    const QVariant resultArg=msg.arguments().at(1);
+    if(resultArg.canConvert<QDBusArgument>()){
+        QDBusArgument typed=resultArg.value<QDBusArgument>();
+        typed >> results;
+    }else results=resultArg.toMap();
 
     if (results.contains("session_handle")) {
         QVariant v = results["session_handle"];
@@ -446,8 +449,14 @@ void ScreenCastPortal::selectSources()
     msg << QVariant::fromValue(QDBusObjectPath(m_sessionHandle));
     msg << QVariant::fromValue(options);
 
-    QDBusPendingCall pending = bus.asyncCall(msg);
-    Q_UNUSED(pending);
+    auto *watcher=new QDBusPendingCallWatcher(bus.asyncCall(msg),this);
+    connect(watcher,&QDBusPendingCallWatcher::finished,this,
+        [this](QDBusPendingCallWatcher *finished){
+            QDBusPendingReply<QDBusObjectPath> reply=*finished;
+            finished->deleteLater();
+            if(reply.isError())
+                emit streamFailed(QStringLiteral("SelectSources failed: ")+reply.error().message());
+        });
 }
 
 void ScreenCastPortal::onSelectSourcesResponse(const QDBusMessage &msg)
@@ -489,8 +498,14 @@ void ScreenCastPortal::startCapture()
     msg << QString("");
     msg << QVariant::fromValue(options);
 
-    QDBusPendingCall pending = bus.asyncCall(msg);
-    Q_UNUSED(pending);
+    auto *watcher=new QDBusPendingCallWatcher(bus.asyncCall(msg),this);
+    connect(watcher,&QDBusPendingCallWatcher::finished,this,
+        [this](QDBusPendingCallWatcher *finished){
+            QDBusPendingReply<QDBusObjectPath> reply=*finished;
+            finished->deleteLater();
+            if(reply.isError())
+                emit streamFailed(QStringLiteral("ScreenCast Start failed: ")+reply.error().message());
+        });
 }
 
 void ScreenCastPortal::onStartResponse(const QDBusMessage &msg)
@@ -509,9 +524,12 @@ void ScreenCastPortal::onStartResponse(const QDBusMessage &msg)
         return;
     }
 
-    QDBusArgument resultsArg = msg.arguments().at(1).value<QDBusArgument>();
     QVariantMap results;
-    resultsArg >> results;
+    const QVariant resultArg=msg.arguments().at(1);
+    if(resultArg.canConvert<QDBusArgument>()){
+        QDBusArgument typed=resultArg.value<QDBusArgument>();
+        typed >> results;
+    }else results=resultArg.toMap();
 
     // Extract PipeWire node ID from the streams array: a(ua{sv})
     if (results.contains("streams")) {
