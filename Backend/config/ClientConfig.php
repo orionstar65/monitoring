@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/AppSettings.php';
 /**
  * Client Configuration Constants
  * 
@@ -68,24 +69,47 @@ class ClientConfig {
      * @param string $platform Platform name (macos, windows, ubuntu)
      * @return array Configuration array
      */
-    public static function getConfig($platform = 'default') {
+    public static function getConfig($platform = 'default', $db = null) {
+        if(!in_array($platform,['ubuntu','windows','macos','default'],true))$platform='default';
         $config = [
             'intervals' => self::DEFAULT_INTERVALS,
             'server' => self::SERVER_CONFIG,
             'features' => self::FEATURES,
             'platform' => $platform,
-            'version' => '1.0',
+            'version' => '1.5',
             'last_updated' => date('Y-m-d H:i:s')
         ];
-        
-        // Apply platform-specific overrides if they exist
-        if (isset(self::PLATFORM_OVERRIDES[$platform])) {
-            $config['intervals'] = array_merge(
-                $config['intervals'], 
-                self::PLATFORM_OVERRIDES[$platform]
-            );
+        // Safe typed defaults if the migration is not installed yet.
+        $settings=AppSettings::values($db);
+        foreach([
+            'screenshot'=>'screenshot','heartbeat'=>'tic',
+            'browser'=>'history','keyboard'=>'keylog','usb'=>'usb',
+            'config_refresh'=>'config_refresh'
+        ] as $key=>$field){
+            $config['intervals'][$field]=$settings["interval.$key.seconds"];
+            if($platform!=='default'){
+                $override=$settings["platform.$platform.interval.$key.seconds"]??null;
+                if($override!==null)$config['intervals'][$field]=$override;
+            }
         }
-        
+        foreach([
+            'screenshot'=>'screenshot_enabled',
+            'browser_history'=>'browser_history_enabled',
+            'keyboard'=>'keylog_enabled','usb'=>'usb_monitoring_enabled',
+            'debug_logging'=>'debug_logging_enabled',
+            'auto_update'=>'auto_update_enabled'
+        ] as $key=>$field){
+            $config['features'][$field]=$settings["feature.$key.enabled"];
+        }
+        foreach([
+            'max_retry_attempts'=>'max_retry_attempts',
+            'connection_timeout.seconds'=>'connection_timeout',
+            'request_timeout.seconds'=>'request_timeout',
+            'chunk_size'=>'chunk_size',
+            'compression.enabled'=>'compression_enabled'
+        ] as $key=>$field){
+            $config['server'][$field]=$settings["server.$key"];
+        }
         return $config;
     }
     
