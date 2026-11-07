@@ -50,6 +50,7 @@ php Backend/tests/monitor_selector_sort_contract.php
 php Backend/tests/client_tray_session_contract.php
 php Backend/tests/ubuntu_keyboard_helper_status_contract.php
 php Backend/tests/ubuntu_tray_lifecycle_contract.php
+php Backend/tests/ubuntu_upgrade_contract.php
 node Backend/tests/timeline_geometry_test.js
 node Backend/tests/monitoring_date_transcript_test.js
 node Backend/tests/screenshot_navigation_range_test.js
@@ -229,3 +230,30 @@ window and that API heartbeats continue. The direct `Ubuntu/install.sh` path
 now correctly copies its input-reader helper from the active build directory.
 Run `php Backend/tests/ubuntu_tray_lifecycle_contract.php` to verify source
 contracts; a native build and GUI test are still necessary.
+
+## Debian upgrade fixes
+
+Ubuntu packages must now be published with an incremented patch version.
+The self-hosted update manifest rejects different bytes under the same
+version. `Ubuntu/create_deb_package.sh` verifies that the native executable's
+`--version` matches the requested package version and embedded dpkg version,
+then installs a constrained restart helper at
+`/opt/monitorclient/upgrade-restart.sh`. At package configure time, the
+helper detects older running executable inodes belonging **only** to the
+package-managed binary and restarts the affected active desktop user session.
+It does not force-kill stuck clients or touch unknown installation paths.
+The in-app updater waits for `pkexec/dpkg` to finish and reports declined or
+failed installs rather than quitting immediately. A legacy updater that quits
+before authorization has completed requires one manual desktop launch on its
+first upgrade.
+
+See `Ubuntu/UPGRADES.md` for package build commands, installed versus running
+binary verification, and startup migration instructions. Run:
+
+```bash
+php Backend/tests/ubuntu_upgrade_contract.php
+python3 scripts/test_publish_update.py
+```
+
+Native Qt builds and real Ubuntu desktop upgrades remain required; these
+source contracts alone cannot prove process handoff on the target machine.
