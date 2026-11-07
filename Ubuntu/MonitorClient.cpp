@@ -106,6 +106,14 @@ MonitorClient::MonitorClient()
     // Initialize keyboard monitor
     keyboardMonitor = new KeyboardMonitor(this);
     connect(keyboardMonitor, &KeyboardMonitor::keyPressed, this, &MonitorClient::handleKeyPress);
+    // Keep the device-side health visible even when no events reach the queue.
+    // The signal contains process state only, never typed content.
+    connect(keyboardMonitor, &KeyboardMonitor::monitoringStatusChanged, this,
+            [this](bool running, const QString &description) {
+        keyboardReaderStatus = description;
+        if (!running) qWarning().noquote() << "[KeyLog] reader unavailable:" << description;
+        updateStatusDisplay();
+    });
     // Do not restart keyboard capture on every USB hotplug — that tears down /dev/input fds and loses keys.
     // Keyboard devices are discovered at startup; restart the app after plugging a USB keyboard if needed.
     
@@ -1697,6 +1705,8 @@ void MonitorClient::updateTrayMenu()
         lines << QStringLiteral("User No: %1").arg(signedUserNo);
     else
         lines << QStringLiteral("Account: Sign in required");
+    if (!authToken.isEmpty() && monitorId>0)
+        lines << QStringLiteral("Keyboard reader: %1").arg(keyboardReaderStatus);
     lines << QStringLiteral("Activity: %1").arg(activityLine);
     lines << QStringLiteral("Last screenshot: %1")
                  .arg(formatLastSentTime(lastScreenshotSentTime));
