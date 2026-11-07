@@ -319,12 +319,13 @@ void ConfigDialog::loadSettings(){
     updateServerInput->setText(cfg.value("Updates/url","").toString());
     // These are display fields only. The token remains in Secret Service,
     // and the backend must validate it before the account is considered signed in.
-    const QString previousNo=cfg.value("User/no").toString().trimmed();
-    if(!previousNo.isEmpty()){
-        userNoInput->setText(previousNo);
+    rememberedUserNo=cfg.value("User/no").toString().trimmed();
+    rememberedMonitorId=cfg.value("Monitor/id",0).toInt();
+    if(!rememberedUserNo.isEmpty()){
+        userNoInput->setText(rememberedUserNo);
         connectionStatusLabel->setText(
             QStringLiteral("Previous User No: %1 · Sign in if the secure session cannot be restored")
-                .arg(previousNo));
+                .arg(rememberedUserNo));
         connectionStatusLabel->setWordWrap(true);
     }
 }
@@ -336,9 +337,15 @@ void ConfigDialog::saveSettings(){
     cfg.setValue("Server/ip",getServerIP());
     cfg.setValue("Server/port",getServerPort());
     cfg.setValue("Notifications/enabled",notificationsCheck->isChecked());
-    cfg.setValue("Monitor/id",monitorId);
-    cfg.setValue("User/no",activeUserNo);
-    cfg.setValue("User/name",activeUserName);
+    // Do not overwrite remembered identity with empty values just because
+    // the secure keyring is temporarily locked or the backend is offline.
+    if(!authToken.isEmpty() && !activeUserNo.isEmpty()){
+        rememberedUserNo=activeUserNo;
+        rememberedMonitorId=monitorId;
+        cfg.setValue("Monitor/id",monitorId);
+        cfg.setValue("User/no",activeUserNo);
+        cfg.setValue("User/name",activeUserName);
+    }
     cfg.setValue("Updates/url",updateServerInput->text().trimmed());
     cfg.sync();
     if(cfg.status()!=QSettings::NoError)
@@ -348,6 +355,8 @@ void ConfigDialog::saveSettings(){
 // Secret Service and is never written to this file.
 void ConfigDialog::persistSessionIdentity(){
     if(authToken.isEmpty() || activeUserNo.isEmpty())return;
+    rememberedUserNo=activeUserNo;
+    rememberedMonitorId=monitorId;
     QDir().mkpath(QFileInfo(settingsPath()).absolutePath());
     QSettings cfg(settingsPath(),QSettings::IniFormat);
     cfg.setValue("User/no",activeUserNo);
@@ -357,6 +366,8 @@ void ConfigDialog::persistSessionIdentity(){
 }
 
 void ConfigDialog::clearSessionIdentity(){
+    rememberedUserNo.clear();
+    rememberedMonitorId=0;
     QSettings cfg(settingsPath(),QSettings::IniFormat);
     cfg.remove("User/no");
     cfg.remove("User/name");
