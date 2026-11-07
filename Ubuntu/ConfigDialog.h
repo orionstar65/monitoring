@@ -29,7 +29,7 @@ public:
     QString getActiveUserNo() const { return authToken.isEmpty() ? QString() : activeUserNo; }
     // Display-only identity survives transient offline/keyring failures;
     // never treat this value as proof of an authenticated session.
-    QString getRememberedUserNo() const { return activeUserNo.isEmpty() ? rememberedUserNo : activeUserNo; }
+    QString getRememberedUserNo() const { return (authToken.isEmpty() || activeUserNo.isEmpty()) ? rememberedUserNo : activeUserNo; }
     QString getActiveUserName() const { return authToken.isEmpty() ? QString() : activeUserName; }
     QString getAuthToken() const { return authToken; }
     int getMonitorId() const { return monitorId; }
