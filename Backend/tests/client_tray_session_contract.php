@@ -56,11 +56,14 @@ $checks=[
     !str_contains($ubuntu,'Signed in: %1 (User No: %2)') &&
     !str_contains($ubuntu,'signedUserName'),
   'Ubuntu session identity is loaded into tray status at startup'=>
-    str_contains($ubuntu,'signedUserNo=saved.getActiveUserNo();') &&
+    str_contains($ubuntu,'signedUserNo=saved.getRememberedUserNo();') &&
+    str_contains($ubuntu,'signedUserNo=savedIdentity.value("User/no").toString().trimmed();') &&
+    str_contains($ubuntu,'updateStatusDisplay();'.PHP_EOL.'    });'.PHP_EOL.'    // Fetch configuration from API') &&
     !str_contains($ubuntu,'signedUserName=saved.getActiveUserName();'),
   'Ubuntu tray identity updates immediately when the account changes'=>
-    substr_count($ubuntu,'signedUserNo=dialog->getActiveUserNo();')>=2 &&
-    str_contains($ubuntu,'connect(dialog,&ConfigDialog::sessionStateChanged'),
+    str_contains($ubuntu,'signedUserNo = dialog->getRememberedUserNo();') &&
+    str_contains($ubuntu,'connect(dialog, &ConfigDialog::sessionStateChanged') &&
+    str_contains($ubuntu,'User No: %1 (sign-in required)'),
   'Session-restoration response includes user name and monitor assignment'=>
     str_contains($auth,'$action===\'restore\'') &&
     str_contains($auth,'\'user\'=>$user') &&
@@ -70,10 +73,18 @@ $checks=[
     !str_contains($dialog,'loadRememberedSession();'."\n".'    refreshMonitors();'),
   'Ubuntu settings show only User No once and sign-in status has no repeated identity'=>
     str_contains($dialog,'accountFieldLabel=new QLabel("User No"') &&
-    str_contains($dialog,'accountInfoLabel->setText(activeUserNo)') &&
+    str_contains($dialog,'accountInfoLabel->setText(enrolled ? displayUserNo') &&
     substr_count($dialog,'connectionStatusLabel->setText(QStringLiteral("● Signed in"));')===2 &&
     !str_contains($dialog,'Signed in as %1') &&
     !str_contains($dialog,'activeUserName.isEmpty()?activeUserNo:activeUserName'),
+  'Saved Ubuntu account remains visible when the keyring or server is offline'=>
+    str_contains($dialog,'rememberedUserNo=cfg.value("User/no").toString().trimmed();') &&
+    str_contains($dialog,'const bool showUserNo=!displayUserNo.isEmpty();') &&
+    str_contains($dialog,'(previously signed in)') &&
+    str_contains($dialog,'Server unavailable · saved session retained'),
+  'Ubuntu settings saves do not blank the previously signed-in identity'=>
+    str_contains($dialog,'if(!authToken.isEmpty() && !activeUserNo.isEmpty()){') &&
+    str_contains($dialog,'cfg.setValue("User/no",activeUserNo);'),
   'Ubuntu stores display metadata but not the session bearer token in INI'=>
     str_contains($dialog,'void ConfigDialog::persistSessionIdentity()') &&
     str_contains($dialog,'cfg.setValue("User/no",activeUserNo)') &&
