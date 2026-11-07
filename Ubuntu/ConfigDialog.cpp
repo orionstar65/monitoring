@@ -40,6 +40,11 @@
 #include <QTabWidget>
 
 ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
+    // Settings is a temporary tray tool, not the main application window.
+    // Do not create a separate taskbar / dock entry for it on supported
+    // desktop environments. Closing it only dismisses the dialog.
+    setWindowFlag(Qt::Tool, true);
+    setAttribute(Qt::WA_QuitOnClose, false);
     setWindowTitle(QString("MonitorClient v%1 — Settings").arg(MONITORAPP_VERSION));
     setMinimumSize(500,340);
     resize(540,380);
