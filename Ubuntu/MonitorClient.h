@@ -201,7 +201,6 @@ private:
     QAction *sendAllAction;
     QAction *configureAction;
     QAction *screenshotAction;
-    QAction *configRefreshAction;
     bool serverConnected;
     QString lastError;
     QString screenshotUploadError;
