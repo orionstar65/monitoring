@@ -16,14 +16,30 @@ All three scripts call `scripts/publish_update.py` and place files in the
 **repository-root `release-updates/` folder**, updating its shared
 `manifest.json`. They do not upload releases to remote servers automatically.
 
-If you build on a machine other than the live Ubuntu backend server, deploy the
-complete directory after verifying the build:
+If all three releases were built in **one shared checkout**, you may
+synchronize that checkout's complete `release-updates/` directory to the
+server after verifying the manifest. However, if Ubuntu, Windows and macOS
+releases are built on **separate machines**, do not copy the old
+`manifest.json` from each one: it can overwrite other platform entries.
+
+Instead upload each versioned artifact to the backend machine, then register
+it there using the one shared manifest:
 
 ```bash
-# Example from your build machine, with SSH access to your Ubuntu backend:
-rsync -av --delay-updates release-updates/ \
-  server@YOUR_SERVER:/var/monitor/release-updates/
+# On build host: copy the platform package (example: Ubuntu)
+scp Ubuntu/MonitorClient-1.5.3-ubuntu-amd64.deb \
+  server@YOUR_SERVER:/tmp/
+
+# On the Ubuntu backend server:
+cd /var/monitor
+bash Backend/publish_upgrade.sh ubuntu-amd64 1.5.3 \
+  /tmp/MonitorClient-1.5.3-ubuntu-amd64.deb
 ```
+
+Repeat on the backend with `windows-x64`, `macos-arm64` or
+`macos-x64` and the matching artifact extension. The same script uses
+`scripts/publish_update.py` to update only that platform's manifest
+entry. Register releases sequentially; do not start concurrent writers.
 
 The PHP endpoint uses a fixed, read-only path:
 `Backend/upgrades/index.php` defines
