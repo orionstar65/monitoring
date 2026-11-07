@@ -390,6 +390,9 @@ QJsonObject ConfigDialog::authRequest(const QJsonObject &payload,bool authentica
     timer.start(8000);
     if(!reply->isFinished())loop.exec();
     QJsonObject response=QJsonDocument::fromJson(reply->readAll()).object();
+    // Keep transport status local to the client: an unavailable server is
+    // not evidence that the user's revocable session was signed out.
+    response.insert("_http_status",reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt());
     if(reply->error()!=QNetworkReply::NoError&&!response.contains("error"))
         response.insert("error",timer.isActive()?reply->errorString():"Server request timed out");
     reply->deleteLater();return response;
@@ -492,16 +495,36 @@ void ConfigDialog::rememberToken(const QString &token){
 }
 void ConfigDialog::loadRememberedSession(){
     authToken=readRememberedToken();
-    if(authToken.isEmpty())return;
+    if(authToken.isEmpty()){
+        // A locked/unavailable Secret Service keyring does not erase the
+        // previously signed-in account number shown in Settings.
+        return;
+    }
+    activeUserNo=rememberedUserNo;
+    monitorId=rememberedMonitorId;
     auto state=authRequest({{"action","restore"}},true);
     if(!state.value("success").toBool()){
-        authToken.clear();
-        connectionStatusLabel->setText("Session unavailable · Sign in again");
+        const int httpStatus=state.value("_http_status").toInt();
+        if(httpStatus==401 || httpStatus==403){
+            // Only an explicit authorization denial invalidates this token.
+            // Keep display-only User No so the owner can sign in again.
+            authToken.clear();
+            activeUserNo.clear();
+            monitorId=0;
+            connectionStatusLabel->setText("Session expired · Sign in again");
+        }else{
+            // Do not silently sign out on a timeout, offline startup or
+            // temporary backend failure. Existing authenticated requests can
+            // retry when the server returns.
+            connectionStatusLabel->setText(
+                "Server unavailable · saved session retained (not yet verified)");
+        }
         return;
     }
     monitorId=state.value("monitor_id").toInt();
     const QJsonObject account=state.value("user").toObject();
-    activeUserNo=account.value("user_no").toString();
+    const QString restoredNo=account.value("user_no").toVariant().toString().trimmed();
+    if(!restoredNo.isEmpty())activeUserNo=restoredNo;
     activeUserName=account.value("name").toString();
     assignmentLocked=state.value("assignment_locked").toBool();
     settingsLocked=state.value("settings_locked").toBool();
@@ -526,6 +549,7 @@ bool ConfigDialog::saveServerIfChanged(){
             serverPortEdit->setValue(draftPort);
         }
         clearStoredToken(oldHost,oldPort);
+        clearSessionIdentity();
         authToken.clear();monitorId=0;assignmentLocked=false;activeUserNo.clear();activeUserName.clear();
         emit sessionStateChanged();
     }
@@ -565,14 +589,22 @@ void ConfigDialog::refreshMonitors(){
     if(authToken.isEmpty()){updateMonitorList({});return;}
     const auto result=authRequest({{"action","restore"}},true);
     if(!result.value("success").toBool()){
-        authToken.clear();monitorId=0;assignmentLocked=false;activeUserNo.clear();activeUserName.clear();
-        updateMonitorList({});updateUI();return;
+        const int httpStatus=result.value("_http_status").toInt();
+        if(httpStatus==401 || httpStatus==403){
+            authToken.clear();monitorId=0;assignmentLocked=false;
+            activeUserNo.clear();activeUserName.clear();
+            updateMonitorList({});
+        }
+        // Transient network/backend failures must not remove the session
+        // or hide the last signed-in User No.
+        updateUI();return;
     }
     monitorId=result.value("monitor_id").toInt();
     assignmentLocked=result.value("assignment_locked").toBool();
     settingsLocked=false;
     const QJsonObject account=result.value("user").toObject();
-    activeUserNo=account.value("user_no").toString();
+    const QString restoredNo=account.value("user_no").toVariant().toString().trimmed();
+    if(!restoredNo.isEmpty())activeUserNo=restoredNo;
     activeUserName=account.value("name").toString();
     persistSessionIdentity();
     if(userNoInput)userNoInput->setText(activeUserNo);
@@ -680,9 +712,13 @@ void ConfigDialog::updateUI(){
     passwordInput->setVisible(!enrolled);
     userNoFieldLabel->setVisible(!enrolled);
     passwordFieldLabel->setVisible(!enrolled);
-    accountFieldLabel->setVisible(enrolled);
-    accountInfoLabel->setVisible(enrolled);
-    if(enrolled)accountInfoLabel->setText(activeUserNo);
+    const QString displayUserNo=getRememberedUserNo();
+    const bool showUserNo=!displayUserNo.isEmpty();
+    accountFieldLabel->setVisible(showUserNo);
+    accountInfoLabel->setVisible(showUserNo);
+    if(showUserNo)
+        accountInfoLabel->setText(enrolled ? displayUserNo
+            : QStringLiteral("%1 (previously signed in)").arg(displayUserNo));
     logoutButton->setVisible(enrolled);
     logoutButton->setEnabled(enrolled);
     sendAllButton->setEnabled(enrolled&&monitorId>0);
