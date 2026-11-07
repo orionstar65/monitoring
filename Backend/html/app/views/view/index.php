@@ -2631,17 +2631,31 @@ function historySelectExternalScreenshot(shot){
     if(!current||current.monitor!==monitor){
         startHistoryViewer(id,shot.capture_datetime,full,thumb);return;
     }
+    // Navigation (header arrows and keyboard) must move the entire bottom
+    // time range to the selected screenshot, not just replace the main image.
+    // Keep the existing selection width and center it around this capture.
+    const duration=Math.max(1000,current.rangeEnd-current.rangeStart);
+    const outside=ms<current.start||ms>current.end;
+    if(outside){
+        current.start=ms-12*3600000;current.end=ms+12*3600000;
+        current.shots=[];current.keys=[];
+        current.visibleCacheKey='';
+    }
+    const from=MonitorCctvRange.clamp(ms-duration/2,current.start,current.end-duration);
+    current.rangeStart=from;current.rangeEnd=from+duration;
     current.focus={global_id:id,ms,full,thumb};
     current.activeId=id;current.activeTime=ms;current.cursorTime=ms;
-    if(ms<current.start||ms>current.end){
-        const duration=current.rangeEnd-current.rangeStart;
-        current.start=ms-12*3600000;current.end=ms+12*3600000;
-        current.rangeStart=ms-duration/2;current.rangeEnd=ms+duration/2;
-        historyLoadDomain();
-    }else{
-        const half=(current.rangeEnd-current.rangeStart)/2;
-        const from=Math.max(current.start,Math.min(current.end-2*half,ms-half));
-        historySetRange(from,from+2*half,true);
+
+    // Repaint the selection, From/To inputs, playhead and active marker
+    // together. Do not seek the nearest cached shot: navigation selected an
+    // exact screenshot that may not be in the sampled timeline yet.
+    historyRenderRuler(true);
+    historyShowShot(current.focus);
+    historyUpdateVisual();
+    if(outside)historyLoadDomain();
+    else{
+        historyLoadTranscript();
+        historyScheduleVisibleShots();
     }
 }
 function historySetRange(from,to,load=true){
