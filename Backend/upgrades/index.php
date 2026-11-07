@@ -83,12 +83,12 @@ $size=filesize($file);
 if($size===false || $size!==$allowed[$name]['size']){
     upgradeError(503,'Update artifact not ready');
 }
+$stream=fopen($file,'rb');
+if(!$stream)upgradeError(503,'Cannot read update artifact');
 header('Content-Type: '.$allowed[$name]['type']);
 header('Content-Disposition: attachment; filename="'.$name.'"');
 header('Content-Length: '.$size);
 header('Cache-Control: public, max-age=300');
-if($method==='HEAD')exit;
-$stream=fopen($file,'rb');
-if(!$stream)upgradeError(503,'Cannot read update artifact');
+if($method==='HEAD'){fclose($stream);exit;}
 fpassthru($stream);
 fclose($stream);
