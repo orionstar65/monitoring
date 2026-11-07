@@ -5,6 +5,14 @@
 #include <QDBusInterface>
 #include <QDBusMessage>
 #include <QDBusObjectPath>
+#include <QDBusPendingReply>
+#include <QDBusPendingCallWatcher>
+#include <QFileInfo>
+#include <QImageReader>
+#include <QTimer>
+#include <QUrl>
+#include <QStandardPaths>
+#include <QDir>
 #include <QDBusUnixFileDescriptor>
 #include <QDebug>
 #include <QSettings>
@@ -22,6 +30,7 @@
 #define PORTAL_REQUEST_IF    "org.freedesktop.portal.Request"
 #define PORTAL_SESSION_IF    "org.freedesktop.portal.Session"
 #define PORTAL_SCREENCAST_IF "org.freedesktop.portal.ScreenCast"
+#define PORTAL_SCREENSHOT_IF "org.freedesktop.portal.Screenshot"
 
 #define CAPTURE_TYPE_MONITOR    1
 #define PERSIST_MODE_PERSISTENT 2
@@ -59,6 +68,9 @@ void ScreenCastPortal::onPwStreamStateChanged(void *data,
         self->m_streaming.store(false);
         QString err = error ? QString::fromUtf8(error) : "Unknown error";
         qWarning() << "PipeWire stream error:" << err;
+        QMetaObject::invokeMethod(self,[self,err]() {
+            emit self->streamFailed(QStringLiteral("PipeWire stream: ") + err);
+        },Qt::QueuedConnection);
     } else if (state == PW_STREAM_STATE_UNCONNECTED) {
         self->m_streaming.store(false);
     }
@@ -94,7 +106,10 @@ void ScreenCastPortal::onPwStreamParamChanged(void *data, uint32_t id,
     params[0] = (const struct spa_pod *)spa_pod_builder_add_object(&b,
         SPA_TYPE_OBJECT_ParamBuffers, SPA_PARAM_Buffers,
         SPA_PARAM_BUFFERS_buffers, SPA_POD_CHOICE_RANGE_Int(8, 1, 32),
-        SPA_PARAM_BUFFERS_dataType, SPA_POD_Int(1 << SPA_DATA_MemPtr));
+        // Desktop screencast providers commonly negotiate MemFd buffers,
+        // not just MemPtr. MAP_BUFFERS makes MemFd payloads readable.
+        SPA_PARAM_BUFFERS_dataType, SPA_POD_Int(
+            (1 << SPA_DATA_MemPtr) | (1 << SPA_DATA_MemFd)));
 
     pw_stream_update_params(self->m_pwStream, params, 1);
 }
@@ -108,7 +123,8 @@ void ScreenCastPortal::onPwStreamProcess(void *data)
         return;
 
     struct spa_buffer *spaBuf = pwBuf->buffer;
-    if (spaBuf->n_datas < 1 || !spaBuf->datas[0].data) {
+    if (spaBuf->n_datas < 1 || !spaBuf->datas[0].data ||
+        !spaBuf->datas[0].chunk) {
         pw_stream_queue_buffer(self->m_pwStream, pwBuf);
         return;
     }
@@ -126,6 +142,15 @@ void ScreenCastPortal::onPwStreamProcess(void *data)
         stride = self->m_width * bpp;
     }
 
+    const int bytesPerPixel = qfmt==QImage::Format_RGB888?3:4;
+    if(self->m_width<=0 || self->m_height<=0 ||
+       stride<self->m_width*bytesPerPixel ||
+       d->chunk->offset>d->maxsize ||
+       quint64(stride)*quint64(self->m_height)>
+           quint64(d->maxsize-d->chunk->offset)){
+        pw_stream_queue_buffer(self->m_pwStream,pwBuf);
+        return;
+    }
     const uint8_t *pixels = static_cast<const uint8_t *>(d->data)
                             + d->chunk->offset;
     QImage frame(pixels, self->m_width, self->m_height, stride, qfmt);
@@ -173,6 +198,13 @@ bool ScreenCastPortal::start()
 
 void ScreenCastPortal::stop()
 {
+    if(m_screenshotRequestPending){
+        QDBusConnection::sessionBus().disconnect(
+            "",m_screenshotRequestPath,PORTAL_REQUEST_IF,"Response",
+            this,SLOT(onScreenshotResponse(QDBusMessage)));
+        m_screenshotRequestPending=false;
+        m_screenshotRequestPath.clear();
+    }
     cleanupPipeWire();
 
     if (!m_sessionHandle.isEmpty()) {
@@ -189,6 +221,118 @@ QImage ScreenCastPortal::captureFrame()
 {
     QMutexLocker lock(&m_frameMutex);
     return m_latestFrame;
+}
+
+// Public screenshot portal fallback. It is only called from a real user
+// screenshot action; GNOME controls consent, not the monitoring application.
+bool ScreenCastPortal::requestScreenshot()
+{
+    if (m_screenshotRequestPending) return true;
+
+    QDBusConnection bus=QDBusConnection::sessionBus();
+    if(!bus.isConnected()){
+        emit screenshotFailed(QStringLiteral("No desktop session D-Bus bus. Open the app from a logged-in desktop session (not sudo/system service)."));
+        return false;
+    }
+
+    const QString token=nextRequestToken();
+    const QString requestPath=requestObjectPath(token);
+    if(!bus.connect("",requestPath,PORTAL_REQUEST_IF,"Response",
+                    this,SLOT(onScreenshotResponse(QDBusMessage)))){
+        emit screenshotFailed(QStringLiteral("Could not subscribe to desktop portal screenshot response"));
+        return false;
+    }
+
+    m_screenshotRequestPending=true;
+    m_screenshotRequestPath=requestPath;
+    QDBusMessage call=QDBusMessage::createMethodCall(
+        PORTAL_SERVICE,PORTAL_PATH,PORTAL_SCREENSHOT_IF,"Screenshot");
+    QVariantMap options;
+    options["handle_token"]=token;
+    call << QString() << QVariant::fromValue(options);
+    auto *watcher=new QDBusPendingCallWatcher(bus.asyncCall(call),this);
+    connect(watcher,&QDBusPendingCallWatcher::finished,this,
+        [this,requestPath](QDBusPendingCallWatcher *finished){
+            QDBusPendingReply<QDBusObjectPath> reply=*finished;
+            finished->deleteLater();
+            if(m_screenshotRequestPath!=requestPath)return;
+            if(reply.isError()){
+                QDBusConnection::sessionBus().disconnect(
+                    "",m_screenshotRequestPath,PORTAL_REQUEST_IF,"Response",
+                    this,SLOT(onScreenshotResponse(QDBusMessage)));
+                m_screenshotRequestPending=false;
+                m_screenshotRequestPath.clear();
+                emit screenshotFailed(QStringLiteral("Desktop screenshot portal request failed: ")+reply.error().message());
+                return;
+            }
+            // Some portal implementations return a different request path.
+            // Listen on the actual returned path as well.
+            const QString actual=reply.value().path();
+            if(!actual.isEmpty() && actual!=m_screenshotRequestPath){
+                QDBusConnection::sessionBus().disconnect(
+                    "",m_screenshotRequestPath,PORTAL_REQUEST_IF,"Response",
+                    this,SLOT(onScreenshotResponse(QDBusMessage)));
+                m_screenshotRequestPath=actual;
+                QDBusConnection::sessionBus().connect(
+                    "",m_screenshotRequestPath,PORTAL_REQUEST_IF,"Response",
+                    this,SLOT(onScreenshotResponse(QDBusMessage)));
+            }
+        });
+
+    QTimer::singleShot(45000,this,[this,requestPath](){
+        // A granted capture clears the request before this timer fires.
+        if(!m_screenshotRequestPending)return;
+        if(m_screenshotRequestPath!=requestPath)return;
+        QDBusConnection::sessionBus().disconnect(
+            "",m_screenshotRequestPath,PORTAL_REQUEST_IF,"Response",
+            this,SLOT(onScreenshotResponse(QDBusMessage)));
+        m_screenshotRequestPending=false;
+        m_screenshotRequestPath.clear();
+        emit screenshotFailed(QStringLiteral("Desktop permission dialog timed out. Approve screenshot sharing and try again."));
+    });
+    return true;
+}
+
+void ScreenCastPortal::onScreenshotResponse(const QDBusMessage &msg)
+{
+    if(!m_screenshotRequestPending)return;
+    QDBusConnection::sessionBus().disconnect(
+        "",m_screenshotRequestPath,PORTAL_REQUEST_IF,"Response",
+        this,SLOT(onScreenshotResponse(QDBusMessage)));
+    m_screenshotRequestPending=false;
+    m_screenshotRequestPath.clear();
+
+    if(msg.arguments().size()<2){
+        emit screenshotFailed(QStringLiteral("Desktop screenshot portal returned an incomplete response"));
+        return;
+    }
+    const uint status=msg.arguments().at(0).toUInt();
+    if(status!=0){
+        emit screenshotFailed(status==1
+            ? QStringLiteral("Screenshot permission was cancelled")
+            : QStringLiteral("Desktop denied screenshot access"));
+        return;
+    }
+    QVariantMap result;
+    const QVariant value=msg.arguments().at(1);
+    if(value.canConvert<QDBusArgument>()){
+        QDBusArgument arg=value.value<QDBusArgument>();
+        arg >> result;
+    }else result=value.toMap();
+
+    const QString uri=result.value(QStringLiteral("uri")).toString();
+    const QString path=QUrl(uri).toLocalFile();
+    if(path.isEmpty()){
+        emit screenshotFailed(QStringLiteral("Desktop screenshot portal returned no readable file URI"));
+        return;
+    }
+    QImageReader reader(path);
+    const QImage captured=reader.read();
+    if(captured.isNull()){
+        emit screenshotFailed(QStringLiteral("Desktop screenshot file cannot be decoded: ")+reader.errorString());
+        return;
+    }
+    emit screenshotReady(captured);
 }
 
 // --- Portal D-Bus flow: CreateSession -> SelectSources -> Start -> OpenPipeWireRemote ---
@@ -566,7 +710,10 @@ uint32_t ScreenCastPortal::portalVersion()
 
 void ScreenCastPortal::loadRestoreToken()
 {
-    QSettings settings("settings.ini", QSettings::IniFormat);
+    const QString path=QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
+        +QStringLiteral("/monitorclient/settings.ini");
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    QSettings settings(path,QSettings::IniFormat);
     m_restoreToken = settings.value("ScreenCast/restore_token", "").toString();
     if (!m_restoreToken.isEmpty())
         qDebug() << "Loaded restore token from settings";
@@ -574,7 +721,10 @@ void ScreenCastPortal::loadRestoreToken()
 
 void ScreenCastPortal::saveRestoreToken()
 {
-    QSettings settings("settings.ini", QSettings::IniFormat);
+    const QString path=QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
+        +QStringLiteral("/monitorclient/settings.ini");
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    QSettings settings(path,QSettings::IniFormat);
     settings.setValue("ScreenCast/restore_token", m_restoreToken);
     settings.sync();
 }
