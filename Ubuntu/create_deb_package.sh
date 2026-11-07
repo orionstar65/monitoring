@@ -278,11 +278,14 @@ chmod +x /opt/monitorclient/uninstall.sh
 mkdir -p /opt/monitorclient/logs
 chown -R root:root /opt/monitorclient/logs
 
-# Reload systemd
-systemctl daemon-reload
-
-# Update desktop database
-update-desktop-database /usr/share/applications
+# Reload desktop integration where the relevant helpers are installed.
+# Do not fail a dpkg upgrade on headless/containerized Ubuntu images.
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload >/dev/null 2>&1 || true
+fi
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+fi
 
 # Setgid "input" on the keyreader helper so it can read /dev/input/event* devices.
 getent group input >/dev/null 2>&1 || groupadd --system input
