@@ -251,6 +251,7 @@ See `Ubuntu/UPGRADES.md` for package build commands, installed versus running
 binary verification, and startup migration instructions. Run:
 
 ```bash
+bash Ubuntu/tests/check-upgrade-scripts.sh
 php Backend/tests/ubuntu_upgrade_contract.php
 python3 scripts/test_publish_update.py
 ```
