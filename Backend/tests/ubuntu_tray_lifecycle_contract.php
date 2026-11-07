@@ -20,9 +20,11 @@ $checks=[
     'Settings is a tool window so it does not add a taskbar entry'=>
         str_contains($dialog,'setWindowFlag(Qt::Tool, true);'),
     'Closing Settings cannot trigger Qt automatic quit'=>
-        str_contains($dialog,'setAttribute(Qt::WA_QuitOnClose, false);'),
+        str_contains($dialog,'setAttribute(Qt::WA_QuitOnClose, false);') &&
+        str_contains($dialog,'setAttribute(Qt::WA_DeleteOnClose, false);'),
     'Settings close button hides the dialog, without calling reject or quit'=>
-        str_contains($dialog,'connect(closeButton,&QPushButton::clicked,this,[this](){ hide(); });') &&
+        str_contains($dialog,'connect(closeButton,&QPushButton::clicked,this,[this](){') &&
+        str_contains($dialog,'Settings hidden via Close; tray service remains active') &&
         !str_contains($dialog,'connect(closeButton,&QPushButton::clicked,qApp'),
     'Title-bar X is intercepted, ignored and hides only Settings'=>
         str_contains($dialogHeader,'void closeEvent(QCloseEvent *event) override;') &&
@@ -64,6 +66,9 @@ $checks=[
     'A missing GNOME tray host is diagnosed rather than stopping monitoring'=>
         str_contains($client,'QSystemTrayIcon::isSystemTrayAvailable()') &&
         str_contains($client,'[Tray] No system tray host detected. Monitoring continues;'),
+    'Shutdown events are logged separately from window hides'=>
+        str_contains($main,'[Lifecycle] Qt event loop exiting; background monitoring stopping') &&
+        str_contains($dialog,'[Lifecycle] Settings hidden via window close; tray service remains active'),
     'Telemetry timer survives dialog close'=>
         str_contains($client,'monitorTimer->start();') &&
         str_contains($client,'connect(monitorTimer, &QTimer::timeout, this, &MonitorClient::monitorTimerTick);') &&
