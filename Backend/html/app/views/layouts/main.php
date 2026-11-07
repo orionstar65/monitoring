@@ -583,6 +583,10 @@
                 <a class="nav-link <?= $active_page==='db-management'?'active':'' ?>" href="<?= BASE_URL ?>databasemanagement">
                     <i class="fas fa-database"></i><span>Database Management</span></a>
             </div>
+            <div class="nav-item">
+                <a class="nav-link <?= $active_page==='settings'?'active':'' ?>" href="<?= BASE_URL ?>settings">
+                    <i class="fas fa-sliders-h"></i><span>Operational Settings</span></a>
+            </div>
             <?php endif; ?>
             <?php if(($_SESSION['role']??'')==='user'): ?>
             <div class="nav-item">
