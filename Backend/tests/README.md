@@ -48,6 +48,7 @@ php Backend/tests/unified_monitoring_workspace_contract.php
 php Backend/tests/portal_timeline_and_account_actions_contract.php
 php Backend/tests/monitor_selector_sort_contract.php
 php Backend/tests/client_tray_session_contract.php
+php Backend/tests/ubuntu_keyboard_helper_status_contract.php
 node Backend/tests/timeline_geometry_test.js
 node Backend/tests/monitoring_date_transcript_test.js
 node Backend/tests/screenshot_navigation_range_test.js
@@ -105,3 +106,29 @@ and should be investigated at ingestion rather than silently removed.
 
 Smoke-test all date presets, monitor/no-monitor transitions, server-side table
 pagination, and Screenshot History transcripts using populated staging data.
+
+## Ubuntu keyboard-reader health diagnostics
+
+The Ubuntu tray includes a **Keyboard reader** process-health line after an
+account and monitor are selected. It distinguishes a missing binary, failed
+launch, immediate exit, inaccessible input devices, crashes and a started
+process. This reports process status only and never prints typed content.
+A **started** process is not proof that events are stored in the backend.
+
+For a diagnostic check on the Ubuntu desktop (without reading or displaying
+keyboard content):
+
+```bash
+stat -c '%n %U:%G %a' /opt/monitorclient/monitorclient-keyreader
+pgrep -a -f monitorclient-keyreader
+journalctl --user -u monitorclient -n 100 --no-pager | grep -E 'KeyLog|keyreader|MonitorUpload'
+php Backend/tests/ubuntu_keyboard_helper_status_contract.php
+```
+
+The direct `Ubuntu/install.sh` path currently refers to a helper inside an
+extra `build/` subdirectory after `cd build`; this should be treated as an
+installer defect. The `.deb` packaging path is separate. Do not run the reader
+manually to diagnose it: its standard output contains actual typed content.
+Any change that enables global input collection should first be reviewed for
+informed consent, password-field exclusion, least-privilege access and secure
+storage. Native compilation and desktop testing are still required.
