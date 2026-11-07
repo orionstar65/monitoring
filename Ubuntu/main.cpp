@@ -20,6 +20,10 @@ static QString instanceServerName()
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
+    // This is a tray-resident client. Closing the last Settings dialog must
+    // not stop monitoring, destroy the tray icon, or end the event loop.
+    // Only the explicit Quit MonitorClient action (or system shutdown) exits.
+    app.setQuitOnLastWindowClosed(false);
 
     const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
     QDir().mkpath(cacheDir);
