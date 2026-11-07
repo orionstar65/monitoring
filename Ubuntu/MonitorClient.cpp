@@ -1581,22 +1581,17 @@ void MonitorClient::setupSystemTray()
         "QMenu::separator { height: 1px; background: #c5cdd8; margin: 6px 10px; }"));
 
     screenshotAction = new QAction("Take Screenshot", this);
-    configureAction = new QAction("Configure...", this);
-    testConnectionAction = new QAction("Test Connection", this);
-    testAPIEndpointsAction = new QAction("Test API Endpoints", this);
+    configureAction = new QAction("Settings...", this);
     configRefreshAction = new QAction("Refresh Configuration", this);
-    sendAllAction = new QAction("Send All Data", this);
-    
-    // Add actions to menu
+    sendAllAction = new QAction("Send All Logs", this);
+
+    // Only primary actions are shown. Connection and API tests stay in
+    // Settings; avoid duplicate separators in the system tray.
     trayMenu->addAction(screenshotAction);
+    trayMenu->addAction(sendAllAction);
     trayMenu->addAction(configureAction);
-    trayMenu->addAction(testConnectionAction);
-    trayMenu->addAction(testAPIEndpointsAction);
-    // Refresh Configuration moved into Settings.
     trayMenu->addSeparator();
-    // Send All Logs moved into Settings.
-    trayMenu->addSeparator();
-    trayMenu->addAction("Quit", qApp, &QApplication::quit);
+    trayMenu->addAction("Quit MonitorClient", qApp, &QApplication::quit);
     
     // Set menu for tray icon
     trayIcon->setContextMenu(trayMenu);
@@ -1606,8 +1601,6 @@ void MonitorClient::setupSystemTray()
     connect(sendAllAction, &QAction::triggered, this, &MonitorClient::onSendAllAction);
     connect(configureAction, &QAction::triggered, this, &MonitorClient::onConfigureAction);
     connect(screenshotAction, &QAction::triggered, this, &MonitorClient::onTakeScreenshotAction);
-    connect(testConnectionAction, &QAction::triggered, this, &MonitorClient::onTestConnectionAction);
-    connect(testAPIEndpointsAction, &QAction::triggered, this, &MonitorClient::onTestAPIEndpointsAction);
     connect(configRefreshAction, &QAction::triggered, this, &MonitorClient::onConfigRefreshAction);
     
     // Show tray icon
