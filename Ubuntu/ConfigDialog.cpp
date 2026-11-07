@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <vector>
 #include <QCheckBox>
+#include <QCloseEvent>
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
@@ -48,7 +49,8 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     setWindowTitle(QString("MonitorClient v%1 — Settings").arg(MONITORAPP_VERSION));
     setMinimumSize(500,340);
     resize(540,380);
-    setModal(true);
+    // A modeless tool window keeps the tray responsive while Settings is open.
+    setModal(false);
     auto *outer=new QVBoxLayout(this);
     // Direct tab layout avoids nesting a scroll area around already
     // single-page settings, which introduced excessive blank space.
@@ -266,7 +268,7 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     connect(saveButton,&QPushButton::clicked,this,&ConfigDialog::onSaveClicked);
     connect(editButton,&QPushButton::clicked,this,&ConfigDialog::onEditClicked);
     connect(lockSettingsButton,&QPushButton::clicked,this,&ConfigDialog::onLockSettingsClicked);
-    connect(closeButton,&QPushButton::clicked,this,&ConfigDialog::reject);
+    connect(closeButton,&QPushButton::clicked,this,[this](){ hide(); });
     loadSettings();
     // Apply immediately: a disabled toggle must suppress system tray
     // notifications without waiting for a separate Save click.
@@ -282,6 +284,18 @@ ConfigDialog::ConfigDialog(QWidget *parent) : QDialog(parent) {
     loadRememberedSession();
     updateUI();
 }
+void ConfigDialog::closeEvent(QCloseEvent *event) {
+    // Do not run QDialog's default close/reject path. Settings belongs to the
+    // running tray client and is reused across opens, including the titlebar X.
+    event->ignore();
+    hide();
+}
+
+void ConfigDialog::reject() {
+    // Escape and any explicit QDialog rejection dismiss Settings only.
+    hide();
+}
+
 QString ConfigDialog::settingsPath() const {
     return QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)+"/monitorclient/settings.ini";
 }
