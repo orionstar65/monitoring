@@ -1636,8 +1636,12 @@ void MonitorClient::setupSystemTray()
     connect(configureAction, &QAction::triggered, this, &MonitorClient::onConfigureAction);
     connect(screenshotAction, &QAction::triggered, this, &MonitorClient::onTakeScreenshotAction);
     
-    // Show tray icon
+    // Show tray icon. Some GNOME desktops require a StatusNotifier/AppIndicator
+    // host extension; a missing host does not mean monitoring should stop.
     trayIcon->show();
+    if (!QSystemTrayIcon::isSystemTrayAvailable())
+        qWarning() << "[Tray] No system tray host detected. Monitoring continues; "
+                      "enable a desktop app-indicator host or launch MonitorClient again to reopen Settings.";
     
     // Force initial update
     updateTrayMenu();
