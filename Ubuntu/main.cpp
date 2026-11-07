@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
     // This is a tray-resident client. Closing the last Settings dialog must
     // not stop monitoring, destroy the tray icon, or end the event loop.
-    // Only the explicit Quit MonitorClient action (or system shutdown) exits.
+    // The explicit Quit action, an approved update, or shutdown can still exit.
     app.setQuitOnLastWindowClosed(false);
 
     const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
