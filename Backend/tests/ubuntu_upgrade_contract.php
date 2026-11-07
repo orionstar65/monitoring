@@ -32,6 +32,10 @@ $tests=[
     'Package honors user-customized legacy configuration on upgrades'=>
         str_contains($pack,'DEBIAN/conffiles') &&
         str_contains($pack,'/opt/monitorclient/config/settings.ini'),
+    'Package locks down former user-owned app directory before root helper execution'=>
+        str_contains($pack,'chown root:root /opt/monitorclient') &&
+        str_contains($pack,'chmod 0755 /opt/monitorclient') &&
+        str_contains($pack,'/opt/monitorclient/upgrade-restart.sh'),
     'postinst executes restart only after configure'=>
         str_contains($pack,'if [ "${1:-}" = configure ]; then') &&
         str_contains($pack,'/opt/monitorclient/upgrade-restart.sh configure || true'),
