@@ -93,14 +93,18 @@ sudo mkdir -p /opt/monitorclient
 sudo mkdir -p /opt/monitorclient/config
 sudo mkdir -p /opt/monitorclient/logs
 
-# Copy executable and files
+# Replace the binary atomically. Directly overwriting a running ELF can
+# raise ETXTBSY or leave a still-running process on the previous version.
 print_status "Installing MonitorClient..."
-sudo cp MonitorClient /opt/monitorclient/
-sudo cp ../settings.ini /opt/monitorclient/config/
-sudo chmod +x /opt/monitorclient/MonitorClient
-
-# Set ownership
-sudo chown -R $USER:$USER /opt/monitorclient
+sudo install -m 0755 MonitorClient /opt/monitorclient/.MonitorClient.new
+sudo mv -f /opt/monitorclient/.MonitorClient.new /opt/monitorclient/MonitorClient
+sudo install -m 0755 ../upgrade-restart.sh /opt/monitorclient/upgrade-restart.sh
+# Preserve existing machine defaults. User authentication is stored separately
+# under the user's XDG config and secure session keyring.
+if ! sudo test -f /opt/monitorclient/config/settings.ini; then
+    sudo install -m 0644 ../settings.ini /opt/monitorclient/config/settings.ini
+fi
+sudo chown root:root /opt/monitorclient /opt/monitorclient/MonitorClient /opt/monitorclient/upgrade-restart.sh
 
 print_success "MonitorClient installed to /opt/monitorclient/"
 
@@ -126,10 +130,11 @@ sudo cp MonitorClient.desktop /etc/xdg/autostart/
 # Install the setgid keyreader helper for keyboard monitoring
 print_status "Setting up keyboard monitoring helper..."
 # The build script already entered Ubuntu/build above.
-sudo cp monitorclient-keyreader /opt/monitorclient/
 sudo getent group input >/dev/null 2>&1 || sudo groupadd --system input
-sudo chown root:input /opt/monitorclient/monitorclient-keyreader
-sudo chmod 2755 /opt/monitorclient/monitorclient-keyreader
+sudo install -m 0755 monitorclient-keyreader /opt/monitorclient/.monitorclient-keyreader.new
+sudo chown root:input /opt/monitorclient/.monitorclient-keyreader.new
+sudo chmod 2755 /opt/monitorclient/.monitorclient-keyreader.new
+sudo mv -f /opt/monitorclient/.monitorclient-keyreader.new /opt/monitorclient/monitorclient-keyreader
 
 print_success "Keyboard helper installed (setgid input — no user group change needed)!"
 
@@ -272,8 +277,10 @@ print_status "Performing final setup..."
 sudo mkdir -p /opt/monitorclient/logs
 sudo chown -R $USER:$USER /opt/monitorclient/logs
 
-# Enable autostart
-sudo systemctl --user enable monitorclient.service
+# Desktop autostart is already installed in /etc/xdg/autostart.
+# Do not enable a second user-service startup path, which could race with the
+# graphical session and keep a headless old process running in the background.
+# Existing service users may keep managing it explicitly if desired.
 
 print_success "Installation completed successfully!"
 
@@ -299,4 +306,8 @@ echo "Configuration: Edit /opt/monitorclient/config/settings.ini"
 echo "Logs: Check /opt/monitorclient/logs/"
 echo ""
 print_success "Keyboard monitoring uses a setgid helper — no group changes to your user needed."
+# Restart only the old package-path binary; keep the same logged-in desktop
+# user/session and leave unrelated MonitorClient executables untouched.
+sudo /opt/monitorclient/upgrade-restart.sh --restart-running || true
+echo "Installed: $(/opt/monitorclient/MonitorClient --version)"
 echo "" 
