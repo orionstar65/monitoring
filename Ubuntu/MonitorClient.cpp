@@ -482,70 +482,92 @@ void MonitorClient::uploadCapturedScreenshot(const QString &filePath)
 
 void MonitorClient::grabEntireDesktop(QString path, QPixmap& res, bool& ok)
 {
-    QDBusConnection connection = QDBusConnection::sessionBus();
-    connection.registerService("org.gnome.Screenshot");
-    QDBusInterface gnomeInterface(
-        QStringLiteral("org.gnome.Shell"),
-        QStringLiteral("/org/gnome/Shell/Screenshot"),
-        QStringLiteral("org.gnome.Shell.Screenshot"),
-        connection);
-    QDBusReply<bool> reply = gnomeInterface.call(
-        QStringLiteral("Screenshot"), false, false, path);
-    if (reply.isValid() && reply.value()) {
-        res = QPixmap(path);
-        QFile::remove(path);
-        ok = !res.isNull();
-    } else {
-        ok = false;
-        qWarning() << "[Screenshot] GNOME D-Bus capture unavailable:"
-                   << reply.error().message();
+    ok=false;
+    QDBusConnection bus=QDBusConnection::sessionBus();
+    if(!bus.isConnected()){
+        m_lastCaptureError=QStringLiteral("Desktop session D-Bus is unavailable. Run MonitorClient as the signed-in desktop user.");
+        return;
     }
-    connection.unregisterService("org.gnome.Screenshot");
+    QDBusInterface gnome(QStringLiteral("org.gnome.Shell"),
+        QStringLiteral("/org/gnome/Shell/Screenshot"),
+        QStringLiteral("org.gnome.Shell.Screenshot"),bus);
+    if(!gnome.isValid()){
+        m_lastCaptureError=QStringLiteral("GNOME screenshot interface unavailable");
+        return;
+    }
+    // GNOME Shell returns TWO values (success and filename_used).
+    // Do not register another service name or assume the requested file path.
+    const QDBusMessage reply=gnome.call(QStringLiteral("Screenshot"),false,false,path);
+    if(reply.type()==QDBusMessage::ErrorMessage){
+        m_lastCaptureError=QStringLiteral("GNOME screenshot: ")+reply.errorMessage();
+        qWarning().noquote() << "[Screenshot]" << m_lastCaptureError;
+        return;
+    }
+    const auto args=reply.arguments();
+    if(args.isEmpty()||!args.at(0).toBool()){
+        m_lastCaptureError=QStringLiteral("GNOME screenshot service rejected capture");
+        return;
+    }
+    const QString stored=args.size()>1&&!args.at(1).toString().isEmpty()
+        ? args.at(1).toString() : path;
+    res=QPixmap(stored);
+    ok=!res.isNull();
+    if(ok)QFile::remove(stored);
+    else m_lastCaptureError=QStringLiteral("GNOME screenshot output could not be loaded");
 }
 
 void MonitorClient::grabScreen(QString filePath, bool& ok)
 {
-    ok = false;
-
-    // Try PipeWire portal capture first (Wayland with one-time approval)
-    if (screenCastPortal && screenCastPortal->isStreaming()) {
-        QImage frame = screenCastPortal->captureFrame();
-        if (!frame.isNull()) {
-            if (frame.width() > 1920 || frame.height() > 1080)
-                frame = frame.scaled(1920, 1080, Qt::KeepAspectRatio,
-                                     Qt::SmoothTransformation);
-            ok = frame.save(filePath + ".jpg", "JPEG", 70);
-            if (ok) {
-                QFileInfo fi(filePath + ".jpg");
-                qDebug() << "Screenshot (PipeWire):" << fi.size() / 1024 << "KB";
-            }
+    ok=false;
+    if(screenCastPortal){
+        // Wayland screen pixels must come from a portal-approved stream.
+        if(!screenCastPortal->isStreaming()){
+            m_lastCaptureError=QStringLiteral("Screen sharing has not been approved or PipeWire is not streaming");
             return;
         }
+        QImage frame=screenCastPortal->captureFrame();
+        if(frame.isNull()){
+            m_lastCaptureError=QStringLiteral("PipeWire stream is active but no screenshot frames have arrived");
+            return;
+        }
+        if(frame.width()>1920||frame.height()>1080)
+            frame=frame.scaled(1920,1080,Qt::KeepAspectRatio,Qt::SmoothTransformation);
+        ok=frame.save(filePath+QStringLiteral(".jpg"),"JPEG",70);
+        if(!ok)m_lastCaptureError=QStringLiteral("Could not encode PipeWire screenshot as JPEG");
+        else qInfo() << "[Screenshot] PipeWire image captured:" << frame.width() << "x" << frame.height();
+        return;
     }
 
-    // Fallback: GNOME Shell D-Bus screenshot.
-    QPixmap p;
-    bool desktopOk = false;
-    grabEntireDesktop(filePath + ".png", p, desktopOk);
-    if (desktopOk && !p.isNull()) {
-        QImage image = p.toImage();
-        if (image.width() > 1920 || image.height() > 1080)
-            image = image.scaled(1920, 1080, Qt::KeepAspectRatio,
-                                 Qt::SmoothTransformation);
-        ok = !image.isNull() && image.save(filePath + ".jpg", "JPEG", 70);
-        if (ok) {
-            QFileInfo fi(filePath + ".jpg");
-            qInfo() << "Screenshot (GNOME D-Bus):" << fi.size() / 1024 << "KB";
+    // X11: capture the root window directly first. The private GNOME Shell
+    // screenshot interface may be restricted even when a display exists.
+    if(QScreen *screen=QGuiApplication::primaryScreen()){
+        const QPixmap captured=screen->grabWindow(0);
+        if(!captured.isNull()){
+            QImage image=captured.toImage();
+            if(image.width()>1920||image.height()>1080)
+                image=image.scaled(1920,1080,Qt::KeepAspectRatio,Qt::SmoothTransformation);
+            ok=image.save(filePath+QStringLiteral(".jpg"),"JPEG",70);
+            if(ok){
+                qInfo() << "[Screenshot] X11 root window image captured:"
+                        << image.width() << "x" << image.height();
+                return;
+            }
         }
+        m_lastCaptureError=QStringLiteral("X11 root-window capture unavailable or JPEG encoding failed");
+    }else{
+        m_lastCaptureError=QStringLiteral("No active X11 display. Check DISPLAY and XAUTHORITY for the signed-in user.");
     }
-    // X11 can capture directly even when GNOME's private D-Bus API is absent.
-    if (!ok && qgetenv("WAYLAND_DISPLAY").isEmpty()) {
-        if (QScreen *screen=QGuiApplication::primaryScreen()) {
-            const QPixmap captured=screen->grabWindow(0);
-            if(!captured.isNull())
-                ok=captured.save(filePath + ".jpg", "JPEG", 70);
-            if(ok)qInfo() << "[Screenshot] X11 direct capture succeeded";
-        }
+
+    // Older GNOME X11 installations can provide this method as a fallback.
+    QPixmap image;
+    bool desktopOk=false;
+    grabEntireDesktop(filePath+QStringLiteral(".png"),image,desktopOk);
+    if(desktopOk&&!image.isNull()){
+        QImage scaled=image.toImage();
+        if(scaled.width()>1920||scaled.height()>1080)
+            scaled=scaled.scaled(1920,1080,Qt::KeepAspectRatio,Qt::SmoothTransformation);
+        ok=scaled.save(filePath+QStringLiteral(".jpg"),"JPEG",70);
+        if(ok)qInfo() << "[Screenshot] GNOME X11 image captured";
     }
 }
 
