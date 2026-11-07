@@ -16,6 +16,8 @@
 #include <QJsonObject>
 #include <QNetworkAccessManager>
 
+class QCloseEvent;
+
 class ConfigDialog : public QDialog {
     Q_OBJECT
 public:
@@ -31,6 +33,11 @@ public:
     bool hasSession() const { return !authToken.isEmpty(); }
     bool notificationsEnabled() const { return notificationsCheck->isChecked(); }
     bool didLogout() const { return logoutPerformed; }
+
+protected:
+    // Closing Settings never ends the tray application's lifetime.
+    void closeEvent(QCloseEvent *event) override;
+    void reject() override;
 
 signals:
     void sessionStateChanged();
