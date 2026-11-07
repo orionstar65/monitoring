@@ -2928,7 +2928,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         signedInSummary.lineBreakMode = .byWordWrapping
         signedInSummary.maximumNumberOfLines = 3
         signedInSummary.widthAnchor.constraint(equalToConstant:300).isActive = true
-        let signedInRow=line("Signed-in user",signedInSummary)
+        let signedInRow=line("User No",signedInSummary)
         server.addArrangedSubview(signedInRow)
         let test = action("Sign In", "test")
         let status = text("Not tested")
@@ -3229,7 +3229,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             signedInRow.isHidden = !enrolled
             if enrolled {
                 let no=self.storage.string(forKey:"user_no") ?? "—"
-                signedInSummary.stringValue="User No: \(no)"
+                signedInSummary.stringValue=no
             }
             test.isHidden = enrolled
             signOutRow.isHidden = !enrolled
@@ -4867,6 +4867,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         clientItem.tag = 99
         clientItem.isEnabled = false
         menu.addItem(clientItem)
+
+        // The authenticated account is identified by User No, never display name.
+        let userNoItem = NSMenuItem(title: "User No: Not signed in", action: nil, keyEquivalent: "")
+        userNoItem.tag = 98
+        userNoItem.isEnabled = false
+        menu.addItem(userNoItem)
         
         // Server information
         let serverIP = storage.string(forKey: "server-ip") ?? "Not configured"
@@ -4990,6 +4996,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             clientItem.title = "Client: \(clientIPAddress) / \(macAddress)"
         }
         
+        // Keep the tray account synced with sign-in, sign-out and restoration.
+        if let userNoItem = menu.item(withTag: 98) {
+            let number = storage.string(forKey: "user_no") ?? "—"
+            userNoItem.title = clientToken.isEmpty ? "User No: Not signed in" : "User No: \(number)"
+        }
+
         // Update server status
         if let serverItem = menu.item(withTag: 100) {
             let serverIP = storage.string(forKey: "server-ip") ?? "Not configured"
