@@ -58,7 +58,9 @@ private:
     QString m_sessionHandle;
     QString m_restoreToken;
     QString m_screenshotRequestPath;
+    QString m_screenshotRequestToken;
     bool m_screenshotRequestPending = false;
+    bool m_sessionRequestPending = false;
     uint32_t m_pipewireNode;
     std::atomic<bool> m_streaming;
     int m_tokenCounter;
