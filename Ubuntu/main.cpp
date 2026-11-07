@@ -8,6 +8,10 @@
 #include <QStandardPaths>
 #include <QSysInfo>
 
+#include <cstdio>
+#include <cstring>
+#include "version.h"
+
 #include <unistd.h>
 
 #include "MonitorClient.h"
@@ -19,6 +23,12 @@ static QString instanceServerName()
 
 int main(int argc, char *argv[])
 {
+    // This option is safe for package verification without a GUI session or
+    // sign-in. It reports the exact version compiled into the installed binary.
+    if (argc == 2 && std::strcmp(argv[1], "--version") == 0) {
+        std::printf("MonitorClient %s\\n", MONITORAPP_VERSION);
+        return 0;
+    }
     QApplication app(argc, argv);
     // This is a tray-resident client. Closing the last Settings dialog must
     // not stop monitoring, destroy the tray icon, or end the event loop.
