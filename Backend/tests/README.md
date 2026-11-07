@@ -132,3 +132,41 @@ manually to diagnose it: its standard output contains actual typed content.
 Any change that enables global input collection should first be reviewed for
 informed consent, password-field exclusion, least-privilege access and secure
 storage. Native compilation and desktop testing are still required.
+
+## Ubuntu duplicate screenshot and updater-warning regression (November 2026)
+
+The Ubuntu capture timer calls `getScreen()` for scheduled screenshots;
+**Take Screenshot** and **Send All Logs** call `captureScreen(true)`.
+Only one capture/upload can be in progress at a time. Manual bursts within
+two seconds and scheduled ticks inside the configured screenshot interval are
+coalesced, including timer ticks immediately after a manual capture. A second
+portal-ready callback cannot start another POST. Uploaded timestamps are taken
+at successful capture in UTC, not when the server reply arrives.
+
+```bash
+php Backend/tests/ubuntu_screenshot_capture_contract.php
+php Backend/tests/manual_send_all_contract.php
+php Backend/tests/ubuntu_settings_source_contract.php
+```
+
+Both Ubuntu updater requests now use `QNetworkRequest::RedirectPolicyAttribute`
+with `ManualRedirectPolicy`, replacing the deprecated
+`FollowRedirectsAttribute` while keeping redirects disabled. This protects the
+update manifest and downloaded package from automatic redirecting.
+
+After rebuilding and restarting the Ubuntu client, watch the screenshot log
+without collecting any screen content:
+
+```bash
+journalctl --user -u monitorclient -f --no-pager | grep -E 'Screenshot|SendAll'
+pgrep -a MonitorClient
+```
+
+Verify one `Stored on backend` acknowledgement per scheduled interval; two
+manual clicks within two seconds should not result in two uploads. Compare
+screenshots near midnight for correct UTC storage and browser-local display.
+If duplicates persist even with one client process, check whether an older
+client or a different OS user/session is also uploading to the same monitor:
+the per-user single-instance lock cannot block a process under another UID.
+These are source contracts, not substitutes for native Qt compilation or a live
+backend/browser smoke test. Do not run GitHub Actions.
